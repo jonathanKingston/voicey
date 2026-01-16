@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Voicy</string>
+    <key>CFBundleExecutable</key>
+    <string>Voicy</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.voicy.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Voicy</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 Voicy. All rights reserved.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Voicey needs access to your microphone to transcribe your voice.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Voicey needs accessibility access to paste transcribed text into other applications and register global hotkeys.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Voicey needs to control other applications to paste transcribed text.</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
+    <key>NSSupportsSuddenTermination</key>
+    <false/>
+</dict>
+</plist>

@@ -114,11 +114,31 @@ struct ModelDownloadRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 
-                // Progress bar during download (indeterminate since WhisperKit doesn't expose progress)
+                // Progress bar during download with percentage
                 if modelManager.isDownloading[model, default: false] {
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                        .scaleEffect(x: 1, y: 0.5, anchor: .center)
+                    let progress = modelManager.downloadProgress[model, default: 0]
+                    VStack(alignment: .leading, spacing: 2) {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                        HStack {
+                            Text("\(Int(progress * 100))%")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("Downloading...")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                
+                // Error message when download failed
+                if modelManager.downloadFailed[model, default: false],
+                   let errorMsg = modelManager.downloadErrorMessage[model] {
+                    Text("Failed: \(errorMsg)")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
                 }
             }
             
@@ -165,6 +185,23 @@ struct ModelDownloadRow: View {
             } message: {
                 Text(deleteError ?? "Unknown error")
             }
+        } else if modelManager.downloadFailed[model, default: false] {
+            // Show failed state with retry option
+            Menu {
+                Button("Retry Download") {
+                    modelManager.clearFailedState(model)
+                    modelManager.downloadModel(model)
+                }
+                if let errorMsg = modelManager.downloadErrorMessage[model] {
+                    Text("Error: \(errorMsg)")
+                }
+            } label: {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.red)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 30)
         } else {
             Button {
                 modelManager.downloadModel(model)
@@ -182,6 +219,8 @@ struct ModelDownloadRow: View {
             return .green.opacity(0.15)
         } else if modelManager.isDownloading[model, default: false] {
             return .blue.opacity(0.15)
+        } else if modelManager.downloadFailed[model, default: false] {
+            return .red.opacity(0.15)
         }
         return .gray.opacity(0.1)
     }
@@ -200,6 +239,8 @@ struct ModelDownloadRow: View {
             return .green
         } else if modelManager.isDownloading[model, default: false] {
             return .blue
+        } else if modelManager.downloadFailed[model, default: false] {
+            return .red
         }
         return .secondary
     }
