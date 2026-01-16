@@ -6,21 +6,30 @@ import os
 final class SettingsManager: SettingsProviding {
     static let shared = SettingsManager()
     
-    private let defaults = UserDefaults.standard
+    /// Use a specific suite to ensure consistent storage regardless of how app is launched
+    private let defaults: UserDefaults
     
     private init() {
+        // Use explicit suite name so settings work consistently when running from
+        // command line (.build/debug/Voicey) or as app bundle (Voicey.app)
+        if let suite = UserDefaults(suiteName: "com.voicey.app") {
+            defaults = suite
+        } else {
+            defaults = UserDefaults.standard
+        }
         registerDefaults()
     }
     
     private func registerDefaults() {
         defaults.register(defaults: [
             Keys.outputMode: OutputMode.both.rawValue,
-            Keys.selectedModel: WhisperModel.base.rawValue,
+            Keys.selectedModel: WhisperModel.largeTurbo.rawValue,
             Keys.useGPUAcceleration: true,
             Keys.launchAtLogin: false,
             Keys.showDockIcon: false,
             Keys.voiceCommandsEnabled: false,
-            Keys.enableDetailedLogging: false
+            Keys.enableDetailedLogging: false,
+            Keys.hasCompletedOnboarding: false
         ])
     }
     
@@ -36,6 +45,7 @@ final class SettingsManager: SettingsProviding {
         static let voiceCommands = "voiceCommands"
         static let selectedInputDevice = "selectedInputDevice"
         static let enableDetailedLogging = "enableDetailedLogging"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
     
     // MARK: - Output
@@ -53,7 +63,8 @@ final class SettingsManager: SettingsProviding {
     
     var selectedModel: WhisperModel {
         get {
-            WhisperModel(rawValue: defaults.string(forKey: Keys.selectedModel) ?? "") ?? .base
+            let storedValue = defaults.string(forKey: Keys.selectedModel) ?? ""
+            return WhisperModel(rawValue: storedValue) ?? .largeTurbo
         }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.selectedModel)
@@ -128,10 +139,17 @@ final class SettingsManager: SettingsProviding {
         set { defaults.set(newValue, forKey: Keys.enableDetailedLogging) }
     }
     
+    // MARK: - Onboarding
+    
+    var hasCompletedOnboarding: Bool {
+        get { defaults.bool(forKey: Keys.hasCompletedOnboarding) }
+        set { defaults.set(newValue, forKey: Keys.hasCompletedOnboarding) }
+    }
+    
     // MARK: - Reset
     
     func resetToDefaults() {
-        let domain = Bundle.main.bundleIdentifier ?? "com.voicetype"
+        let domain = Bundle.main.bundleIdentifier ?? "com.voicey"
         defaults.removePersistentDomain(forName: domain)
         defaults.synchronize()
         registerDefaults()

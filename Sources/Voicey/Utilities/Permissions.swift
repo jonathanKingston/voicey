@@ -1,10 +1,14 @@
 import Foundation
 import AVFoundation
 import AppKit
+import os
 
 /// Manages system permissions required by the app
 final class PermissionsManager: PermissionsProviding {
     static let shared = PermissionsManager()
+    
+    // Cache the key string to avoid multiple takeRetainedValue calls
+    private static let accessibilityPromptKey: String = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
     
     private init() {}
     
@@ -39,19 +43,36 @@ final class PermissionsManager: PermissionsProviding {
     /// Check if accessibility permission is granted
     /// Required for global hotkeys and simulating keyboard input
     func checkAccessibilityPermission() -> Bool {
-        // This checks if the app has accessibility permission
-        let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: false]
-        return AXIsProcessTrustedWithOptions(options as CFDictionary)
+        // Use the simpler check without options dictionary for more reliable detection
+        let trusted = AXIsProcessTrusted()
+        
+        AppLogger.general.info("Accessibility check: AXIsProcessTrusted() = \(trusted), Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")")
+        
+        return trusted
+    }
+    
+    /// Try to verify accessibility by actually attempting an operation
+    /// This is more reliable than AXIsProcessTrusted() which can cache
+    func verifyAccessibilityWorks() -> Bool {
+        // Try to create a CGEventSource - this requires accessibility permission
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let works = source != nil
+        AppLogger.general.info("Accessibility verify (CGEventSource): \(works)")
+        return works
     }
     
     /// Prompt user to grant accessibility permission
+    /// Opens System Settings to the Accessibility pane
     func promptForAccessibilityPermission() {
-        let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true]
-        _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+        AppLogger.general.info("Opening System Settings for accessibility permission")
+        // Just open System Settings - the AXIsProcessTrustedWithOptions prompt is unreliable
+        // and can cause double dialogs
+        openAccessibilitySettings()
     }
     
     /// Open System Settings to Accessibility pane
     func openAccessibilitySettings() {
+        // Use the newer URL format for macOS 13+
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
@@ -75,6 +96,18 @@ final class PermissionsManager: PermissionsProviding {
             microphone: microphone,
             accessibility: accessibility
         )
+    }
+    
+    /// Force a fresh check of accessibility permission using multiple methods
+    func refreshAccessibilityPermission() -> Bool {
+        // Try multiple detection methods
+        let axTrusted = AXIsProcessTrusted()
+        let cgEventWorks = verifyAccessibilityWorks()
+        
+        AppLogger.general.info("Refresh accessibility: AXIsProcessTrusted=\(axTrusted), CGEventSource=\(cgEventWorks)")
+        
+        // Return true if either method indicates we have permission
+        return axTrusted || cgEventWorks
     }
 }
 

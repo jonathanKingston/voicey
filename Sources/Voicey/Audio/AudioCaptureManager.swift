@@ -27,13 +27,20 @@ final class AudioCaptureManager {
     }
     
     func startCapture() {
+        AppLogger.audio.info("AudioCapture: Starting capture...")
         audioBuffer.removeAll()
         
         audioEngine = AVAudioEngine()
-        guard let audioEngine = audioEngine else { return }
+        guard let audioEngine = audioEngine else {
+            AppLogger.audio.error("AudioCapture: Failed to create audio engine")
+            return
+        }
         
         inputNode = audioEngine.inputNode
-        guard let inputNode = inputNode else { return }
+        guard let inputNode = inputNode else {
+            AppLogger.audio.error("AudioCapture: Failed to get input node")
+            return
+        }
         
         let inputFormat = inputNode.outputFormat(forBus: 0)
         
@@ -82,6 +89,10 @@ final class AudioCaptureManager {
         audioEngine = nil
         inputNode = nil
         converter = nil
+        
+        let sampleCount = result?.count ?? 0
+        let durationSec = Double(sampleCount) / targetSampleRate
+        AppLogger.audio.info("AudioCapture: Stopped. Got \(sampleCount) samples (~\(String(format: "%.1f", durationSec))s of audio)")
         
         return result
     }

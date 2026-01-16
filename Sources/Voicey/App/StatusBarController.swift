@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 
 final class StatusBarController {
     private var statusItem: NSStatusItem
@@ -7,6 +8,7 @@ final class StatusBarController {
     private weak var appState: AppState?
     private weak var delegate: AppDelegate?
     private var animationTimer: Timer?
+    private var cancellables = Set<AnyCancellable>()
     
     init(appState: AppState, delegate: AppDelegate) {
         self.appState = appState
@@ -17,15 +19,70 @@ final class StatusBarController {
         
         setupStatusItem()
         setupMenu()
+        observeModelStatus()
     }
     
     private func setupStatusItem() {
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voicy")
+            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voicey")
             image?.isTemplate = true
             button.image = image
+            button.toolTip = "Voicey - Loading..."
         }
         statusItem.menu = menu
+    }
+    
+    private func observeModelStatus() {
+        appState?.$modelStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.updateTooltip(for: status)
+                self?.updateIconForModelStatus(status)
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func updateTooltip(for status: ModelStatus) {
+        guard let button = statusItem.button else { return }
+        
+        switch status {
+        case .notDownloaded:
+            button.toolTip = "Voicey - No model downloaded\nClick to download a model"
+        case .loading:
+            button.toolTip = "Voicey - Loading model...\nPlease wait before recording"
+        case .ready:
+            button.toolTip = "Voicey - Ready\nPress Ctrl+V to start recording"
+        case .failed(let error):
+            button.toolTip = "Voicey - Error: \(error)"
+        }
+    }
+    
+    private func updateIconForModelStatus(_ status: ModelStatus) {
+        // Don't update icon if we're recording
+        if appState?.isRecording == true { return }
+        
+        guard let button = statusItem.button else { return }
+        
+        switch status {
+        case .loading:
+            // Show loading indicator - dim the icon
+            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voicey - Loading")
+            image?.isTemplate = true
+            button.image = image
+            button.alphaValue = 0.5
+        case .ready:
+            // Normal icon
+            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voicey - Ready")
+            image?.isTemplate = true
+            button.image = image
+            button.alphaValue = 1.0
+        case .notDownloaded, .failed:
+            // Warning state
+            let image = NSImage(systemSymbolName: "mic.slash", accessibilityDescription: "Voicey - Not Ready")
+            image?.isTemplate = true
+            button.image = image
+            button.alphaValue = 1.0
+        }
     }
     
     private func setupMenu() {
@@ -60,7 +117,7 @@ final class StatusBarController {
         menu.addItem(NSMenuItem.separator())
         
         let aboutItem = NSMenuItem(
-            title: "About Voicy",
+            title: "About Voicey",
             action: #selector(showAbout),
             keyEquivalent: ""
         )
@@ -115,7 +172,7 @@ final class StatusBarController {
         animationTimer = nil
         
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voicy")
+            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voicey")
             image?.isTemplate = true
             button.image = image
             button.contentTintColor = nil

@@ -6,6 +6,9 @@ enum TranscriptionState: Equatable {
     /// No transcription in progress
     case idle
     
+    /// Loading the Whisper model (first-time warmup)
+    case loadingModel
+    
     /// Currently recording audio
     /// - Parameter startTime: When recording started (for duration tracking)
     case recording(startTime: Date)
@@ -35,10 +38,16 @@ enum TranscriptionState: Equatable {
         return false
     }
     
-    /// Whether we're in an active state (recording or processing)
+    /// Whether we're loading the model
+    var isLoadingModel: Bool {
+        if case .loadingModel = self { return true }
+        return false
+    }
+    
+    /// Whether we're in an active state (loading, recording or processing)
     var isActive: Bool {
         switch self {
-        case .recording, .processing:
+        case .loadingModel, .recording, .processing:
             return true
         case .idle, .completed, .error:
             return false
@@ -58,6 +67,8 @@ enum TranscriptionState: Equatable {
         switch self {
         case .idle:
             return "Ready"
+        case .loadingModel:
+            return "Loading model..."
         case .recording:
             return "Listening..."
         case .processing:
@@ -70,6 +81,33 @@ enum TranscriptionState: Equatable {
     }
 }
 
+/// Model readiness status - shown in status bar
+enum ModelStatus: Equatable {
+    case notDownloaded
+    case loading
+    case ready
+    case failed(String)
+    
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
+    
+    var isLoading: Bool {
+        if case .loading = self { return true }
+        return false
+    }
+    
+    var statusText: String {
+        switch self {
+        case .notDownloaded: return "No model"
+        case .loading: return "Loading..."
+        case .ready: return "Ready"
+        case .failed(let error): return "Error: \(error)"
+        }
+    }
+}
+
 /// Holds the observable application state
 final class AppState: ObservableObject {
     @Published var transcriptionState: TranscriptionState = .idle
@@ -77,10 +115,21 @@ final class AppState: ObservableObject {
     @Published var currentModel: WhisperModel = SettingsManager.shared.selectedModel
     @Published var lastTranscription: String = ""
     
+    /// Model loading status - for startup warmup indication
+    @Published var modelStatus: ModelStatus = .notDownloaded
+    
+    /// Whether accessibility permission is granted (needed for paste)
+    @Published var hasAccessibilityPermission: Bool = false
+    
     // MARK: - Convenience Accessors
     
     /// Whether we're currently recording (delegates to transcriptionState)
     var isRecording: Bool {
         transcriptionState.isRecording
+    }
+    
+    /// Whether the app is ready to record (model loaded and permissions granted)
+    var isReadyToRecord: Bool {
+        modelStatus.isReady && hasAccessibilityPermission
     }
 }

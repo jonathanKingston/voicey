@@ -5,6 +5,8 @@ struct WaveformView: View {
     let level: Float
     
     @State private var levels: [CGFloat] = Array(repeating: 0.1, count: 12)
+    @State private var timer: Timer?
+    @State private var lastLevel: Float = 0
     
     var body: some View {
         HStack(spacing: 3) {
@@ -17,8 +19,26 @@ struct WaveformView: View {
         }
         .frame(maxHeight: .infinity)
         .onChange(of: level) { newLevel in
-            updateLevels(with: newLevel)
+            lastLevel = newLevel
         }
+        .onAppear {
+            startTimer()
+        }
+        .onDisappear {
+            stopTimer()
+        }
+    }
+    
+    private func startTimer() {
+        // Update the waveform at a consistent rate (60fps-ish)
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            updateLevels(with: lastLevel)
+        }
+    }
+    
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
     }
     
     private func barHeight(for index: Int) -> CGFloat {
@@ -43,8 +63,10 @@ struct WaveformView: View {
         
         // Add some variation based on the level
         let baseLevel = CGFloat(newLevel)
-        let variation = CGFloat.random(in: -0.1...0.1)
-        let adjustedLevel = max(0.1, min(1.0, baseLevel + variation))
+        // More variation at low levels to show activity even in silence
+        let variationRange = baseLevel < 0.2 ? 0.05 : 0.1
+        let variation = CGFloat.random(in: -variationRange...variationRange)
+        let adjustedLevel = max(0.05, min(1.0, baseLevel + variation))
         
         newLevels.append(adjustedLevel)
         levels = newLevels

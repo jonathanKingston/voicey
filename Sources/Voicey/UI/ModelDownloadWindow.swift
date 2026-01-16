@@ -98,7 +98,7 @@ struct ModelDownloadRow: View {
                     Text(model.displayName)
                         .font(.headline)
                     
-                    if model == .base {
+                    if model.isRecommended {
                         Text("Recommended")
                             .font(.caption2)
                             .fontWeight(.medium)
@@ -188,10 +188,12 @@ struct ModelDownloadRow: View {
     
     private var iconName: String {
         switch model {
-        case .tiny: return "hare"
-        case .base: return "gauge.medium"
+        case .largeTurbo: return "bolt.fill"
+        case .large: return "star.fill"
+        case .distilLarge: return "brain.head.profile"
         case .small: return "scalemass"
-        case .medium: return "brain.head.profile"
+        case .base: return "gauge.medium"
+        case .tiny: return "hare"
         }
     }
     

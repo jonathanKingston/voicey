@@ -182,7 +182,7 @@ import AVFoundation
 
 struct ModelSettingsView: View {
     @ObservedObject var modelManager = ModelManager.shared
-    @AppStorage("selectedModel") private var selectedModel: String = WhisperModel.base.rawValue
+    @AppStorage("selectedModel") private var selectedModel: String = WhisperModel.largeTurbo.rawValue
     @AppStorage("useGPUAcceleration") private var useGPUAcceleration: Bool = true
     
     var body: some View {
@@ -237,8 +237,21 @@ struct ModelRowView: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.displayName)
-                    .font(.headline)
+                HStack {
+                    Text(model.displayName)
+                        .font(.headline)
+                    
+                    if model.isRecommended {
+                        Text("Recommended")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.2))
+                            .foregroundStyle(.blue)
+                            .cornerRadius(4)
+                    }
+                }
                 Text(ModelManager.formatSize(model.diskSize))
                     .font(.caption)
                     .foregroundStyle(.secondary)

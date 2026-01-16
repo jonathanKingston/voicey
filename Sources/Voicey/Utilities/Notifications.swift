@@ -7,11 +7,23 @@ import os
 final class NotificationManager: NotificationProviding {
     static let shared = NotificationManager()
     
+    /// Whether notifications are available (requires proper app bundle)
+    private let notificationsAvailable: Bool
+    
     private init() {
-        requestNotificationPermission()
+        // UNUserNotificationCenter requires a proper app bundle
+        // When running from .build/debug/, there's no bundle and it crashes
+        notificationsAvailable = Bundle.main.bundleIdentifier != nil
+        
+        if notificationsAvailable {
+            requestNotificationPermission()
+        } else {
+            AppLogger.general.warning("Notifications unavailable - running without app bundle")
+        }
     }
     
     private func requestNotificationPermission() {
+        guard notificationsAvailable else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error = error {
                 AppLogger.general.error("Notification permission error: \(error)")
@@ -35,6 +47,13 @@ final class NotificationManager: NotificationProviding {
         )
     }
     
+    func showAccessibilityRequired() {
+        showNotification(
+            title: "Accessibility Permission Needed",
+            body: "Voicey needs accessibility access to paste transcribed text. Please grant permission in System Settings."
+        )
+    }
+    
     // MARK: - Model Notifications
     
     func showNoModelNotification() {
@@ -47,7 +66,7 @@ final class NotificationManager: NotificationProviding {
     func showModelDownloadComplete(model: WhisperModel) {
         showNotification(
             title: "Model Downloaded",
-            body: "\(model.displayName) is ready to use. Press Ctrl+C to start transcribing."
+            body: "\(model.displayName) is ready to use. Press Ctrl+V to start transcribing."
         )
     }
     
@@ -77,6 +96,12 @@ final class NotificationManager: NotificationProviding {
     // MARK: - Generic Notification
     
     private func showNotification(title: String, body: String) {
+        guard notificationsAvailable else {
+            // Log instead when running without bundle
+            AppLogger.general.info("Notification: \(title) - \(body)")
+            return
+        }
+        
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import os
 
 /// Simulates keyboard input to paste text into the active application
 final class KeyboardSimulator {
@@ -9,7 +10,15 @@ final class KeyboardSimulator {
     
     /// Simulate Cmd+V to paste from clipboard using AppleScript (most reliable)
     func simulatePaste() {
-        log("Simulating paste via AppleScript...")
+        // Log current state for debugging
+        let frontApp = NSWorkspace.shared.frontmostApplication
+        AppLogger.output.info("Paste: Current frontmost app: \(frontApp?.localizedName ?? "none") (bundle: \(frontApp?.bundleIdentifier ?? "?"))")
+        AppLogger.output.info("Paste: Clipboard has text: \(ClipboardManager.shared.hasText)")
+        if let text = ClipboardManager.shared.currentText() {
+            AppLogger.output.info("Paste: Clipboard content length: \(text.count) chars")
+        }
+        
+        AppLogger.output.info("Paste: Attempting AppleScript method...")
         
         let script = """
         tell application "System Events"
@@ -21,24 +30,24 @@ final class KeyboardSimulator {
         if let appleScript = NSAppleScript(source: script) {
             appleScript.executeAndReturnError(&error)
             if let error = error {
-                log("AppleScript error: \(error)")
-                // Fallback to CGEvent
+                AppLogger.output.error("Paste: AppleScript error: \(error)")
+                AppLogger.output.info("Paste: Falling back to CGEvent method...")
                 simulatePasteViaCGEvent()
             } else {
-                log("Paste sent via AppleScript successfully")
+                AppLogger.output.info("Paste: AppleScript paste sent successfully")
             }
         } else {
-            log("Failed to create AppleScript, using CGEvent fallback")
+            AppLogger.output.error("Paste: Failed to create AppleScript, using CGEvent fallback")
             simulatePasteViaCGEvent()
         }
     }
     
     /// Fallback: Simulate Cmd+V using CGEvent
     private func simulatePasteViaCGEvent() {
-        log("Using CGEvent fallback...")
+        AppLogger.output.info("Paste: Using CGEvent method...")
         
         guard let source = CGEventSource(stateID: .combinedSessionState) else {
-            log("Failed to create event source")
+            AppLogger.output.error("Paste: Failed to create CGEventSource - this usually means accessibility permissions are missing")
             return
         }
         
@@ -46,7 +55,7 @@ final class KeyboardSimulator {
         
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
-            log("Failed to create key events")
+            AppLogger.output.error("Paste: Failed to create CGEvent key events")
             return
         }
         
@@ -56,7 +65,7 @@ final class KeyboardSimulator {
         keyDown.post(tap: .cgSessionEventTap)
         keyUp.post(tap: .cgSessionEventTap)
         
-        log("CGEvent paste posted")
+        AppLogger.output.info("Paste: CGEvent paste posted successfully")
     }
     
     /// Type text character by character (for apps that don't support paste)

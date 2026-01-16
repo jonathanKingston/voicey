@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Post-processes transcription output for punctuation, formatting, and voice commands
 final class PostProcessor {
@@ -16,6 +17,77 @@ final class PostProcessor {
     private var voiceCommands: [VoiceCommand] {
         SettingsManager.shared.voiceCommands.filter { $0.enabled }
     }
+    
+    // MARK: - Noise Words Filter
+    
+    /// Words/phrases that Whisper often outputs for non-speech sounds
+    /// These should be filtered out as they're typically noise artifacts
+    private static let noiseWords: Set<String> = [
+        // Onomatopoeia for sounds
+        "bang", "click", "clicks", "clicking", "clack", "clunk",
+        "beep", "beeps", "beeping", "boop",
+        "thud", "thump", "thumping",
+        "tap", "taps", "tapping",
+        "knock", "knocks", "knocking",
+        "buzz", "buzzing", "hum", "humming",
+        "ring", "rings", "ringing", "ding", "dong",
+        "pop", "pops", "popping",
+        "crack", "crackle", "crackling",
+        "snap", "snaps", "snapping",
+        "whoosh", "swoosh", "swish",
+        "rustle", "rustling",
+        "scratch", "scratching",
+        "squeak", "squeaking", "creak", "creaking",
+        "slam", "slamming",
+        "crash", "crashing",
+        "bang", "banging",
+        "clatter", "clattering",
+        "rattle", "rattling",
+        "shuffle", "shuffling",
+        "footsteps", "footstep",
+        
+        // Breathing/vocal sounds
+        "sigh", "sighs", "sighing",
+        "cough", "coughs", "coughing",
+        "sneeze", "sneezes", "sneezing",
+        "sniff", "sniffs", "sniffling",
+        "gasp", "gasps", "gasping",
+        "yawn", "yawns", "yawning",
+        "grunt", "grunts", "grunting",
+        "groan", "groans", "groaning",
+        "moan", "moans", "moaning",
+        "huff", "huffs", "huffing",
+        "puff", "puffs", "puffing",
+        "wheeze", "wheezes", "wheezing",
+        "inhale", "inhales", "exhale", "exhales",
+        "breath", "breathing",
+        
+        // Music/ambient descriptions
+        "music", "music playing", "playing music",
+        "silence", "static", "noise",
+        "applause", "clapping", "cheering",
+        "laughter", "laughing", "chuckling",
+        
+        // Whisper artifacts for silence
+        "...", "…",
+        "[silence]", "[music]", "[noise]", "[applause]",
+        "(silence)", "(music)", "(noise)", "(applause)",
+        "*silence*", "*music*", "*noise*",
+        "[inaudible]", "(inaudible)", "*inaudible*",
+        "[unintelligible]", "(unintelligible)",
+        "[background noise]", "(background noise)",
+        "[typing]", "(typing)", "typing",
+        "[keyboard]", "(keyboard)", "keyboard sounds"
+    ]
+    
+    /// Patterns that indicate noise (regex patterns)
+    private static let noisePatterns: [String] = [
+        "^\\s*\\*[^*]+\\*\\s*$",           // *anything in asterisks*
+        "^\\s*\\[[^\\]]+\\]\\s*$",         // [anything in brackets]
+        "^\\s*\\([^)]+\\)\\s*$",           // (anything in parentheses) when it's the whole text
+        "^\\s*\\.+\\s*$",                   // Just dots/ellipsis
+        "^\\s*…+\\s*$"                      // Just ellipsis character
+    ]
     
     // MARK: - Default Text Expansions
     
@@ -37,6 +109,19 @@ final class PostProcessor {
     func process(_ result: TranscriptionResult) -> String {
         var text = result.text
         
+        AppLogger.transcription.info("PostProcessor: Input text: \"\(text)\"")
+        
+        // First, filter out noise words and artifacts
+        text = filterNoise(text)
+        
+        AppLogger.transcription.info("PostProcessor: After noise filter: \"\(text)\"")
+        
+        // If the entire transcription was just noise, return empty
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            AppLogger.transcription.info("PostProcessor: Text is empty after noise filter, returning empty")
+            return ""
+        }
+        
         // Apply intelligent punctuation based on timing and segment analysis
         text = applyIntelligentPunctuation(text, segments: result.segments)
         
@@ -51,7 +136,80 @@ final class PostProcessor {
         // Final cleanup
         text = finalCleanup(text)
         
+        AppLogger.transcription.info("PostProcessor: Final output: \"\(text)\"")
+        
         return text
+    }
+    
+    // MARK: - Noise Filtering
+    
+    private func filterNoise(_ text: String) -> String {
+        var result = text
+        
+        // Check if entire text matches a noise pattern
+        for pattern in Self.noisePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(result.startIndex..., in: result)
+                if regex.firstMatch(in: result, range: range) != nil {
+                    // Entire text is noise
+                    return ""
+                }
+            }
+        }
+        
+        // Remove individual noise words/phrases (case insensitive, whole word matching)
+        for noiseWord in Self.noiseWords {
+            // Match the noise word as a complete phrase, possibly with punctuation
+            let pattern = "(?:^|\\s)\\*?\(NSRegularExpression.escapedPattern(for: noiseWord))\\*?[.,!?]*(?:\\s|$)"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                result = regex.stringByReplacingMatches(
+                    in: result,
+                    range: NSRange(result.startIndex..., in: result),
+                    withTemplate: " "
+                )
+            }
+        }
+        
+        // Remove bracketed annotations like [music] or (typing)
+        let bracketPatterns = [
+            "\\[[^\\]]*\\]",  // [anything]
+            "\\([^)]*\\)"     // (anything) - but be careful not to remove legitimate parentheses
+        ]
+        
+        for pattern in bracketPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                // Only remove if the content looks like a noise annotation
+                let matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
+                for match in matches.reversed() {
+                    if let range = Range(match.range, in: result) {
+                        let matchedText = String(result[range]).lowercased()
+                        // Check if this looks like a noise annotation
+                        let isNoiseAnnotation = Self.noiseWords.contains { matchedText.contains($0) } ||
+                            matchedText.contains("music") ||
+                            matchedText.contains("noise") ||
+                            matchedText.contains("silence") ||
+                            matchedText.contains("inaudible") ||
+                            matchedText.contains("typing") ||
+                            matchedText.contains("applause")
+                        
+                        if isNoiseAnnotation {
+                            result.replaceSubrange(range, with: "")
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Remove asterisk-wrapped words like *click*
+        if let regex = try? NSRegularExpression(pattern: "\\*[^*]+\\*", options: .caseInsensitive) {
+            result = regex.stringByReplacingMatches(
+                in: result,
+                range: NSRange(result.startIndex..., in: result),
+                withTemplate: ""
+            )
+        }
+        
+        return result
     }
     
     // MARK: - Intelligent Punctuation

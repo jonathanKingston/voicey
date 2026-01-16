@@ -47,6 +47,7 @@ protocol PermissionsProviding {
 protocol NotificationProviding {
     func showMicrophoneRequiredNotification()
     func showAccessibilityRequiredNotification()
+    func showAccessibilityRequired()
     func showNoModelNotification()
     func showModelDownloadComplete(model: WhisperModel)
     func showModelDownloadFailed(reason: String)

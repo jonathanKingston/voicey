@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Voicy",
+    name: "Voicey",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "Voicy", targets: ["Voicy"])
+        .executable(name: "Voicey", targets: ["Voicey"])
     ],
     dependencies: [
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts.git", from: "2.0.0"),
@@ -15,12 +15,12 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Voicy",
+            name: "Voicey",
             dependencies: [
                 "KeyboardShortcuts",
                 "WhisperKit"
             ],
-            path: "Sources/Voicy",
+            path: "Sources/Voicey",
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("CoreAudio"),
