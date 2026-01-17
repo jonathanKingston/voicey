@@ -15,27 +15,45 @@ struct OnboardingView: View {
 
   let onComplete: () -> Void
 
-  /// The default model to download
-  private let defaultModel = WhisperModel.largeTurbo
+  /// The fast model to download first for quick startup
+  private let fastModel = WhisperModel.small
 
-  /// Whether all required setup is complete
+  /// The high-quality model to download in background
+  private let qualityModel = WhisperModel.largeTurbo
+
+  /// Whether all required setup is complete (fast model is enough to proceed)
   private var isSetupComplete: Bool {
-    microphoneGranted && accessibilityGranted && modelManager.isDownloaded(defaultModel)
+    microphoneGranted && accessibilityGranted && modelManager.isDownloaded(fastModel)
   }
 
-  /// Whether model is currently downloading
-  private var isModelDownloading: Bool {
-    modelManager.isDownloading[defaultModel] == true
+  /// Whether fast model is currently downloading
+  private var isFastModelDownloading: Bool {
+    modelManager.isDownloading[fastModel] == true
   }
 
-  /// Whether model is ready
-  private var isModelReady: Bool {
-    modelManager.isDownloaded(defaultModel)
+  /// Whether quality model is currently downloading
+  private var isQualityModelDownloading: Bool {
+    modelManager.isDownloading[qualityModel] == true
   }
 
-  /// Download progress (0-1)
-  private var downloadProgress: Double {
-    modelManager.downloadProgress[defaultModel] ?? 0
+  /// Whether fast model is ready
+  private var isFastModelReady: Bool {
+    modelManager.isDownloaded(fastModel)
+  }
+
+  /// Whether quality model is ready
+  private var isQualityModelReady: Bool {
+    modelManager.isDownloaded(qualityModel)
+  }
+
+  /// Download progress for fast model (0-1)
+  private var fastDownloadProgress: Double {
+    modelManager.downloadProgress[fastModel] ?? 0
+  }
+
+  /// Download progress for quality model (0-1)
+  private var qualityDownloadProgress: Double {
+    modelManager.downloadProgress[qualityModel] ?? 0
   }
 
   var body: some View {
@@ -66,19 +84,38 @@ struct OnboardingView: View {
           .font(.headline)
           .padding(.top, 20)
 
-        // Step 1: Model Download (most important - show first)
+        // Step 1: Fast Model Download (for quick startup)
         SetupStepRow(
           stepNumber: 1,
           icon: "cpu",
-          title: "Download AI Model",
-          description: "\(defaultModel.displayName) (~1.5GB)",
-          isComplete: isModelReady,
-          isInProgress: isModelDownloading,
-          progress: downloadProgress,
-          buttonTitle: isModelReady
-            ? "Ready" : (isModelDownloading ? "Downloading..." : "Download"),
-          action: startModelDownloadIfNeeded
+          title: "Download Fast Model",
+          description: "\(fastModel.displayName) (~250MB) - Quick start",
+          isComplete: isFastModelReady,
+          isInProgress: isFastModelDownloading,
+          progress: fastDownloadProgress,
+          buttonTitle: isFastModelReady
+            ? "Ready" : (isFastModelDownloading ? "Downloading..." : "Download"),
+          action: startFastModelDownload
         )
+
+        // Step 1b: Quality Model Download (background upgrade)
+        SetupStepRow(
+          stepNumber: 0,  // No number - it's a sub-step
+          icon: "sparkles",
+          title: "Download Quality Model",
+          description: "\(qualityModel.displayName) (~1.5GB) - Better accuracy",
+          isComplete: isQualityModelReady,
+          isInProgress: isQualityModelDownloading,
+          progress: qualityDownloadProgress,
+          isOptional: true,
+          buttonTitle: isQualityModelReady
+            ? "Ready"
+            : (isQualityModelDownloading
+              ? "Downloading..." : (isFastModelReady ? "Download" : "After fast model")),
+          action: startQualityModelDownload
+        )
+        .disabled(!isFastModelReady && !isQualityModelDownloading)
+        .opacity(isFastModelReady || isQualityModelDownloading || isQualityModelReady ? 1.0 : 0.6)
 
         // Step 2: Microphone
         SetupStepRow(
@@ -116,7 +153,31 @@ struct OnboardingView: View {
           action: enableLaunchAtLogin
         )
       }
-      .padding(.horizontal, 30)
+
+      // Background upgrade status
+      if isFastModelReady && !isQualityModelReady {
+        VStack(spacing: 8) {
+          if isQualityModelDownloading {
+            HStack(spacing: 8) {
+              ProgressView()
+                .scaleEffect(0.7)
+              Text(
+                "Upgrading to \(qualityModel.displayName)... \(Int(qualityDownloadProgress * 100))%"
+              )
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            }
+            ProgressView(value: qualityDownloadProgress)
+              .progressViewStyle(.linear)
+          } else {
+            Text("💡 Tip: Download the quality model for better accuracy")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+        .padding(.horizontal, 30)
+        .padding(.top, 8)
+      }
 
       Spacer()
 
@@ -125,14 +186,14 @@ struct OnboardingView: View {
         // Status message
         if !isSetupComplete {
           HStack(spacing: 8) {
-            if isModelDownloading {
+            if isFastModelDownloading {
               ProgressView()
                 .scaleEffect(0.7)
-              Text("Downloading model... \(Int(downloadProgress * 100))%")
-            } else if !isModelReady {
+              Text("Downloading fast model... \(Int(fastDownloadProgress * 100))%")
+            } else if !isFastModelReady {
               Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
-              Text("Model download required")
+              Text("Fast model download required")
             } else if !microphoneGranted {
               Image(systemName: "mic.slash")
                 .foregroundStyle(.orange)
@@ -149,15 +210,21 @@ struct OnboardingView: View {
           HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
               .foregroundStyle(.green)
-            Text("All set! Ready to start.")
+            if isQualityModelReady {
+              Text("All set! Using quality model.")
+            } else if isQualityModelDownloading {
+              Text("Ready! Quality model downloading in background...")
+            } else {
+              Text("Ready to start with fast model!")
+            }
           }
           .font(.subheadline)
           .foregroundStyle(.green)
         }
 
         // Download progress bar
-        if isModelDownloading {
-          ProgressView(value: downloadProgress)
+        if isFastModelDownloading {
+          ProgressView(value: fastDownloadProgress)
             .progressViewStyle(.linear)
             .padding(.horizontal, 30)
         }
@@ -186,7 +253,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 30)
 
         // Fallback for accessibility detection issues
-        if !accessibilityGranted && microphoneGranted && isModelReady {
+        if !accessibilityGranted && microphoneGranted && isFastModelReady {
           Button {
             debugPrint("⚠️ Continue anyway pressed", category: "ONBOARD")
             onComplete()
@@ -201,10 +268,10 @@ struct OnboardingView: View {
       }
       .padding(.bottom, 30)
     }
-    .frame(width: 480, height: 720)
+    .frame(width: 480, height: 780)  // Slightly taller for the extra model row
     .onAppear {
       checkCurrentPermissions()
-      startModelDownloadIfNeeded()
+      startFastModelDownload()
     }
     .onDisappear {
       accessibilityCheckTask?.cancel()
@@ -219,19 +286,58 @@ struct OnboardingView: View {
     }
   }
 
-  /// Start downloading the default model automatically during onboarding
-  private func startModelDownloadIfNeeded() {
+  /// Start downloading the fast model automatically during onboarding
+  private func startFastModelDownload() {
     // Only download if not already downloaded and not currently downloading
-    guard !modelManager.isDownloaded(defaultModel),
-      modelManager.isDownloading[defaultModel] != true
+    guard !modelManager.isDownloaded(fastModel),
+      modelManager.isDownloading[fastModel] != true
+    else {
+      // If fast model is already ready, start quality model download
+      if isFastModelReady {
+        startQualityModelDownload()
+      }
+      return
+    }
+
+    debugPrint(
+      "📥 Auto-starting download of \(fastModel.displayName) during onboarding",
+      category: "ONBOARD")
+    modelManager.downloadModel(fastModel)
+
+    // Watch for fast model completion to auto-start quality model
+    Task {
+      await waitForFastModelThenStartQualityDownload()
+    }
+  }
+
+  /// Wait for fast model to complete, then start quality model download
+  private func waitForFastModelThenStartQualityDownload() async {
+    // Poll until fast model download completes
+    while modelManager.isDownloading[fastModel] == true {
+      try? await Task.sleep(nanoseconds: 500_000_000)  // Check every 0.5s
+    }
+
+    // If fast model is now downloaded, start quality model
+    if modelManager.isDownloaded(fastModel) {
+      await MainActor.run {
+        startQualityModelDownload()
+      }
+    }
+  }
+
+  /// Start downloading the quality model (can be done in background)
+  private func startQualityModelDownload() {
+    // Only download if not already downloaded and not currently downloading
+    guard !modelManager.isDownloaded(qualityModel),
+      modelManager.isDownloading[qualityModel] != true
     else {
       return
     }
 
     debugPrint(
-      "📥 Auto-starting download of \(defaultModel.displayName) during onboarding",
+      "📥 Starting download of \(qualityModel.displayName) for quality upgrade",
       category: "ONBOARD")
-    modelManager.downloadModel(defaultModel)
+    modelManager.downloadModel(qualityModel)
   }
 
   private func recheckPermissions() {

@@ -23,7 +23,8 @@ final class SettingsManager: SettingsProviding {
   private func registerDefaults() {
     defaults.register(defaults: [
       Keys.outputMode: OutputMode.both.rawValue,
-      Keys.selectedModel: WhisperModel.largeTurbo.rawValue,
+      // Default to fast model - onboarding will upgrade to quality model in background
+      Keys.selectedModel: WhisperModel.small.rawValue,
       Keys.useGPUAcceleration: true,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,

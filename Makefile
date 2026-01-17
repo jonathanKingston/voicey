@@ -69,6 +69,27 @@ format:
 logs:
 	log stream --predicate 'subsystem == "com.voicey.app"' --level debug
 
+# Reset app state (keeps downloaded models)
+reset-state:
+	@echo "Resetting app state (keeping models)..."
+	@defaults delete com.voicey.app 2>/dev/null || true
+	@echo "Done. App will show onboarding on next launch."
+
+# Reset everything including models
+reset-all:
+	@echo "Resetting all app data..."
+	@defaults delete com.voicey.app 2>/dev/null || true
+	@rm -rf ~/Library/Application\ Support/Voicey/Models
+	@echo "Done. App will show onboarding and require model download."
+
+# Show current app state
+show-state:
+	@echo "=== App Settings ==="
+	@defaults read com.voicey.app 2>/dev/null || echo "(no settings saved)"
+	@echo ""
+	@echo "=== Downloaded Models ==="
+	@ls -la ~/Library/Application\ Support/Voicey/Models/models/argmaxinc/whisperkit-coreml/ 2>/dev/null || echo "(no models downloaded)"
+
 # Help
 help:
 	@echo "Voicey Build System"
@@ -76,13 +97,16 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build    - Build debug version (default)"
-	@echo "  release  - Build release version"
-	@echo "  bundle   - Create app bundle from release build"
-	@echo "  sign     - Sign the app bundle"
-	@echo "  clean    - Clean build artifacts"
-	@echo "  run      - Build and run debug version"
-	@echo "  logs     - Stream debug logs (run in separate terminal)"
-	@echo "  install  - Install to /Applications"
-	@echo "  xcode    - Generate Xcode project"
-	@echo "  help     - Show this help"
+	@echo "  build       - Build debug version (default)"
+	@echo "  release     - Build release version"
+	@echo "  bundle      - Create app bundle from release build"
+	@echo "  sign        - Sign the app bundle"
+	@echo "  clean       - Clean build artifacts"
+	@echo "  run         - Build and run debug version"
+	@echo "  logs        - Stream debug logs (run in separate terminal)"
+	@echo "  install     - Install to /Applications"
+	@echo "  xcode       - Generate Xcode project"
+	@echo "  reset-state - Reset app state (keeps models)"
+	@echo "  reset-all   - Reset everything including models"
+	@echo "  show-state  - Show current app settings and models"
+	@echo "  help        - Show this help"

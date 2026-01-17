@@ -76,6 +76,9 @@ enum WhisperModel: String, CaseIterable, Identifiable {
   }
 }
 
+/// Callback for when a background model upgrade completes
+typealias ModelUpgradeCallback = (WhisperModel) -> Void
+
 /// Manages downloading, storing, and selecting Whisper models via WhisperKit
 final class ModelManager: ObservableObject {
   static let shared = ModelManager()
@@ -85,11 +88,85 @@ final class ModelManager: ObservableObject {
   @Published var isDownloading: [WhisperModel: Bool] = [:]
   @Published var downloadError: String?
 
+  /// Whether a model is currently being prewarmed (loaded into memory)
+  @Published var isPrewarming: [WhisperModel: Bool] = [:]
+
+  /// Model that's ready for background upgrade (downloaded and prewarmed)
+  @Published var pendingUpgradeModel: WhisperModel?
+
+  /// Callback when a background model upgrade is ready
+  var onUpgradeReady: ModelUpgradeCallback?
+
   private let fileManager = FileManager.default
   private var downloadTasks: [WhisperModel: Task<Void, Never>] = [:]
 
   private init() {
     loadDownloadedModels()
+  }
+
+  // MARK: - Model Hierarchy
+  
+  /// The fast model used for quick startup
+  static let fastModel = WhisperModel.small
+  
+  /// The quality model used for better accuracy
+  static let qualityModel = WhisperModel.largeTurbo
+  
+  /// Check if we should upgrade from fast to quality model
+  var shouldUpgradeToQuality: Bool {
+    let currentModel = SettingsManager.shared.selectedModel
+    return currentModel == Self.fastModel && isDownloaded(Self.qualityModel)
+  }
+  
+  // MARK: - CoreML Compilation Check
+  
+  /// Check if a model has likely been compiled by CoreML before (fast to load)
+  /// CoreML caches compiled models, so subsequent loads are much faster
+  func isLikelyCompiled(_ model: WhisperModel) -> Bool {
+    // Check for CoreML cache - this is where device-specific optimizations are stored
+    // The cache location varies but we can check for common indicators
+    
+    guard let modelPath = modelPath(for: model) else { return false }
+    let modelURL = URL(fileURLWithPath: modelPath)
+    
+    // Check if the AudioEncoder has a compiled data file (coremldata.bin)
+    // This is created after first successful load
+    let audioEncoderCompiled = modelURL
+      .appendingPathComponent("AudioEncoder.mlmodelc/coremldata.bin")
+    
+    if fileManager.fileExists(atPath: audioEncoderCompiled.path) {
+      // Check file size - compiled models have substantial coremldata.bin files
+      if let attrs = try? fileManager.attributesOfItem(atPath: audioEncoderCompiled.path),
+         let size = attrs[.size] as? Int64,
+         size > 1_000_000 {  // > 1MB suggests it's been compiled
+        return true
+      }
+    }
+    
+    // Also check the system CoreML cache
+    let coreMLCache = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/Caches/com.apple.CoreML")
+    
+    if fileManager.fileExists(atPath: coreMLCache.path) {
+      // If the cache directory exists and has content, models may be cached
+      // This is a heuristic - we can't easily map cache entries to specific models
+      if let contents = try? fileManager.contentsOfDirectory(atPath: coreMLCache.path),
+         !contents.isEmpty {
+        // Check if any cache file was modified recently (within last 30 days)
+        // and is substantial in size - suggests active model caching
+        for item in contents {
+          let itemPath = coreMLCache.appendingPathComponent(item)
+          if let attrs = try? fileManager.attributesOfItem(atPath: itemPath.path),
+             let modDate = attrs[.modificationDate] as? Date,
+             modDate > Date().addingTimeInterval(-30 * 24 * 60 * 60) {
+            AppLogger.model.debug("Found recent CoreML cache activity")
+            // Can't definitively say THIS model is cached, but system has cache
+          }
+        }
+      }
+    }
+    
+    return false
   }
 
   // MARK: - Paths
@@ -384,6 +461,111 @@ final class ModelManager: ObservableObject {
 
     downloadedModels.remove(model)
     downloadProgress[model] = 0
+  }
+
+  // MARK: - Background Upgrade
+
+  /// Start background download and prewarm of the quality model
+  /// Call this after the fast model is loaded and working
+  func startBackgroundUpgrade(engine: WhisperEngine) {
+    guard !isDownloaded(Self.qualityModel) else {
+      // Already downloaded, just need to prewarm
+      Task {
+        await prewarmForUpgrade(model: Self.qualityModel, engine: engine)
+      }
+      return
+    }
+
+    // Download first, then prewarm
+    AppLogger.model.info(
+      "Starting background download of quality model: \(Self.qualityModel.displayName)")
+    downloadModel(Self.qualityModel)
+
+    // Watch for download completion
+    Task {
+      await waitForDownloadAndPrewarm(model: Self.qualityModel, engine: engine)
+    }
+  }
+
+  /// Wait for a model to download, then prewarm it
+  private func waitForDownloadAndPrewarm(model: WhisperModel, engine: WhisperEngine) async {
+    // Poll until download completes
+    while isDownloading[model] == true {
+      try? await Task.sleep(nanoseconds: 1_000_000_000)  // Check every 1s
+    }
+
+    // Check if download succeeded
+    guard isDownloaded(model) else {
+      AppLogger.model.error("Background download of \(model.displayName) failed")
+      return
+    }
+
+    // Now prewarm the model
+    await prewarmForUpgrade(model: model, engine: engine)
+  }
+
+  /// Prewarm a model in background so it's ready for hot-swap
+  private func prewarmForUpgrade(model: WhisperModel, engine: WhisperEngine) async {
+    await MainActor.run {
+      isPrewarming[model] = true
+    }
+
+    debugPrint("🔥 Prewarming \(model.displayName) for background upgrade...", category: "MODEL")
+    debugPrint("⏳ This may take 2-5 minutes for CoreML compilation (happens once per model)", category: "MODEL")
+    AppLogger.model.info("Prewarming \(model.displayName) for background upgrade...")
+
+    // Create a temporary engine to prewarm the model
+    // This compiles CoreML models if needed
+    let prewarmEngine = WhisperEngine()
+    
+    // Start a progress indicator task
+    let modelName = model.displayName
+    let progressTask = Task {
+      for tick in 1...20 {  // Up to 10 minutes (20 x 30s)
+        try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+        if Task.isCancelled { break }
+        let elapsed = tick * 30
+        await MainActor.run {
+          debugPrint("⏳ Still prewarming \(modelName)... (\(elapsed)s elapsed)", category: "MODEL")
+        }
+      }
+    }
+
+    do {
+      let startTime = CFAbsoluteTimeGetCurrent()
+      try await prewarmEngine.loadModel(variant: model.rawValue)
+      let loadTime = CFAbsoluteTimeGetCurrent() - startTime
+      
+      progressTask.cancel()
+
+      await MainActor.run {
+        isPrewarming[model] = false
+        pendingUpgradeModel = model
+
+        debugPrint("✅ \(model.displayName) prewarmed in \(String(format: "%.1f", loadTime))s - ready for upgrade!", category: "MODEL")
+        AppLogger.model.info("✅ \(model.displayName) prewarmed and ready for upgrade")
+
+        // Notify that upgrade is ready
+        onUpgradeReady?(model)
+      }
+    } catch {
+      progressTask.cancel()
+      
+      await MainActor.run {
+        isPrewarming[model] = false
+        debugPrint("❌ Failed to prewarm \(model.displayName): \(error)", category: "MODEL")
+        AppLogger.model.error("Failed to prewarm \(model.displayName): \(error)")
+      }
+    }
+  }
+
+  /// Perform the model upgrade - switch to the quality model
+  func performUpgrade() {
+    guard let upgradeModel = pendingUpgradeModel else { return }
+
+    AppLogger.model.info("Upgrading to \(upgradeModel.displayName)")
+    SettingsManager.shared.selectedModel = upgradeModel
+    pendingUpgradeModel = nil
   }
 
   // MARK: - Formatting

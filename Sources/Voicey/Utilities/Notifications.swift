@@ -79,6 +79,22 @@ final class NotificationManager: NotificationProviding {
     )
   }
 
+  func showModelUpgradeComplete(model: WhisperModel) {
+    showNotification(
+      title: "Model Upgraded",
+      body: "Now using \(model.displayName) for better accuracy."
+    )
+  }
+
+  // MARK: - Performance Notifications
+
+  func showPerformanceWarning(_ message: String) {
+    showNotification(
+      title: "Performance Notice",
+      body: message
+    )
+  }
+
   // MARK: - Error Notifications
 
   func showTranscriptionError(_ message: String) {

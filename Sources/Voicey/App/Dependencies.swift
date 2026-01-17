@@ -51,8 +51,10 @@ protocol NotificationProviding {
   func showNoModelNotification()
   func showModelDownloadComplete(model: WhisperModel)
   func showModelDownloadFailed(reason: String)
+  func showModelUpgradeComplete(model: WhisperModel)
   func showTranscriptionError(_ message: String)
   func showNetworkError()
+  func showPerformanceWarning(_ message: String)
 }
 
 // MARK: - Dependencies Container

@@ -163,8 +163,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
 
+    // Handle performance issues
+    whisperEngine?.onPerformanceIssue = { [weak self] metrics in
+      self?.handlePerformanceIssue(metrics)
+    }
+
     postProcessor = PostProcessor()
     outputManager = OutputManager()
+
+    // Setup model upgrade callback
+    ModelManager.shared.onUpgradeReady = { [weak self] model in
+      self?.handleModelUpgradeReady(model)
+    }
+  }
+
+  // MARK: - Performance Handling
+
+  private func handlePerformanceIssue(_ metrics: PerformanceMetrics) {
+    AppLogger.general.warning("Performance issue detected: \(metrics.description)")
+
+    // Show notification with suggestion if available
+    if let suggestion = metrics.suggestion {
+      dependencies.notifications.showPerformanceWarning(suggestion)
+    }
+  }
+
+  // MARK: - Model Upgrade Handling
+
+  private func handleModelUpgradeReady(_ model: WhisperModel) {
+    debugPrint("🎉 Quality model ready for upgrade: \(model.displayName)", category: "MODEL")
+    tryPerformPendingUpgrade()
+  }
+  
+  /// Try to perform a pending model upgrade if conditions are right
+  private func tryPerformPendingUpgrade() {
+    guard let pendingModel = ModelManager.shared.pendingUpgradeModel else {
+      return
+    }
+    
+    // Only upgrade if we're NOT already using the quality model
+    let currentModel = SettingsManager.shared.selectedModel
+    guard currentModel != ModelManager.qualityModel else {
+      debugPrint("Not upgrading - already using \(currentModel.displayName)", category: "MODEL")
+      ModelManager.shared.pendingUpgradeModel = nil
+      return
+    }
+
+    guard appState.transcriptionState == .idle else {
+      debugPrint("⏳ Upgrade pending - waiting for transcription to complete...", category: "MODEL")
+      return
+    }
+
+    // Perform the upgrade
+    performModelUpgrade(to: pendingModel)
+  }
+
+  private func performModelUpgrade(to model: WhisperModel) {
+    let previousModel = SettingsManager.shared.selectedModel
+    debugPrint("🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
+    appState.modelStatus = .loading
+
+    Task {
+      // Unload current model
+      debugPrint("🗑️ Unloading \(previousModel.displayName)...", category: "MODEL")
+      whisperEngine?.unloadModel()
+      whisperEngine?.resetPerformanceTracking()
+
+      // Update settings to use new model
+      await MainActor.run {
+        SettingsManager.shared.selectedModel = model
+        appState.currentModel = model
+        ModelManager.shared.pendingUpgradeModel = nil
+      }
+
+      // Load the new model
+      do {
+        debugPrint("📦 Loading \(model.displayName)...", category: "MODEL")
+        let startTime = CFAbsoluteTimeGetCurrent()
+        try await whisperEngine?.loadModel(variant: model.rawValue)
+        let loadTime = CFAbsoluteTimeGetCurrent() - startTime
+
+        await MainActor.run {
+          appState.modelStatus = .ready
+          debugPrint("✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!", category: "MODEL")
+          dependencies.notifications.showModelUpgradeComplete(model: model)
+        }
+      } catch {
+        await MainActor.run {
+          appState.modelStatus = .failed("Failed to load \(model.displayName)")
+          debugPrint("❌ Upgrade failed: \(error)", category: "MODEL")
+        }
+      }
+    }
   }
 
   private func setupHotkey() {
@@ -252,6 +342,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           if whisperEngine?.isModelLoaded == true {
             appState.modelStatus = .ready
             debugPrint("✅ Model ready in \(String(format: "%.1f", loadTime))s", category: "MODEL")
+
+            // Start background upgrade if we're using the fast model
+            self.startBackgroundUpgradeIfNeeded()
           } else {
             appState.modelStatus = .failed("Failed to load model")
             debugPrint("❌ Model preload failed", category: "MODEL")
@@ -275,6 +368,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 seconds
         self.openModelDownloader()
       }
+    }
+  }
+
+  /// Start background download and prewarming of quality model if we're not already using it
+  private func startBackgroundUpgradeIfNeeded() {
+    let currentModel = SettingsManager.shared.selectedModel
+
+    // Only start upgrade if NOT already using quality model
+    guard currentModel != ModelManager.qualityModel else {
+      debugPrint(
+        "📦 Already using \(currentModel.displayName), no upgrade needed", category: "MODEL")
+      return
+    }
+
+    // Check if quality model is already downloaded
+    if ModelManager.shared.isDownloaded(ModelManager.qualityModel) {
+      debugPrint("🔄 Quality model (\(ModelManager.qualityModel.displayName)) downloaded, starting background prewarm...", category: "MODEL")
+    } else {
+      debugPrint("📥 Starting background download of quality model...", category: "MODEL")
+    }
+
+    // Start the background upgrade process
+    if let engine = whisperEngine {
+      ModelManager.shared.startBackgroundUpgrade(engine: engine)
     }
   }
 
@@ -486,6 +603,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "Audio too short (\(String(format: "%.2f", durationSec))s), skipping transcription")
       hideOverlay()
       appState.transcriptionState = .idle
+      // Check for pending model upgrade now that we're idle
+      tryPerformPendingUpgrade()
       return
     }
 
@@ -514,6 +633,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Update menubar
     statusBarController?.updateIcon(recording: false)
+    
+    // Check for pending model upgrade now that we're idle
+    tryPerformPendingUpgrade()
   }
 
   private func processTranscription(audioBuffer: [Float]) async {
@@ -549,6 +671,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "processTranscription: No text to deliver (empty after processing)")
           self.hideOverlay()
           self.appState.transcriptionState = .idle
+          // Check for pending model upgrade now that we're idle
+          self.tryPerformPendingUpgrade()
           return
         }
 
@@ -562,6 +686,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           self?.hideOverlay()
           // Reset to idle after delivery
           self?.appState.transcriptionState = .idle
+          // Check for pending model upgrade now that we're idle
+          self?.tryPerformPendingUpgrade()
         }
       }
     } catch {
@@ -572,6 +698,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.appState.transcriptionState = .error(message: error.localizedDescription)
         self?.outputManager?.previousApp = nil
         self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+        // Check for pending model upgrade even after error
+        self?.tryPerformPendingUpgrade()
       }
     }
   }
