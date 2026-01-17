@@ -1,18 +1,20 @@
 # Voicey
 
-A macOS menubar application that provides system-wide voice-to-text transcription using on-device Whisper models.
+A macOS menubar application that provides system-wide voice-to-text transcription using on-device Whisper models powered by WhisperKit.
 
 ## Features
 
-- **Privacy-first**: All transcription runs on-device; network access only for model downloads
+- **Privacy-first**: All transcription runs on-device using CoreML; network access only for model downloads
 - **Low friction**: Single hotkey to toggle (default: `Ctrl+V`), minimal UI, instant output
-- **Expressive output**: Punctuation inferred from speech patterns, not voice commands
+- **Intelligent output**: Punctuation inferred from speech timing and patterns, noise filtering removes artifacts
+- **Smart model management**: Starts fast with a lightweight model, automatically upgrades to higher quality in the background
+- **Performance monitoring**: Real-time factor tracking with suggestions when system is under load
 - **Unobtrusive**: Small overlay, menubar-only presence, no dock icon
 
 ## Requirements
 
 - macOS 13.0 (Ventura) or later
-- Apple Silicon (M1+) recommended for optimal performance
+- Apple Silicon (M1+) required for WhisperKit CoreML acceleration
 - Microphone access permission
 - Accessibility permission (for global hotkey and paste functionality)
 
@@ -64,12 +66,12 @@ open Voicey.xcodeproj
 1. Launch Voicey from Applications or build output
 2. Grant microphone permission when prompted
 3. Grant accessibility permission in System Settings > Privacy & Security > Accessibility
-4. Download a transcription model (Base model recommended for balance of speed/accuracy)
+4. Download a transcription model (Large v3 Turbo recommended for best speed/accuracy balance)
 
 ### Recording
 
 1. Press `Ctrl+V` (or your custom hotkey) to start recording
-2. Speak naturally - the app will detect punctuation from your intonation
+2. Speak naturally - the app will detect punctuation from your speech timing
 3. Press the hotkey again to stop and transcribe
 4. Press `ESC` to cancel without transcribing
 
@@ -79,36 +81,47 @@ Access settings from the menubar icon:
 - **General**: Output mode, launch at login, dock icon visibility
 - **Hotkey**: Customize the recording hotkey
 - **Audio**: Select input device, test microphone
-- **Model**: Download/manage Whisper models, GPU acceleration
-- **Voice Commands**: Enable optional voice commands (new line, new paragraph, etc.)
+- **Model**: Download/manage Whisper models
+- **Voice Commands**: Enable optional voice commands (new line, new paragraph, scratch that)
 
 ## Models
 
-| Model | Size | Memory | Speed | Accuracy |
-|-------|------|--------|-------|----------|
-| Tiny | ~75MB | ~125MB | ~10x | Good |
-| Base | ~150MB | ~250MB | ~7x | Better |
-| Small | ~500MB | ~850MB | ~4x | Very Good |
-| Medium | ~1.5GB | ~2.5GB | ~2x | Excellent |
+| Model | Disk Size | Memory | Notes |
+|-------|-----------|--------|-------|
+| Large v3 Turbo | ~1.5GB | ~3GB | **Recommended** - Fast & accurate, 8x faster than Large |
+| Large v3 | ~3GB | ~6GB | Maximum accuracy, slower |
+| Distil Large v3 | ~800MB | ~2GB | Distilled model, good balance |
+| Small (English) | ~250MB | ~600MB | Fast, English-only |
+| Base (English) | ~80MB | ~200MB | Very fast, basic accuracy |
+| Tiny (English) | ~40MB | ~100MB | Fastest, lowest accuracy |
 
-*Speed relative to realtime on M1 MacBook Air*
+*Note: First load of each model requires CoreML compilation (1-3 minutes). Subsequent loads are instant.*
+
+## Post-Processing
+
+Voicey includes intelligent post-processing:
+
+- **Noise filtering**: Removes Whisper artifacts like `[music]`, `*click*`, breathing sounds, etc.
+- **Intelligent punctuation**: Adds periods, commas, and question marks based on speech timing and patterns
+- **Text expansions**: Converts common phrases (e.g., "etcetera" → "etc.", "mister" → "Mr.")
+- **Voice commands** (optional): "new line", "new paragraph", "scratch that"
 
 ## Architecture
 
 ```
 Voicey/
 ├── App/                    # App entry, lifecycle, menubar
-├── Audio/                  # Audio capture and processing
-├── Transcription/          # Whisper engine and post-processing
-├── Output/                 # Clipboard and paste simulation
-├── UI/                     # Overlay and settings windows
-├── Input/                  # Hotkey management
-└── Utilities/              # Permissions, settings, notifications
+├── Audio/                  # Audio capture and level monitoring
+├── Transcription/          # WhisperKit engine, model management, post-processing
+├── Output/                 # Clipboard and keyboard simulation
+├── UI/                     # Overlay, settings, onboarding views
+├── Input/                  # Hotkey management and keybinding recorder
+└── Utilities/              # Permissions, settings, notifications, logging
 ```
 
 ## Dependencies
 
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - Whisper inference engine
+- [WhisperKit](https://github.com/argmaxinc/WhisperKit) - CoreML-optimized Whisper inference for Apple Silicon
 - [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) - Global hotkey management
 
 ## Permissions
@@ -126,5 +139,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - OpenAI for the Whisper model
-- ggerganov for whisper.cpp
+- Argmax for WhisperKit
 - Sindre Sorhus for KeyboardShortcuts
