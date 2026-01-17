@@ -23,7 +23,7 @@ struct OnboardingView: View {
 
   /// Whether all required setup is complete (fast model is enough to proceed)
   private var isSetupComplete: Bool {
-    microphoneGranted && accessibilityGranted && modelManager.isDownloaded(fastModel)
+    microphoneGranted && modelManager.isDownloaded(fastModel)
   }
 
   /// Whether fast model is currently downloading
@@ -128,14 +128,16 @@ struct OnboardingView: View {
           action: requestMicrophonePermission
         )
 
-        // Step 3: Accessibility
+        // Step 3: Accessibility (optional, only needed for auto-paste)
         SetupStepRow(
           stepNumber: 3,
           icon: "keyboard",
           title: "Accessibility Access",
-          description: "Required to paste text into apps",
+          description: "Optional: Required for auto-paste into other apps",
           isComplete: accessibilityGranted,
           isInProgress: isCheckingAccessibility,
+          progress: 0,
+          isOptional: true,
           buttonTitle: accessibilityGranted
             ? "Granted" : (isCheckingAccessibility ? "Checking..." : "Open Settings"),
           action: requestAccessibilityPermission
@@ -198,10 +200,6 @@ struct OnboardingView: View {
               Image(systemName: "mic.slash")
                 .foregroundStyle(.orange)
               Text("Microphone access required")
-            } else if !accessibilityGranted {
-              Image(systemName: "keyboard")
-                .foregroundStyle(.orange)
-              Text("Accessibility access required")
             }
           }
           .font(.caption)
@@ -230,14 +228,6 @@ struct OnboardingView: View {
         }
 
         HStack(spacing: 12) {
-          // Recheck button for accessibility
-          if !accessibilityGranted && !isCheckingAccessibility {
-            Button("Recheck") {
-              recheckPermissions()
-            }
-            .buttonStyle(.bordered)
-          }
-
           Button {
             debugPrint("✅ Get Started pressed - setup complete", category: "ONBOARD")
             onComplete()
@@ -251,20 +241,6 @@ struct OnboardingView: View {
           .disabled(!isSetupComplete)
         }
         .padding(.horizontal, 30)
-
-        // Fallback for accessibility detection issues
-        if !accessibilityGranted && microphoneGranted && isFastModelReady {
-          Button {
-            debugPrint("⚠️ Continue anyway pressed", category: "ONBOARD")
-            onComplete()
-          } label: {
-            Text("I've granted accessibility → Continue anyway")
-              .font(.caption)
-              .underline()
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(.blue)
-        }
       }
       .padding(.bottom, 30)
     }
@@ -275,6 +251,7 @@ struct OnboardingView: View {
     }
     .onDisappear {
       accessibilityCheckTask?.cancel()
+      accessibilityCheckTask = nil
     }
   }
 
@@ -340,22 +317,6 @@ struct OnboardingView: View {
     modelManager.downloadModel(qualityModel)
   }
 
-  private func recheckPermissions() {
-    Task {
-      microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
-      // Use refresh for accessibility - tries multiple detection methods
-      let granted = PermissionsManager.shared.refreshAccessibilityPermission()
-      await MainActor.run {
-        accessibilityGranted = granted
-        if granted {
-          AppLogger.general.info("Accessibility permission detected as granted")
-        } else {
-          AppLogger.general.warning("Accessibility permission still not detected")
-        }
-      }
-    }
-  }
-
   private func requestMicrophonePermission() {
     Task {
       let granted = await PermissionsManager.shared.requestMicrophonePermission()
@@ -368,6 +329,7 @@ struct OnboardingView: View {
   private func requestAccessibilityPermission() {
     // Cancel any existing check
     accessibilityCheckTask?.cancel()
+    accessibilityCheckTask = nil
 
     PermissionsManager.shared.promptForAccessibilityPermission()
     isCheckingAccessibility = true
@@ -379,8 +341,7 @@ struct OnboardingView: View {
 
         try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 second
 
-        // Use the refresh method which tries multiple detection approaches
-        let granted = PermissionsManager.shared.refreshAccessibilityPermission()
+        let granted = PermissionsManager.shared.checkAccessibilityPermission()
 
         await MainActor.run {
           accessibilityGranted = granted

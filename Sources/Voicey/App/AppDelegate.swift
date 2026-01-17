@@ -23,7 +23,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var outputManager: OutputManager?
 
   // ESC key monitors
-  private var escKeyMonitor: Any?
   private var localEscKeyMonitor: Any?
 
   // Model upgrade lock - prevents recording during model swap
@@ -87,12 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let hasMicrophone = await dependencies.permissions.checkMicrophonePermission()
     debugPrint("🔍 Has microphone: \(hasMicrophone)", category: "STARTUP")
 
-    // Check accessibility
-    let hasAccessibility = dependencies.permissions.checkAccessibilityPermission()
-    debugPrint("🔍 Has accessibility: \(hasAccessibility)", category: "STARTUP")
-
     // Need onboarding if any required step is missing
-    let needsOnboarding = !hasModel || !hasMicrophone || !hasAccessibility
+    let needsOnboarding = !hasModel || !hasMicrophone
     debugPrint("🔍 Needs onboarding: \(needsOnboarding)", category: "STARTUP")
 
     return needsOnboarding
@@ -100,9 +95,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationWillTerminate(_ notification: Notification) {
     // Remove monitors
-    if let monitor = escKeyMonitor {
-      NSEvent.removeMonitor(monitor)
-    }
     if let monitor = localEscKeyMonitor {
       NSEvent.removeMonitor(monitor)
     }
@@ -278,22 +270,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func setupEscapeKeyMonitor() {
-    // Global monitor for ESC key (works even when app is not focused)
-    // Note: Global monitor requires accessibility permission
-    escKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      if event.keyCode == UInt16(kVK_Escape) {
-        Task { @MainActor in
-          // Cancel if in any active state (loading, recording, or processing)
-          if self?.appState.transcriptionState.isActive == true {
-            AppLogger.general.info(
-              "ESC pressed - cancelling (state: \(String(describing: self?.appState.transcriptionState)))"
-            )
-            self?.cancelTranscription()
-          }
-        }
-      }
-    }
-
     // Local monitor for when app is focused (doesn't require accessibility)
     localEscKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       if event.keyCode == UInt16(kVK_Escape) {
@@ -313,21 +289,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Check permissions silently - just log status, don't prompt
   private func checkPermissionsSilently() async {
     let micPermission = await dependencies.permissions.checkMicrophonePermission()
-    let accessibilityPermission = dependencies.permissions.checkAccessibilityPermission()
-
-    await MainActor.run {
-      appState.hasAccessibilityPermission = accessibilityPermission
-    }
-
-    AppLogger.general.info(
-      "Permission status - Microphone: \(micPermission), Accessibility: \(accessibilityPermission)")
+    AppLogger.general.info("Permission status - Microphone: \(micPermission)")
 
     // Only warn if missing, don't prompt (user completed onboarding, they know)
     if !micPermission {
       AppLogger.general.warning("Microphone permission not granted")
-    }
-    if !accessibilityPermission {
-      AppLogger.general.warning("Accessibility permission not granted - paste won't work")
     }
   }
 
@@ -429,7 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let window = NSWindow(contentViewController: hostingController)
     window.title = "Voicey"
-    window.styleMask = [.titled]
+    window.styleMask = [.titled, .closable]  // Allow user to close/quit
     window.setContentSize(NSSize(width: 300, height: 150))
     window.center()
     window.isReleasedWhenClosed = false
@@ -575,11 +541,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint("🎙️ Starting recording...", category: "RECORD")
     AppLogger.audio.info("Starting recording...")
 
-    // Save the current frontmost app BEFORE we show our overlay
-    outputManager?.saveFrontmostApp()
-    AppLogger.output.info(
-      "Saved frontmost app: \(self.outputManager?.previousApp?.localizedName ?? "none")")
-
     appState.transcriptionState = .recording(startTime: Date())
 
     // Show overlay (or update it if already showing)
@@ -645,9 +606,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Stop and discard audio
     _ = audioCaptureManager?.stopCapture()
 
-    // Clear saved app
-    outputManager?.previousApp = nil
-
     // Hide overlay
     hideOverlay()
 
@@ -696,17 +654,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           return
         }
 
-        debugPrint("📋 Copying to clipboard and pasting: \"\(processedText)\"", category: "OUTPUT")
+        debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
-        // Deliver text first (this will restore focus to previous app and paste)
-        // Hide overlay AFTER a delay to not interfere with focus
+        // Deliver text to clipboard and show notification
         outputManager?.deliver(text: processedText) { [weak self] in
-          debugPrint("✅ Paste complete", category: "OUTPUT")
-          // Called after paste is complete
+          debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
           self?.hideOverlay()
-          // Reset to idle after delivery
           self?.appState.transcriptionState = .idle
-          // Check for pending model upgrade now that we're idle
           self?.tryPerformPendingUpgrade()
         }
       }
@@ -716,9 +670,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       await MainActor.run { [weak self] in
         self?.hideOverlay()
         self?.appState.transcriptionState = .error(message: error.localizedDescription)
-        self?.outputManager?.previousApp = nil
         self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-        // Check for pending model upgrade even after error
         self?.tryPerformPendingUpgrade()
       }
     }

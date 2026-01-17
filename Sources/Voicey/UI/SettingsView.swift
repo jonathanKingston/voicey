@@ -43,23 +43,28 @@ struct SettingsView: View {
 // MARK: - General Settings
 
 struct GeneralSettingsView: View {
-  @AppStorage("outputMode") private var outputMode: String = OutputMode.both.rawValue
   @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
   @AppStorage("showDockIcon") private var showDockIcon: Bool = false
+  @AppStorage("autoPasteEnabled") private var autoPasteEnabled: Bool = false
 
   var body: some View {
     Form {
-      Section {
-        Picker("Output Mode", selection: $outputMode) {
-          ForEach(OutputMode.allCases) { mode in
-            Text(mode.displayName).tag(mode.rawValue)
+      Section("Output") {
+        Toggle("Auto-paste after transcription", isOn: $autoPasteEnabled)
+          .onChange(of: autoPasteEnabled) { enabled in
+            guard enabled else { return }
+            if !PermissionsManager.shared.checkAccessibilityPermission() {
+              PermissionsManager.shared.promptForAccessibilityPermission()
+            }
           }
-        }
-        .pickerStyle(.menu)
 
-        Text(OutputMode(rawValue: outputMode)?.description ?? "")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        Text(
+          autoPasteEnabled
+            ? "When enabled, Voicey will copy the transcription and then simulate ⌘V in the active app (requires Accessibility)."
+            : "Voicey copies transcriptions to your clipboard. Press ⌘V to paste."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
 
       Section {

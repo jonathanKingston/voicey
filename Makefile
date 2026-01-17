@@ -8,7 +8,7 @@ CONTENTS_DIR = $(APP_BUNDLE)/Contents
 MACOS_DIR = $(CONTENTS_DIR)/MacOS
 RESOURCES_DIR = $(CONTENTS_DIR)/Resources
 
-.PHONY: all build release clean run install logs
+.PHONY: all build release clean run install logs reset-permissions reset-full
 
 all: build
 
@@ -16,9 +16,17 @@ all: build
 build:
 	swift build
 
+# Debug build (direct distribution features enabled)
+build-direct:
+	swift build -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
+
 # Release build
 release:
 	swift build -c release
+
+# Release build (direct distribution features enabled)
+release-direct:
+	swift build -c release -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
 
 # Create app bundle from release build
 bundle: release
@@ -29,6 +37,19 @@ bundle: release
 	@cp $(RELEASE_DIR)/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp Info.plist $(CONTENTS_DIR)/
 	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
+	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
+	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
+	@echo "App bundle created: $(APP_BUNDLE)"
+
+# Create app bundle with direct-distribution features (auto-paste)
+bundle-direct: release-direct
+	@echo "Creating app bundle (direct distribution)..."
+	@rm -rf $(APP_BUNDLE)
+	@mkdir -p $(MACOS_DIR)
+	@mkdir -p $(RESOURCES_DIR)
+	@cp $(RELEASE_DIR)/Voicey $(MACOS_DIR)/$(APP_NAME)
+	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
+	@if [ -f VoiceyDirect.entitlements ]; then cp VoiceyDirect.entitlements $(CONTENTS_DIR)/Voicey.entitlements; fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "App bundle created: $(APP_BUNDLE)"
@@ -82,6 +103,40 @@ reset-all:
 	@rm -rf ~/Library/Application\ Support/Voicey/Models
 	@echo "Done. App will show onboarding and require model download."
 
+# Reset system permissions (microphone, accessibility, login items)
+reset-permissions:
+	@echo "Resetting system permissions for Voicey..."
+	@echo ""
+	@echo "Resetting microphone permission..."
+	@tccutil reset Microphone com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@echo "Resetting login items..."
+	@sfltool resetbtm 2>/dev/null || echo "  (requires admin privileges)"
+	@echo ""
+	@echo "Done. You may need to:"
+	@echo "  - Re-grant microphone access in System Settings > Privacy & Security > Microphone"
+	@echo "  - Re-enable 'Launch at Login' in app settings"
+
+# Reset permissions for direct distribution build (includes accessibility)
+reset-permissions-direct:
+	@echo "Resetting system permissions for Voicey (direct distribution)..."
+	@echo ""
+	@echo "Resetting microphone permission..."
+	@tccutil reset Microphone com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@echo "Resetting accessibility permission..."
+	@tccutil reset Accessibility com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@echo "Resetting login items..."
+	@sfltool resetbtm 2>/dev/null || echo "  (requires admin privileges)"
+	@echo ""
+	@echo "Done. You may need to:"
+	@echo "  - Re-grant microphone access in System Settings > Privacy & Security > Microphone"
+	@echo "  - Re-grant accessibility in System Settings > Privacy & Security > Accessibility"
+	@echo "  - Re-enable 'Launch at Login' in app settings"
+
+# Full reset: app state + models + permissions
+reset-full: reset-all reset-permissions
+	@echo ""
+	@echo "Full reset complete."
+
 # Show current app state
 show-state:
 	@echo "=== App Settings ==="
@@ -97,16 +152,18 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build       - Build debug version (default)"
-	@echo "  release     - Build release version"
-	@echo "  bundle      - Create app bundle from release build"
-	@echo "  sign        - Sign the app bundle"
-	@echo "  clean       - Clean build artifacts"
-	@echo "  run         - Build and run debug version"
-	@echo "  logs        - Stream debug logs (run in separate terminal)"
-	@echo "  install     - Install to /Applications"
-	@echo "  xcode       - Generate Xcode project"
-	@echo "  reset-state - Reset app state (keeps models)"
-	@echo "  reset-all   - Reset everything including models"
-	@echo "  show-state  - Show current app settings and models"
-	@echo "  help        - Show this help"
+	@echo "  build             - Build debug version (default)"
+	@echo "  release           - Build release version"
+	@echo "  bundle            - Create app bundle from release build"
+	@echo "  sign              - Sign the app bundle"
+	@echo "  clean             - Clean build artifacts"
+	@echo "  run               - Build and run debug version"
+	@echo "  logs              - Stream debug logs (run in separate terminal)"
+	@echo "  install           - Install to /Applications"
+	@echo "  xcode             - Generate Xcode project"
+	@echo "  reset-state       - Reset app state (keeps models)"
+	@echo "  reset-all         - Reset everything including models"
+	@echo "  reset-permissions - Reset system permissions (mic, accessibility, login)"
+	@echo "  reset-full        - Reset everything: state, models, and permissions"
+	@echo "  show-state        - Show current app settings and models"
+	@echo "  help              - Show this help"

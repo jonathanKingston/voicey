@@ -42,40 +42,26 @@ final class PermissionsManager: PermissionsProviding {
   // MARK: - Accessibility Permission
 
   /// Check if accessibility permission is granted
-  /// Required for global hotkeys and simulating keyboard input
   func checkAccessibilityPermission() -> Bool {
-    // Use the simpler check without options dictionary for more reliable detection
     let trusted = AXIsProcessTrusted()
-
     AppLogger.general.info(
       "Accessibility check: AXIsProcessTrusted() = \(trusted), Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")"
     )
-
     return trusted
   }
 
-  /// Try to verify accessibility by actually attempting an operation
-  /// This is more reliable than AXIsProcessTrusted() which can cache
-  func verifyAccessibilityWorks() -> Bool {
-    // Try to create a CGEventSource - this requires accessibility permission
-    let source = CGEventSource(stateID: .combinedSessionState)
-    let works = source != nil
-    AppLogger.general.info("Accessibility verify (CGEventSource): \(works)")
-    return works
-  }
-
-  /// Prompt user to grant accessibility permission
-  /// Opens System Settings to the Accessibility pane
+  /// Prompt user to grant accessibility permission (shows system prompt when possible)
   func promptForAccessibilityPermission() {
-    AppLogger.general.info("Opening System Settings for accessibility permission")
-    // Just open System Settings - the AXIsProcessTrustedWithOptions prompt is unreliable
-    // and can cause double dialogs
+    let options: [String: Any] = [
+      Self.accessibilityPromptKey: true
+    ]
+
+    _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
     openAccessibilitySettings()
   }
 
   /// Open System Settings to Accessibility pane
   func openAccessibilitySettings() {
-    // Use the newer URL format for macOS 13+
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
     {
@@ -103,19 +89,6 @@ final class PermissionsManager: PermissionsProviding {
       microphone: microphone,
       accessibility: accessibility
     )
-  }
-
-  /// Force a fresh check of accessibility permission using multiple methods
-  func refreshAccessibilityPermission() -> Bool {
-    // Try multiple detection methods
-    let axTrusted = AXIsProcessTrusted()
-    let cgEventWorks = verifyAccessibilityWorks()
-
-    AppLogger.general.info(
-      "Refresh accessibility: AXIsProcessTrusted=\(axTrusted), CGEventSource=\(cgEventWorks)")
-
-    // Return true if either method indicates we have permission
-    return axTrusted || cgEventWorks
   }
 }
 

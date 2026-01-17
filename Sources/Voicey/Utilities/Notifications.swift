@@ -41,21 +41,6 @@ final class NotificationManager: NotificationProviding {
     )
   }
 
-  func showAccessibilityRequiredNotification() {
-    showNotification(
-      title: "Accessibility Access Required",
-      body: "Voicey needs accessibility access. Click the Voicey menu and select Settings."
-    )
-  }
-
-  func showAccessibilityRequired() {
-    showNotification(
-      title: "Accessibility Permission Needed",
-      body:
-        "Voicey needs accessibility access to paste transcribed text. Please grant permission in System Settings."
-    )
-  }
-
   // MARK: - Model Notifications
 
   func showNoModelNotification() {
@@ -92,6 +77,15 @@ final class NotificationManager: NotificationProviding {
     showNotification(
       title: "Performance Notice",
       body: message
+    )
+  }
+
+  // MARK: - Transcription Notifications
+
+  func showTranscriptionCopied() {
+    showNotification(
+      title: "Transcription Copied",
+      body: "Press ⌘V to paste your transcribed text."
     )
   }
 

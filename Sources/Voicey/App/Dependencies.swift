@@ -4,10 +4,10 @@ import Foundation
 
 /// Protocol for settings management
 protocol SettingsProviding {
-  var outputMode: OutputMode { get set }
   var selectedModel: WhisperModel { get set }
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
+  var autoPasteEnabled: Bool { get set }
   var voiceCommandsEnabled: Bool { get set }
   var voiceCommands: [VoiceCommand] { get set }
   var enableDetailedLogging: Bool { get set }
@@ -44,12 +44,11 @@ protocol PermissionsProviding {
 /// Protocol for notifications
 protocol NotificationProviding {
   func showMicrophoneRequiredNotification()
-  func showAccessibilityRequiredNotification()
-  func showAccessibilityRequired()
   func showNoModelNotification()
   func showModelDownloadComplete(model: WhisperModel)
   func showModelDownloadFailed(reason: String)
   func showModelUpgradeComplete(model: WhisperModel)
+  func showTranscriptionCopied()
   func showTranscriptionError(_ message: String)
   func showNetworkError()
   func showPerformanceWarning(_ message: String)

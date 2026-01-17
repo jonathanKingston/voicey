@@ -16,7 +16,8 @@ A macOS menubar application that provides system-wide voice-to-text transcriptio
 - macOS 13.0 (Ventura) or later
 - Apple Silicon (M1+) required for WhisperKit CoreML acceleration
 - Microphone access permission
-- Accessibility permission (for global hotkey and paste functionality)
+- Network access (for downloading AI models on first launch)
+- Optional: Accessibility permission (only if enabling auto-paste)
 
 ## Building
 
@@ -65,8 +66,7 @@ open Voicey.xcodeproj
 
 1. Launch Voicey from Applications or build output
 2. Grant microphone permission when prompted
-3. Grant accessibility permission in System Settings > Privacy & Security > Accessibility
-4. Download a transcription model (Large v3 Turbo recommended for best speed/accuracy balance)
+3. Download a transcription model (Large v3 Turbo recommended for best speed/accuracy balance)
 
 ### Recording
 
@@ -78,7 +78,7 @@ open Voicey.xcodeproj
 ### Settings
 
 Access settings from the menubar icon:
-- **General**: Output mode, launch at login, dock icon visibility
+- **General**: Output (clipboard), launch at login, dock icon visibility
 - **Hotkey**: Customize the recording hotkey
 - **Audio**: Select input device, test microphone
 - **Model**: Download/manage Whisper models
@@ -113,7 +113,7 @@ Voicey/
 ├── App/                    # App entry, lifecycle, menubar
 ├── Audio/                  # Audio capture and level monitoring
 ├── Transcription/          # WhisperKit engine, model management, post-processing
-├── Output/                 # Clipboard and keyboard simulation
+├── Output/                 # Clipboard output
 ├── UI/                     # Overlay, settings, onboarding views
 ├── Input/                  # Hotkey management and keybinding recorder
 └── Utilities/              # Permissions, settings, notifications, logging
@@ -129,7 +129,6 @@ Voicey/
 | Permission | Purpose |
 |------------|---------|
 | Microphone | Audio capture for transcription |
-| Accessibility | Global hotkey registration, paste simulation |
 | Network | Model downloads from Hugging Face |
 
 ## License
