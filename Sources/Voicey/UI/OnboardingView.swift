@@ -329,7 +329,20 @@ struct OnboardingView: View {
       let granted = await PermissionsManager.shared.requestMicrophonePermission()
       await MainActor.run {
         microphoneGranted = granted
+        bringOnboardingWindowToFront()
       }
+    }
+  }
+
+  private func bringOnboardingWindowToFront() {
+    NSApp.activate(ignoringOtherApps: true)
+
+    // The system permission prompt can cause our onboarding window to fall behind other apps.
+    // Re-assert focus after the permission flow completes.
+    if let window = NSApp.windows.first(where: { $0.title == "Welcome to Voicey" }) {
+      window.makeKeyAndOrderFront(nil)
+    } else if let window = NSApp.windows.first {
+      window.makeKeyAndOrderFront(nil)
     }
   }
 

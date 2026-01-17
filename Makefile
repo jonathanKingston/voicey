@@ -41,6 +41,19 @@ bundle: release
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "App bundle created: $(APP_BUNDLE)"
 
+# Create app bundle from debug build (recommended for testing permissions during development)
+bundle-debug: build
+	@echo "Creating debug app bundle..."
+	@rm -rf $(APP_BUNDLE)
+	@mkdir -p $(MACOS_DIR)
+	@mkdir -p $(RESOURCES_DIR)
+	@cp $(BUILD_DIR)/debug/Voicey $(MACOS_DIR)/$(APP_NAME)
+	@cp Info.plist $(CONTENTS_DIR)/
+	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
+	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
+	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
+	@echo "Debug app bundle created: $(APP_BUNDLE)"
+
 # Create app bundle with direct-distribution features (auto-paste)
 bundle-direct: release-direct
 	@echo "Creating app bundle (direct distribution)..."
@@ -72,6 +85,10 @@ run: build
 
 # Run as an app bundle (recommended for testing permissions like Accessibility)
 run-bundle: bundle
+	@open -n $(APP_BUNDLE)
+
+# Run the debug app bundle
+run-bundle-debug: bundle-debug
 	@open -n $(APP_BUNDLE)
 
 # Install to Applications

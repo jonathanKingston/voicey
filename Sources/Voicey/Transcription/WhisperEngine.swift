@@ -260,7 +260,26 @@ final class WhisperEngine {
         for tick in 1...20 {  // up to ~10 minutes (20 x 30s)
           try? await Task.sleep(nanoseconds: 30_000_000_000)
           if Task.isCancelled { return }
-          debugPrint("⏳ Still loading model '\(variantName)'... (\(tick * 30)s elapsed)", category: "MODEL")
+          let elapsed = tick * 30
+          let thermal = ProcessInfo.processInfo.thermalState
+          let thermalStr: String
+          switch thermal {
+          case .nominal: thermalStr = "nominal"
+          case .fair: thermalStr = "fair"
+          case .serious: thermalStr = "serious"
+          case .critical: thermalStr = "critical"
+          @unknown default: thermalStr = "unknown"
+          }
+          debugPrint(
+            "⏳ Still loading model '\(variantName)'... (\(elapsed)s elapsed, thermal: \(thermalStr))",
+            category: "MODEL"
+          )
+          if elapsed == 180 {
+            debugPrint(
+              "💡 First-time CoreML compilation can take several minutes even for smaller models. Subsequent launches should be much faster.",
+              category: "MODEL"
+            )
+          }
         }
       }
       defer { progressTask.cancel() }
