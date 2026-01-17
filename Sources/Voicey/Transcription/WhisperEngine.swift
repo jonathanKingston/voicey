@@ -85,6 +85,8 @@ struct TranscriptionToken {
 }
 
 /// Wrapper around WhisperKit for on-device speech-to-text
+/// Note: This class should be accessed from the main thread for UI callbacks.
+/// WhisperKit operations are async and run on background threads automatically.
 final class WhisperEngine {
   private var whisperKit: WhisperKit?
   private var isLoading = false
@@ -428,7 +430,6 @@ enum WhisperError: LocalizedError {
   case failedToLoadModel
   case noModelLoaded
   case transcriptionFailed
-  case engineDeallocated
 
   var errorDescription: String? {
     switch self {
@@ -438,8 +439,6 @@ enum WhisperError: LocalizedError {
       return "No transcription model is loaded"
     case .transcriptionFailed:
       return "Transcription failed"
-    case .engineDeallocated:
-      return "Whisper engine was deallocated"
     }
   }
 }

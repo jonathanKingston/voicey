@@ -92,9 +92,19 @@ struct KeybindingRecorderView: View {
     }
 
     keyCode = UInt32(event.keyCode)
-    modifiers = HotkeyManager.carbonModifiers(from: flags)
+    modifiers = carbonModifiers(from: flags)
     stopRecording()
     updateDisplayText()
+  }
+
+  /// Convert Cocoa modifier flags to Carbon modifier flags
+  private func carbonModifiers(from cocoaModifiers: NSEvent.ModifierFlags) -> UInt32 {
+    var modifiers: UInt32 = 0
+    if cocoaModifiers.contains(.command) { modifiers |= UInt32(cmdKey) }
+    if cocoaModifiers.contains(.shift) { modifiers |= UInt32(shiftKey) }
+    if cocoaModifiers.contains(.option) { modifiers |= UInt32(optionKey) }
+    if cocoaModifiers.contains(.control) { modifiers |= UInt32(controlKey) }
+    return modifiers
   }
 
   private func clearBinding() {

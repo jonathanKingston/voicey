@@ -25,7 +25,6 @@ final class SettingsManager: SettingsProviding {
       Keys.outputMode: OutputMode.both.rawValue,
       // Default to fast model - onboarding will upgrade to quality model in background
       Keys.selectedModel: WhisperModel.small.rawValue,
-      Keys.useGPUAcceleration: true,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
       Keys.voiceCommandsEnabled: false,
@@ -39,12 +38,10 @@ final class SettingsManager: SettingsProviding {
   private enum Keys {
     static let outputMode = "outputMode"
     static let selectedModel = "selectedModel"
-    static let useGPUAcceleration = "useGPUAcceleration"
     static let launchAtLogin = "launchAtLogin"
     static let showDockIcon = "showDockIcon"
     static let voiceCommandsEnabled = "voiceCommandsEnabled"
     static let voiceCommands = "voiceCommands"
-    static let selectedInputDevice = "selectedInputDevice"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
   }
@@ -70,11 +67,6 @@ final class SettingsManager: SettingsProviding {
     set {
       defaults.set(newValue.rawValue, forKey: Keys.selectedModel)
     }
-  }
-
-  var useGPUAcceleration: Bool {
-    get { defaults.bool(forKey: Keys.useGPUAcceleration) }
-    set { defaults.set(newValue, forKey: Keys.useGPUAcceleration) }
   }
 
   // MARK: - App Behavior
@@ -125,13 +117,6 @@ final class SettingsManager: SettingsProviding {
         defaults.set(data, forKey: Keys.voiceCommands)
       }
     }
-  }
-
-  // MARK: - Audio
-
-  var selectedInputDevice: String? {
-    get { defaults.string(forKey: Keys.selectedInputDevice) }
-    set { defaults.set(newValue, forKey: Keys.selectedInputDevice) }
   }
 
   // MARK: - Debugging

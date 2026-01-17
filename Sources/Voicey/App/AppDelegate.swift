@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var escKeyMonitor: Any?
   private var localEscKeyMonitor: Any?
 
+  // Model upgrade lock - prevents recording during model swap
+  private var isUpgradingModel = false
+
   // MARK: - Initialization
 
   override init() {
@@ -209,10 +212,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    guard appState.transcriptionState == .idle else {
+    // Check state and set lock atomically to prevent race with startRecording
+    guard appState.transcriptionState == .idle && !isUpgradingModel else {
       debugPrint("⏳ Upgrade pending - waiting for transcription to complete...", category: "MODEL")
       return
     }
+
+    // Lock to prevent recording during upgrade
+    isUpgradingModel = true
 
     // Perform the upgrade
     performModelUpgrade(to: pendingModel)
@@ -224,6 +231,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appState.modelStatus = .loading
 
     Task {
+      defer {
+        // Always release the upgrade lock when done
+        Task { @MainActor in
+          self.isUpgradingModel = false
+        }
+      }
+
       // Unload current model
       debugPrint("🗑️ Unloading \(previousModel.displayName)...", category: "MODEL")
       whisperEngine?.unloadModel()
@@ -476,6 +490,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func startRecording() {
+    // Prevent recording during model upgrade to avoid race condition
+    guard !isUpgradingModel else {
+      debugPrint("⚠️ Model upgrade in progress - cannot record", category: "RECORD")
+      return
+    }
+
     // Check if model is loaded FIRST - this is critical
     guard whisperEngine?.isModelLoaded == true else {
       debugPrint("⚠️ Model not loaded yet - cannot record", category: "RECORD")
@@ -751,9 +771,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self?.appState.modelStatus = .loading
       Task { [weak self] in
         await self?.whisperEngine?.preloadModel()
-        let isLoaded = self?.whisperEngine?.isModelLoaded == true
         await MainActor.run { [weak self] in
-          if isLoaded {
+          if self?.whisperEngine?.isModelLoaded == true {
             self?.appState.modelStatus = .ready
           } else {
             self?.appState.modelStatus = .failed("Failed to load model")

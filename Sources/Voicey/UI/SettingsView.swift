@@ -112,8 +112,6 @@ struct HotkeySettingsView: View {
 // MARK: - Audio Settings
 
 struct AudioSettingsView: View {
-  @State private var selectedDevice: String = ""
-  @State private var availableDevices: [AVCaptureDevice] = []
   @State private var isTestingMic: Bool = false
   @State private var testLevel: Float = 0
   @State private var testPassed: Bool?
@@ -121,13 +119,16 @@ struct AudioSettingsView: View {
   var body: some View {
     Form {
       Section("Input Device") {
-        Picker("Microphone", selection: $selectedDevice) {
-          Text("System Default").tag("")
-          ForEach(availableDevices, id: \.uniqueID) { device in
-            Text(device.localizedName).tag(device.uniqueID)
-          }
+        HStack {
+          Text("Microphone")
+          Spacer()
+          Text(AudioCaptureManager.defaultInputDevice?.localizedName ?? "System Default")
+            .foregroundStyle(.secondary)
         }
-        .pickerStyle(.menu)
+
+        Text("Voicey uses your system's default audio input device.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
 
       Section("Test Microphone") {
@@ -155,13 +156,6 @@ struct AudioSettingsView: View {
     }
     .formStyle(.grouped)
     .padding()
-    .onAppear {
-      loadDevices()
-    }
-  }
-
-  private func loadDevices() {
-    availableDevices = AudioCaptureManager.availableInputDevices()
   }
 
   private func testMicrophone() {
@@ -182,7 +176,6 @@ struct AudioSettingsView: View {
 struct ModelSettingsView: View {
   @ObservedObject var modelManager = ModelManager.shared
   @AppStorage("selectedModel") private var selectedModel: String = WhisperModel.largeTurbo.rawValue
-  @AppStorage("useGPUAcceleration") private var useGPUAcceleration: Bool = true
 
   var body: some View {
     Form {
@@ -215,9 +208,7 @@ struct ModelSettingsView: View {
       }
 
       Section("Performance") {
-        Toggle("Use GPU Acceleration", isOn: $useGPUAcceleration)
-
-        Text("Enable Metal acceleration for faster transcription on supported hardware.")
+        Text("GPU acceleration is automatically enabled via Metal on Apple Silicon.")
           .font(.caption)
           .foregroundStyle(.secondary)
       }

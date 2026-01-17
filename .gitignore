@@ -49,3 +49,6 @@ Models/
 # Crash logs
 *.crash
 *.ips
+
+# App bundle
+Voicey.app/

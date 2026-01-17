@@ -82,8 +82,11 @@ final class TranscriptionOverlayController {
       self?.onCancel?()
     }
 
-    // Center on main screen
-    if let screen = NSScreen.main {
+    // Enable position persistence - if user drags the panel, position is saved
+    panel.setFrameAutosaveName("VoiceyTranscriptionOverlay")
+
+    // If no saved position, center on main screen
+    if panel.frame.origin == .zero, let screen = NSScreen.main {
       let screenFrame = screen.visibleFrame
       let x = screenFrame.midX - hostingView.frame.width / 2
       let y = screenFrame.midY - hostingView.frame.height / 2 + 200

@@ -1,0 +1,357 @@
+---
+description: Swift coding guidelines and common pitfalls for macOS app development
+globs: ["**/*.swift"]
+alwaysApply: false
+---
+
+# Swift Coding Guidelines for Voicey
+
+These guidelines are distilled from code review findings. Follow them to avoid common bugs and maintain code quality.
+
+## Static Analysis
+
+### SwiftLint
+
+Run SwiftLint before committing:
+
+```bash
+# Install if needed
+brew install swiftlint
+
+# Run in project root
+swiftlint
+
+# Auto-fix what's possible
+swiftlint --fix
+```
+
+Consider adding a `.swiftlint.yml` with project-specific rules.
+
+---
+
+## Memory Management
+
+### Event Monitor Leaks
+
+**Always store and remove event monitors.** Both global and local monitors must be tracked.
+
+```swift
+// ❌ BAD - Monitor leaks
+NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+    // handle event
+    return event
+}
+
+// ✅ GOOD - Store and remove
+private var keyEventMonitor: Any?
+
+func startMonitoring() {
+    keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        // handle event
+        return event
+    }
+}
+
+func stopMonitoring() {
+    if let monitor = keyEventMonitor {
+        NSEvent.removeMonitor(monitor)
+        keyEventMonitor = nil
+    }
+}
+```
+
+### Timer Cleanup in SwiftUI
+
+Always invalidate timers in `onDisappear`:
+
+```swift
+@State private var timer: Timer?
+
+var body: some View {
+    content
+        .onAppear { timer = Timer.scheduledTimer(...) }
+        .onDisappear { timer?.invalidate(); timer = nil }
+}
+```
+
+---
+
+## Thread Safety
+
+### Race Conditions in Audio/Capture Code
+
+When stopping capture operations, ensure proper ordering:
+
+```swift
+// ✅ Stop tap first, then use sync barrier before accessing shared state
+audioEngine.inputNode.removeTap(onBus: 0)
+processingQueue.sync(flags: .barrier) {
+    // Now safe to access buffer
+}
+```
+
+### TOCTOU (Time-of-Check to Time-of-Use)
+
+Make state checks and actions atomic to prevent race conditions:
+
+```swift
+// ❌ BAD - Race between check and action
+if state == .idle {
+    // Another thread could change state here!
+    startUpgrade()
+}
+
+// ✅ GOOD - Use a flag to make atomic
+private var isUpgrading = false
+
+func tryUpgrade() -> Bool {
+    guard state == .idle, !isUpgrading else { return false }
+    isUpgrading = true  // Set immediately with check
+    return true
+}
+```
+
+---
+
+## Swift Concurrency
+
+### Prefer Structured Concurrency
+
+Use `Task` and `@MainActor` instead of `DispatchQueue`:
+
+```swift
+// ❌ AVOID
+DispatchQueue.main.async { self.updateUI() }
+DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ... }
+
+// ✅ PREFER
+Task { @MainActor in updateUI() }
+Task { @MainActor in
+    try? await Task.sleep(for: .milliseconds(500))
+    // continue
+}
+```
+
+### Avoid Magic Number Delays
+
+Replace hardcoded delays with polling/async patterns:
+
+```swift
+// ❌ BAD - Fragile timing
+try? await Task.sleep(for: .milliseconds(500))
+pasteText()
+
+// ✅ GOOD - Poll for readiness
+func activateAppAndWait() async {
+    let targetApp = // ...
+    for _ in 0..<50 {  // Max 500ms
+        if targetApp.isActive { return }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+}
+```
+
+---
+
+## Settings & State
+
+### Use Computed Properties for Dynamic Settings
+
+If settings can change at runtime, read them fresh:
+
+```swift
+// ❌ BAD - Stale at init time
+class Processor {
+    let enabled: Bool
+    init() { enabled = SettingsManager.shared.featureEnabled }
+}
+
+// ✅ GOOD - Always fresh
+class Processor {
+    var enabled: Bool { SettingsManager.shared.featureEnabled }
+}
+```
+
+### Rich State Enums
+
+Use associated values and computed properties for state:
+
+```swift
+enum TranscriptionState {
+    case idle
+    case recording(startTime: Date)
+    case processing
+    case completed(text: String)
+    case error(message: String)
+    
+    var isActive: Bool {
+        switch self {
+        case .recording, .processing: return true
+        default: return false
+        }
+    }
+    
+    var recordingDuration: TimeInterval? {
+        guard case .recording(let start) = self else { return nil }
+        return Date().timeIntervalSince(start)
+    }
+}
+```
+
+---
+
+## Error Handling
+
+### Don't Silently Swallow Errors
+
+```swift
+// ❌ BAD - User won't know why it failed
+try? deleteModel()
+
+// ✅ GOOD - Show errors to user
+do {
+    try deleteModel()
+} catch {
+    showAlert(error.localizedDescription)
+}
+```
+
+---
+
+## Logging
+
+### Use os.Logger, Not print()
+
+```swift
+import os
+
+// Define categorized loggers
+private let audioLogger = Logger(subsystem: "com.app.voicey", category: "audio")
+private let modelLogger = Logger(subsystem: "com.app.voicey", category: "model")
+
+// ❌ AVOID
+print("Model loaded")
+
+// ✅ PREFER
+modelLogger.info("Model loaded: \(modelName)")
+```
+
+---
+
+## Code Organization
+
+### Import Placement
+
+All imports at the top of the file, not scattered throughout:
+
+```swift
+// ✅ All imports at top
+import SwiftUI
+import Accelerate
+import os
+
+class MyClass { ... }
+```
+
+### Remove Dead Code
+
+- Delete unused files, classes, and enum cases
+- Remove duplicate/old folders (check for typos like `Voicy` vs `Voicey`)
+- Delete code that's #if'd out permanently
+- Remove settings/properties that are never read
+
+### Naming Consistency
+
+Keep file names consistent with the app/module name:
+
+```
+✅ Voicey.entitlements (matches app name)
+❌ VoiceType.entitlements (old/wrong name)
+```
+
+---
+
+## UI/AppKit
+
+### Window Position Persistence
+
+Save window positions with autosave names:
+
+```swift
+panel.setFrameAutosaveName("VoiceyTranscriptionOverlay")
+```
+
+### Progress Indicators
+
+Never fake progress. Use indeterminate indicators for unknown duration:
+
+```swift
+// ❌ BAD - Simulated progress
+for i in 0...100 {
+    progress = Double(i) / 100
+    await Task.sleep(...)
+}
+
+// ✅ GOOD - Indeterminate or real progress
+ProgressView()  // Spinning indicator
+// Or use actual download progress callbacks
+```
+
+---
+
+## Architecture
+
+### Dependency Injection
+
+Use protocols and a DI container instead of singletons:
+
+```swift
+// Define protocols
+protocol SettingsProviding {
+    var hotkey: KeyCombo { get }
+}
+
+// Production implementation
+class SettingsManager: SettingsProviding { ... }
+
+// DI Container
+class Dependencies {
+    static let shared = Dependencies()
+    let settings: SettingsProviding
+    
+    init(settings: SettingsProviding = SettingsManager.shared) {
+        self.settings = settings
+    }
+}
+
+// In tests
+let mockSettings = MockSettingsManager()
+let deps = Dependencies(settings: mockSettings)
+```
+
+---
+
+## Documentation Consistency
+
+Keep README and code in sync:
+
+- Default hotkey in docs must match code
+- Feature descriptions must reflect actual implementation
+- Update docs when changing user-facing behavior
+
+---
+
+## Quick Checklist
+
+Before submitting code, verify:
+
+- [ ] No orphaned event monitors
+- [ ] Timers cleaned up in `onDisappear`
+- [ ] No `DispatchQueue.main` (use `Task { @MainActor }`)
+- [ ] No `try?` without good reason
+- [ ] Using `Logger` not `print()`
+- [ ] Imports at top of file
+- [ ] No dead code or unused files
+- [ ] Settings read fresh if they can change
+- [ ] Race conditions considered for shared state
+- [ ] SwiftLint passes

@@ -6,12 +6,10 @@ import Foundation
 protocol SettingsProviding {
   var outputMode: OutputMode { get set }
   var selectedModel: WhisperModel { get set }
-  var useGPUAcceleration: Bool { get set }
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
   var voiceCommandsEnabled: Bool { get set }
   var voiceCommands: [VoiceCommand] { get set }
-  var selectedInputDevice: String? { get set }
   var enableDetailedLogging: Bool { get set }
 
   func configureLaunchAtLogin(enabled: Bool)
