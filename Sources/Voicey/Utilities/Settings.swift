@@ -23,7 +23,7 @@ final class SettingsManager: SettingsProviding {
   private func registerDefaults() {
     defaults.register(defaults: [
       // Default to fast model - onboarding will upgrade to quality model in background
-      Keys.selectedModel: WhisperModel.small.rawValue,
+      Keys.selectedModel: WhisperModel.base.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
       Keys.autoPasteEnabled: false,

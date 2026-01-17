@@ -20,7 +20,7 @@ final class OutputManager {
   }
 
   /// Deliver transcribed text by copying to clipboard and showing notification
-  func deliver(text: String, completion: (() -> Void)? = nil) {
+  func deliver(text: String, targetPID: pid_t? = nil, completion: (() -> Void)? = nil) {
     AppLogger.output.info("Deliver: TextLength=\(text.count)")
     AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
 
@@ -50,9 +50,23 @@ final class OutputManager {
         return
       }
 
-      AppLogger.output.info("Auto-paste enabled - simulating ⌘V")
-      KeyboardSimulator.simulatePaste()
-      completion?()
+      AppLogger.output.info("Auto-paste enabled - activating target app and simulating ⌘V")
+      Task { @MainActor in
+        // Let caller clean up UI first (hide overlay, etc.)
+        completion?()
+
+        if let pid = targetPID,
+          let targetApp = NSRunningApplication(processIdentifier: pid),
+          targetApp.bundleIdentifier != Bundle.main.bundleIdentifier
+        {
+          _ = targetApp.activate(options: [.activateIgnoringOtherApps])
+          try? await Task.sleep(nanoseconds: 150_000_000)  // allow activation to settle
+        } else {
+          AppLogger.output.warning("Auto-paste: No valid target app PID captured; pasting into current focus")
+        }
+
+        KeyboardSimulator.simulatePaste()
+      }
       return
     }
 

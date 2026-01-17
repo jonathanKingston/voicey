@@ -43,9 +43,11 @@ struct SettingsView: View {
 // MARK: - General Settings
 
 struct GeneralSettingsView: View {
-  @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
-  @AppStorage("showDockIcon") private var showDockIcon: Bool = false
-  @AppStorage("autoPasteEnabled") private var autoPasteEnabled: Bool = false
+  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+
+  @AppStorage("launchAtLogin", store: defaults) private var launchAtLogin: Bool = false
+  @AppStorage("showDockIcon", store: defaults) private var showDockIcon: Bool = false
+  @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
 
   var body: some View {
     Form {
@@ -180,7 +182,8 @@ struct AudioSettingsView: View {
 
 struct ModelSettingsView: View {
   @ObservedObject var modelManager = ModelManager.shared
-  @AppStorage("selectedModel") private var selectedModel: String = WhisperModel.largeTurbo.rawValue
+  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = WhisperModel.base.rawValue
 
   var body: some View {
     Form {
@@ -301,7 +304,8 @@ struct ModelRowView: View {
 // MARK: - Voice Commands Settings
 
 struct VoiceCommandsSettingsView: View {
-  @AppStorage("voiceCommandsEnabled") private var voiceCommandsEnabled: Bool = false
+  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+  @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool = false
   @State private var commands: [VoiceCommand] = SettingsManager.shared.voiceCommands
   @State private var showAddCommand: Bool = false
 
@@ -456,7 +460,8 @@ struct AddVoiceCommandView: View {
 // MARK: - Advanced Settings
 
 struct AdvancedSettingsView: View {
-  @AppStorage("enableDetailedLogging") private var enableDetailedLogging: Bool = false
+  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+  @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
   @State private var clearError: String?
   @State private var showClearError = false
 

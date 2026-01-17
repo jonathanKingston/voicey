@@ -70,6 +70,10 @@ clean:
 run: build
 	$(BUILD_DIR)/debug/$(APP_NAME)
 
+# Run as an app bundle (recommended for testing permissions like Accessibility)
+run-bundle: bundle
+	@open -n $(APP_BUNDLE)
+
 # Install to Applications
 install: sign
 	@echo "Installing to /Applications..."
@@ -109,11 +113,14 @@ reset-permissions:
 	@echo ""
 	@echo "Resetting microphone permission..."
 	@tccutil reset Microphone com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@echo "Resetting accessibility permission (only needed for optional auto-paste)..."
+	@tccutil reset Accessibility com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
 	@echo "Resetting login items..."
 	@sfltool resetbtm 2>/dev/null || echo "  (requires admin privileges)"
 	@echo ""
 	@echo "Done. You may need to:"
 	@echo "  - Re-grant microphone access in System Settings > Privacy & Security > Microphone"
+	@echo "  - Re-grant accessibility in System Settings > Privacy & Security > Accessibility (if using auto-paste)"
 	@echo "  - Re-enable 'Launch at Login' in app settings"
 
 # Reset permissions for direct distribution build (includes accessibility)

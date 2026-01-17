@@ -43,6 +43,14 @@ final class PermissionsManager: PermissionsProviding {
 
   /// Check if accessibility permission is granted
   func checkAccessibilityPermission() -> Bool {
+    // When running as a bare SwiftPM binary (e.g. `.build/debug/Voicey`),
+    // macOS permission UIs don't behave like a proper app bundle.
+    // Avoid reporting a misleading "granted" state in that environment.
+    guard Bundle.main.bundleIdentifier != nil else {
+      AppLogger.general.warning("Accessibility check skipped: no app bundle identifier (run from an app bundle for accurate permission state)")
+      return false
+    }
+
     let trusted = AXIsProcessTrusted()
     AppLogger.general.info(
       "Accessibility check: AXIsProcessTrusted() = \(trusted), Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")"
@@ -52,6 +60,18 @@ final class PermissionsManager: PermissionsProviding {
 
   /// Prompt user to grant accessibility permission (shows system prompt when possible)
   func promptForAccessibilityPermission() {
+    guard Bundle.main.bundleIdentifier != nil else {
+      AppLogger.general.warning(
+        "Cannot prompt for Accessibility permission: no app bundle identifier (run from an app bundle)"
+      )
+      debugPrint(
+        "⚠️ Accessibility prompt unavailable when running from .build/. Run the app bundle to appear in System Settings.",
+        category: "STARTUP"
+      )
+      openAccessibilitySettings()
+      return
+    }
+
     let options: [String: Any] = [
       Self.accessibilityPromptKey: true
     ]

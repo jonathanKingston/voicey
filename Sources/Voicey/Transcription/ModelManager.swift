@@ -107,7 +107,7 @@ final class ModelManager: ObservableObject {
   // MARK: - Model Hierarchy
   
   /// The fast model used for quick startup
-  static let fastModel = WhisperModel.small
+  static let fastModel = WhisperModel.base
   
   /// The quality model used for better accuracy
   static let qualityModel = WhisperModel.largeTurbo

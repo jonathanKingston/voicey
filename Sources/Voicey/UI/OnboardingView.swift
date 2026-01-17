@@ -16,14 +16,14 @@ struct OnboardingView: View {
   let onComplete: () -> Void
 
   /// The fast model to download first for quick startup
-  private let fastModel = WhisperModel.small
+  private let fastModel = WhisperModel.base
 
   /// The high-quality model to download in background
   private let qualityModel = WhisperModel.largeTurbo
 
   /// Whether all required setup is complete (fast model is enough to proceed)
   private var isSetupComplete: Bool {
-    microphoneGranted && modelManager.isDownloaded(fastModel)
+    microphoneGranted && modelManager.hasDownloadedModel
   }
 
   /// Whether fast model is currently downloading
@@ -38,7 +38,8 @@ struct OnboardingView: View {
 
   /// Whether fast model is ready
   private var isFastModelReady: Bool {
-    modelManager.isDownloaded(fastModel)
+    // Any downloaded model is sufficient to proceed; fast model is just the default download.
+    modelManager.hasDownloadedModel || modelManager.isDownloaded(fastModel)
   }
 
   /// Whether quality model is ready
@@ -84,12 +85,12 @@ struct OnboardingView: View {
           .font(.headline)
           .padding(.top, 20)
 
-        // Step 1: Fast Model Download (for quick startup)
+        // Step 1: Model Download (any model works; fast model is default)
         SetupStepRow(
           stepNumber: 1,
           icon: "cpu",
-          title: "Download Fast Model",
-          description: "\(fastModel.displayName) (~250MB) - Quick start",
+          title: "Download Model",
+          description: "Any model works. Default: \(fastModel.displayName) (~80MB) - Quick start",
           isComplete: isFastModelReady,
           isInProgress: isFastModelDownloading,
           progress: fastDownloadProgress,
@@ -191,11 +192,11 @@ struct OnboardingView: View {
             if isFastModelDownloading {
               ProgressView()
                 .scaleEffect(0.7)
-              Text("Downloading fast model... \(Int(fastDownloadProgress * 100))%")
+              Text("Downloading model... \(Int(fastDownloadProgress * 100))%")
             } else if !isFastModelReady {
               Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
-              Text("Fast model download required")
+              Text("Model download required")
             } else if !microphoneGranted {
               Image(systemName: "mic.slash")
                 .foregroundStyle(.orange)
@@ -247,7 +248,10 @@ struct OnboardingView: View {
     .frame(width: 480, height: 780)  // Slightly taller for the extra model row
     .onAppear {
       checkCurrentPermissions()
-      startFastModelDownload()
+      // Only auto-download if the user has no models yet.
+      if !modelManager.hasDownloadedModel {
+        startFastModelDownload()
+      }
     }
     .onDisappear {
       accessibilityCheckTask?.cancel()
@@ -265,6 +269,9 @@ struct OnboardingView: View {
 
   /// Start downloading the fast model automatically during onboarding
   private func startFastModelDownload() {
+    // If any model is already downloaded, don't force-download the fast model.
+    guard !modelManager.hasDownloadedModel else { return }
+
     // Only download if not already downloaded and not currently downloading
     guard !modelManager.isDownloaded(fastModel),
       modelManager.isDownloading[fastModel] != true

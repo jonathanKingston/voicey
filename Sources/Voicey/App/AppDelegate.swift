@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
 
+  // The app that was frontmost when recording started (used for optional auto-paste)
+  private var recordingTargetPID: pid_t?
+
   // ESC key monitors
   private var localEscKeyMonitor: Any?
 
@@ -67,9 +70,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if needsOnboarding {
           debugPrint("👋 Setup incomplete - showing onboarding", category: "STARTUP")
           showOnboarding()
+
+          // Log permission status while onboarding is visible (no prompts).
+          Task {
+            await self.checkPermissionsSilently()
+          }
+
+          // Preload in parallel, but avoid showing extra loading UI over onboarding.
+          self.checkModelStatusAndPreload(showUI: false)
         } else {
           debugPrint("✅ Setup complete - starting normally", category: "STARTUP")
-          checkModelStatusAndPreload()
+          // Log permission status on normal startup (no prompts)
+          Task {
+            await self.checkPermissionsSilently()
+          }
+          checkModelStatusAndPreload(showUI: true)
         }
       }
     }
@@ -77,6 +92,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   /// Check if onboarding is needed (any required step incomplete)
   private func checkIfOnboardingNeeded() async -> Bool {
+    // If user has never completed onboarding, always show it (even if model/mic already exist).
+    // This allows optional setup like Accessibility (auto-paste) to be configured early.
+    if !SettingsManager.shared.hasCompletedOnboarding {
+      debugPrint("🔍 Needs onboarding: true (hasCompletedOnboarding=false)", category: "STARTUP")
+      return true
+    }
+
     // Check model
     ModelManager.shared.loadDownloadedModels()
     let hasModel = ModelManager.shared.hasDownloadedModel
@@ -126,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
 
       // Now start model loading (will show model downloader if needed)
-      self?.checkModelStatusAndPreload()
+      self?.checkModelStatusAndPreload(showUI: true)
     }
 
     let hostingController = NSHostingController(rootView: onboardingView)
@@ -289,15 +311,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Check permissions silently - just log status, don't prompt
   private func checkPermissionsSilently() async {
     let micPermission = await dependencies.permissions.checkMicrophonePermission()
-    AppLogger.general.info("Permission status - Microphone: \(micPermission)")
+    let autoPasteEnabled = dependencies.settings.autoPasteEnabled
+    let accessibilityPermission = dependencies.permissions.checkAccessibilityPermission()
+
+    // Emit to both os.Logger and the debugPrint stream (so it shows up in `make run` output).
+    AppLogger.general.info(
+      "Permission status - Microphone: \(micPermission), AutoPaste: \(autoPasteEnabled), Accessibility: \(accessibilityPermission)"
+    )
+    debugPrint(
+      "🔐 Permissions - Mic: \(micPermission), AutoPaste: \(autoPasteEnabled), Accessibility: \(accessibilityPermission)",
+      category: "STARTUP"
+    )
+
+    if autoPasteEnabled && !accessibilityPermission {
+      AppLogger.general.warning("Auto-paste enabled but Accessibility permission not granted")
+      debugPrint(
+        "⚠️ Auto-paste enabled but Accessibility not granted (will not paste)",
+        category: "STARTUP"
+      )
+    }
 
     // Only warn if missing, don't prompt (user completed onboarding, they know)
     if !micPermission {
       AppLogger.general.warning("Microphone permission not granted")
+      debugPrint("⚠️ Microphone permission not granted", category: "STARTUP")
     }
   }
 
-  private func checkModelStatusAndPreload() {
+  private func checkModelStatusAndPreload(showUI: Bool) {
     // Refresh model status
     ModelManager.shared.loadDownloadedModels()
 
@@ -306,8 +347,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.modelStatus = .loading
       debugPrint("📦 Model downloaded, starting preload...", category: "MODEL")
 
-      // Show loading window
-      showLoadingWindow()
+      if showUI {
+        // Show loading window
+        showLoadingWindow()
+      }
 
       // Preload the model
       Task {
@@ -316,8 +359,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let loadTime = CFAbsoluteTimeGetCurrent() - startTime
 
         await MainActor.run {
-          // Hide loading window
-          self.hideLoadingWindow()
+          if showUI {
+            // Hide loading window
+            self.hideLoadingWindow()
+          }
 
           if whisperEngine?.isModelLoaded == true {
             appState.modelStatus = .ready
@@ -338,15 +383,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       // Wait for download to complete, then preload
       Task {
-        await waitForDownloadAndPreload()
+        await waitForDownloadAndPreload(showUI: showUI)
       }
     } else {
       // No model and no download - show downloader (returning user scenario)
       appState.modelStatus = .notDownloaded
       debugPrint("📥 No model downloaded, opening downloader", category: "MODEL")
-      Task { @MainActor in
-        try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 seconds
-        self.openModelDownloader()
+      if showUI {
+        Task { @MainActor in
+          try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 seconds
+          self.openModelDownloader()
+        }
       }
     }
   }
@@ -354,6 +401,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Start background download and prewarming of quality model if we're not already using it
   private func startBackgroundUpgradeIfNeeded() {
     let currentModel = SettingsManager.shared.selectedModel
+
+    // Only auto-upgrade when we started with the fast model.
+    // If user manually selected another model, don't force-download the quality model.
+    guard currentModel == ModelManager.fastModel else {
+      return
+    }
 
     // Only start upgrade if NOT already using quality model
     guard currentModel != ModelManager.qualityModel else {
@@ -412,7 +465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   /// Wait for an in-progress download to complete, then preload the model
-  private func waitForDownloadAndPreload() async {
+  private func waitForDownloadAndPreload(showUI: Bool) async {
     // Poll until download completes
     while ModelManager.shared.isDownloading.values.contains(true) {
       try? await Task.sleep(nanoseconds: 500_000_000)  // Check every 0.5s
@@ -427,13 +480,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       debugPrint("📦 Download complete, preloading model...", category: "MODEL")
       await MainActor.run {
         appState.modelStatus = .loading
-        showLoadingWindow()
+        if showUI {
+          showLoadingWindow()
+        }
       }
 
       await whisperEngine?.preloadModel()
 
       await MainActor.run {
-        hideLoadingWindow()
+        if showUI {
+          hideLoadingWindow()
+        }
 
         if whisperEngine?.isModelLoaded == true {
           appState.modelStatus = .ready
@@ -540,6 +597,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func beginRecordingAfterModelReady() {
     debugPrint("🎙️ Starting recording...", category: "RECORD")
     AppLogger.audio.info("Starting recording...")
+
+    // Capture the frontmost app BEFORE we show the overlay so we can return focus for auto-paste.
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
+      recordingTargetPID = frontmost?.processIdentifier
+    } else {
+      recordingTargetPID = nil
+    }
 
     appState.transcriptionState = .recording(startTime: Date())
 
@@ -657,12 +722,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
         // Deliver text to clipboard and show notification
-        outputManager?.deliver(text: processedText) { [weak self] in
+        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) {
+          [weak self] in
           debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
           self?.hideOverlay()
           self?.appState.transcriptionState = .idle
           self?.tryPerformPendingUpgrade()
         }
+
+        // Clear target after attempting output
+        self.recordingTargetPID = nil
       }
     } catch {
       debugPrint("❌ Transcription error: \(error)", category: "ERROR")
