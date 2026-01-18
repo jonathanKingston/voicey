@@ -107,7 +107,7 @@ final class ModelManager: ObservableObject {
   // MARK: - Model Hierarchy
   
   /// The fast model used for quick startup
-  static let fastModel = WhisperModel.small
+  static let fastModel = WhisperModel.base
   
   /// The quality model used for better accuracy
   static let qualityModel = WhisperModel.largeTurbo
@@ -140,29 +140,6 @@ final class ModelManager: ObservableObject {
          let size = attrs[.size] as? Int64,
          size > 1_000_000 {  // > 1MB suggests it's been compiled
         return true
-      }
-    }
-    
-    // Also check the system CoreML cache
-    let coreMLCache = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent("Library/Caches/com.apple.CoreML")
-    
-    if fileManager.fileExists(atPath: coreMLCache.path) {
-      // If the cache directory exists and has content, models may be cached
-      // This is a heuristic - we can't easily map cache entries to specific models
-      if let contents = try? fileManager.contentsOfDirectory(atPath: coreMLCache.path),
-         !contents.isEmpty {
-        // Check if any cache file was modified recently (within last 30 days)
-        // and is substantial in size - suggests active model caching
-        for item in contents {
-          let itemPath = coreMLCache.appendingPathComponent(item)
-          if let attrs = try? fileManager.attributesOfItem(atPath: itemPath.path),
-             let modDate = attrs[.modificationDate] as? Date,
-             modDate > Date().addingTimeInterval(-30 * 24 * 60 * 60) {
-            AppLogger.model.debug("Found recent CoreML cache activity")
-            // Can't definitively say THIS model is cached, but system has cache
-          }
-        }
       }
     }
     

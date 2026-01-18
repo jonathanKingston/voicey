@@ -16,14 +16,14 @@ struct OnboardingView: View {
   let onComplete: () -> Void
 
   /// The fast model to download first for quick startup
-  private let fastModel = WhisperModel.small
+  private let fastModel = WhisperModel.base
 
   /// The high-quality model to download in background
   private let qualityModel = WhisperModel.largeTurbo
 
   /// Whether all required setup is complete (fast model is enough to proceed)
   private var isSetupComplete: Bool {
-    microphoneGranted && accessibilityGranted && modelManager.isDownloaded(fastModel)
+    microphoneGranted && modelManager.hasDownloadedModel
   }
 
   /// Whether fast model is currently downloading
@@ -38,7 +38,8 @@ struct OnboardingView: View {
 
   /// Whether fast model is ready
   private var isFastModelReady: Bool {
-    modelManager.isDownloaded(fastModel)
+    // Any downloaded model is sufficient to proceed; fast model is just the default download.
+    modelManager.hasDownloadedModel || modelManager.isDownloaded(fastModel)
   }
 
   /// Whether quality model is ready
@@ -84,12 +85,12 @@ struct OnboardingView: View {
           .font(.headline)
           .padding(.top, 20)
 
-        // Step 1: Fast Model Download (for quick startup)
+        // Step 1: Model Download (any model works; fast model is default)
         SetupStepRow(
           stepNumber: 1,
           icon: "cpu",
-          title: "Download Fast Model",
-          description: "\(fastModel.displayName) (~250MB) - Quick start",
+          title: "Download Model",
+          description: "Any model works. Default: \(fastModel.displayName) (~80MB) - Quick start",
           isComplete: isFastModelReady,
           isInProgress: isFastModelDownloading,
           progress: fastDownloadProgress,
@@ -128,14 +129,16 @@ struct OnboardingView: View {
           action: requestMicrophonePermission
         )
 
-        // Step 3: Accessibility
+        // Step 3: Accessibility (optional, enables auto-insert into text fields)
         SetupStepRow(
           stepNumber: 3,
           icon: "keyboard",
           title: "Accessibility Access",
-          description: "Required to paste text into apps",
+          description: "Optional: Enables auto-insert into text fields",
           isComplete: accessibilityGranted,
           isInProgress: isCheckingAccessibility,
+          progress: 0,
+          isOptional: true,
           buttonTitle: accessibilityGranted
             ? "Granted" : (isCheckingAccessibility ? "Checking..." : "Open Settings"),
           action: requestAccessibilityPermission
@@ -189,19 +192,15 @@ struct OnboardingView: View {
             if isFastModelDownloading {
               ProgressView()
                 .scaleEffect(0.7)
-              Text("Downloading fast model... \(Int(fastDownloadProgress * 100))%")
+              Text("Downloading model... \(Int(fastDownloadProgress * 100))%")
             } else if !isFastModelReady {
               Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
-              Text("Fast model download required")
+              Text("Model download required")
             } else if !microphoneGranted {
               Image(systemName: "mic.slash")
                 .foregroundStyle(.orange)
               Text("Microphone access required")
-            } else if !accessibilityGranted {
-              Image(systemName: "keyboard")
-                .foregroundStyle(.orange)
-              Text("Accessibility access required")
             }
           }
           .font(.caption)
@@ -230,14 +229,6 @@ struct OnboardingView: View {
         }
 
         HStack(spacing: 12) {
-          // Recheck button for accessibility
-          if !accessibilityGranted && !isCheckingAccessibility {
-            Button("Recheck") {
-              recheckPermissions()
-            }
-            .buttonStyle(.bordered)
-          }
-
           Button {
             debugPrint("✅ Get Started pressed - setup complete", category: "ONBOARD")
             onComplete()
@@ -251,30 +242,20 @@ struct OnboardingView: View {
           .disabled(!isSetupComplete)
         }
         .padding(.horizontal, 30)
-
-        // Fallback for accessibility detection issues
-        if !accessibilityGranted && microphoneGranted && isFastModelReady {
-          Button {
-            debugPrint("⚠️ Continue anyway pressed", category: "ONBOARD")
-            onComplete()
-          } label: {
-            Text("I've granted accessibility → Continue anyway")
-              .font(.caption)
-              .underline()
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(.blue)
-        }
       }
       .padding(.bottom, 30)
     }
     .frame(width: 480, height: 780)  // Slightly taller for the extra model row
     .onAppear {
       checkCurrentPermissions()
-      startFastModelDownload()
+      // Only auto-download if the user has no models yet.
+      if !modelManager.hasDownloadedModel {
+        startFastModelDownload()
+      }
     }
     .onDisappear {
       accessibilityCheckTask?.cancel()
+      accessibilityCheckTask = nil
     }
   }
 
@@ -288,6 +269,9 @@ struct OnboardingView: View {
 
   /// Start downloading the fast model automatically during onboarding
   private func startFastModelDownload() {
+    // If any model is already downloaded, don't force-download the fast model.
+    guard !modelManager.hasDownloadedModel else { return }
+
     // Only download if not already downloaded and not currently downloading
     guard !modelManager.isDownloaded(fastModel),
       modelManager.isDownloading[fastModel] != true
@@ -340,34 +324,32 @@ struct OnboardingView: View {
     modelManager.downloadModel(qualityModel)
   }
 
-  private func recheckPermissions() {
-    Task {
-      microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
-      // Use refresh for accessibility - tries multiple detection methods
-      let granted = PermissionsManager.shared.refreshAccessibilityPermission()
-      await MainActor.run {
-        accessibilityGranted = granted
-        if granted {
-          AppLogger.general.info("Accessibility permission detected as granted")
-        } else {
-          AppLogger.general.warning("Accessibility permission still not detected")
-        }
-      }
-    }
-  }
-
   private func requestMicrophonePermission() {
     Task {
       let granted = await PermissionsManager.shared.requestMicrophonePermission()
       await MainActor.run {
         microphoneGranted = granted
+        bringOnboardingWindowToFront()
       }
+    }
+  }
+
+  private func bringOnboardingWindowToFront() {
+    NSApp.activate(ignoringOtherApps: true)
+
+    // The system permission prompt can cause our onboarding window to fall behind other apps.
+    // Re-assert focus after the permission flow completes.
+    if let window = NSApp.windows.first(where: { $0.title == "Welcome to Voicey" }) {
+      window.makeKeyAndOrderFront(nil)
+    } else if let window = NSApp.windows.first {
+      window.makeKeyAndOrderFront(nil)
     }
   }
 
   private func requestAccessibilityPermission() {
     // Cancel any existing check
     accessibilityCheckTask?.cancel()
+    accessibilityCheckTask = nil
 
     PermissionsManager.shared.promptForAccessibilityPermission()
     isCheckingAccessibility = true
@@ -379,8 +361,7 @@ struct OnboardingView: View {
 
         try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 second
 
-        // Use the refresh method which tries multiple detection approaches
-        let granted = PermissionsManager.shared.refreshAccessibilityPermission()
+        let granted = PermissionsManager.shared.checkAccessibilityPermission()
 
         await MainActor.run {
           accessibilityGranted = granted

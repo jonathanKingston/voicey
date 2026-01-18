@@ -3,12 +3,12 @@ import os
 
 /// App-wide loggers using os.Logger for proper system integration
 enum AppLogger {
-  static let audio = Logger(subsystem: "com.voicey.app", category: "audio")
-  static let transcription = Logger(subsystem: "com.voicey.app", category: "transcription")
-  static let output = Logger(subsystem: "com.voicey.app", category: "output")
-  static let ui = Logger(subsystem: "com.voicey.app", category: "ui")
-  static let general = Logger(subsystem: "com.voicey.app", category: "general")
-  static let model = Logger(subsystem: "com.voicey.app", category: "model")
+  static let audio = Logger(subsystem: "work.voicey.Voicey", category: "audio")
+  static let transcription = Logger(subsystem: "work.voicey.Voicey", category: "transcription")
+  static let output = Logger(subsystem: "work.voicey.Voicey", category: "output")
+  static let ui = Logger(subsystem: "work.voicey.Voicey", category: "ui")
+  static let general = Logger(subsystem: "work.voicey.Voicey", category: "general")
+  static let model = Logger(subsystem: "work.voicey.Voicey", category: "model")
 }
 
 // Global function for convenience - logs to general category

@@ -148,6 +148,20 @@ final class WhisperEngine {
         debugPrint("⚠️ No models downloaded, skipping preload", category: "MODEL")
         return
       }
+    } else {
+      // Selected model is downloaded, but may be very slow to compile/load on first run.
+      // If it doesn't look compiled yet, prefer the best startup model for quick availability.
+      if !ModelManager.shared.isLikelyCompiled(modelToLoad),
+        let bestStartup = Self.selectBestAvailableModel(from: ModelManager.shared.downloadedModels),
+        bestStartup != modelToLoad
+      {
+        debugPrint(
+          "⚠️ Selected model '\(modelToLoad.rawValue)' not compiled yet; preloading '\(bestStartup.rawValue)' first for faster startup",
+          category: "MODEL"
+        )
+        modelToLoad = bestStartup
+        SettingsManager.shared.selectedModel = bestStartup
+      }
     }
 
     do {
@@ -240,6 +254,36 @@ final class WhisperEngine {
     let startTime = CFAbsoluteTimeGetCurrent()
 
     do {
+      // Periodic progress log while CoreML compilation runs (can be several minutes on first load).
+      let variantName = variant
+      let progressTask = Task {
+        for tick in 1...20 {  // up to ~10 minutes (20 x 30s)
+          try? await Task.sleep(nanoseconds: 30_000_000_000)
+          if Task.isCancelled { return }
+          let elapsed = tick * 30
+          let thermal = ProcessInfo.processInfo.thermalState
+          let thermalStr: String
+          switch thermal {
+          case .nominal: thermalStr = "nominal"
+          case .fair: thermalStr = "fair"
+          case .serious: thermalStr = "serious"
+          case .critical: thermalStr = "critical"
+          @unknown default: thermalStr = "unknown"
+          }
+          debugPrint(
+            "⏳ Still loading model '\(variantName)'... (\(elapsed)s elapsed, thermal: \(thermalStr))",
+            category: "MODEL"
+          )
+          if elapsed == 180 {
+            debugPrint(
+              "💡 First-time CoreML compilation can take several minutes even for smaller models. Subsequent launches should be much faster.",
+              category: "MODEL"
+            )
+          }
+        }
+      }
+      defer { progressTask.cancel() }
+
       // Use WhisperKitConfig with explicit modelFolder to load from disk
       // Setting download: false prevents any network requests
       let config = WhisperKitConfig(

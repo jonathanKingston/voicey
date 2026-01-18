@@ -118,9 +118,6 @@ final class AppState: ObservableObject {
   /// Model loading status - for startup warmup indication
   @Published var modelStatus: ModelStatus = .notDownloaded
 
-  /// Whether accessibility permission is granted (needed for paste)
-  @Published var hasAccessibilityPermission: Bool = false
-
   // MARK: - Convenience Accessors
 
   /// Whether we're currently recording (delegates to transcriptionState)
@@ -130,6 +127,6 @@ final class AppState: ObservableObject {
 
   /// Whether the app is ready to record (model loaded and permissions granted)
   var isReadyToRecord: Bool {
-    modelStatus.isReady && hasAccessibilityPermission
+    modelStatus.isReady
   }
 }

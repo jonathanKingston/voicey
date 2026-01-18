@@ -12,7 +12,7 @@ final class SettingsManager: SettingsProviding {
   private init() {
     // Use explicit suite name so settings work consistently when running from
     // command line (.build/debug/Voicey) or as app bundle (Voicey.app)
-    if let suite = UserDefaults(suiteName: "com.voicey.app") {
+    if let suite = UserDefaults(suiteName: "work.voicey.Voicey") {
       defaults = suite
     } else {
       defaults = UserDefaults.standard
@@ -22,11 +22,11 @@ final class SettingsManager: SettingsProviding {
 
   private func registerDefaults() {
     defaults.register(defaults: [
-      Keys.outputMode: OutputMode.both.rawValue,
       // Default to fast model - onboarding will upgrade to quality model in background
-      Keys.selectedModel: WhisperModel.small.rawValue,
+      Keys.selectedModel: WhisperModel.base.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
+      Keys.autoPasteEnabled: true,  // Enable by default - uses Accessibility API to insert text
       Keys.voiceCommandsEnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false,
@@ -36,25 +36,14 @@ final class SettingsManager: SettingsProviding {
   // MARK: - Keys
 
   private enum Keys {
-    static let outputMode = "outputMode"
     static let selectedModel = "selectedModel"
     static let launchAtLogin = "launchAtLogin"
     static let showDockIcon = "showDockIcon"
+    static let autoPasteEnabled = "autoPasteEnabled"
     static let voiceCommandsEnabled = "voiceCommandsEnabled"
     static let voiceCommands = "voiceCommands"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
-  }
-
-  // MARK: - Output
-
-  var outputMode: OutputMode {
-    get {
-      OutputMode(rawValue: defaults.string(forKey: Keys.outputMode) ?? "") ?? .both
-    }
-    set {
-      defaults.set(newValue.rawValue, forKey: Keys.outputMode)
-    }
   }
 
   // MARK: - Model
@@ -82,6 +71,13 @@ final class SettingsManager: SettingsProviding {
   var showDockIcon: Bool {
     get { defaults.bool(forKey: Keys.showDockIcon) }
     set { defaults.set(newValue, forKey: Keys.showDockIcon) }
+  }
+
+  /// When enabled, Voicey attempts to auto-paste the transcription into the active app.
+  /// Requires Accessibility permission.
+  var autoPasteEnabled: Bool {
+    get { defaults.bool(forKey: Keys.autoPasteEnabled) }
+    set { defaults.set(newValue, forKey: Keys.autoPasteEnabled) }
   }
 
   func configureLaunchAtLogin(enabled: Bool) {

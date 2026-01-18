@@ -43,23 +43,30 @@ struct SettingsView: View {
 // MARK: - General Settings
 
 struct GeneralSettingsView: View {
-  @AppStorage("outputMode") private var outputMode: String = OutputMode.both.rawValue
-  @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
-  @AppStorage("showDockIcon") private var showDockIcon: Bool = false
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
+
+  @AppStorage("launchAtLogin", store: defaults) private var launchAtLogin: Bool = false
+  @AppStorage("showDockIcon", store: defaults) private var showDockIcon: Bool = false
+  @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
 
   var body: some View {
     Form {
-      Section {
-        Picker("Output Mode", selection: $outputMode) {
-          ForEach(OutputMode.allCases) { mode in
-            Text(mode.displayName).tag(mode.rawValue)
+      Section("Output") {
+        Toggle("Auto-insert after transcription", isOn: $autoPasteEnabled)
+          .onChange(of: autoPasteEnabled) { enabled in
+            guard enabled else { return }
+            if !PermissionsManager.shared.checkAccessibilityPermission() {
+              PermissionsManager.shared.promptForAccessibilityPermission()
+            }
           }
-        }
-        .pickerStyle(.menu)
 
-        Text(OutputMode(rawValue: outputMode)?.description ?? "")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        Text(
+          autoPasteEnabled
+            ? "When enabled, Voicey will attempt to insert text directly into the focused text field (requires Accessibility)."
+            : "Voicey copies transcriptions to your clipboard. Press ⌘V to paste."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
 
       Section {
@@ -175,7 +182,8 @@ struct AudioSettingsView: View {
 
 struct ModelSettingsView: View {
   @ObservedObject var modelManager = ModelManager.shared
-  @AppStorage("selectedModel") private var selectedModel: String = WhisperModel.largeTurbo.rawValue
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
+  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = WhisperModel.base.rawValue
 
   var body: some View {
     Form {
@@ -296,7 +304,8 @@ struct ModelRowView: View {
 // MARK: - Voice Commands Settings
 
 struct VoiceCommandsSettingsView: View {
-  @AppStorage("voiceCommandsEnabled") private var voiceCommandsEnabled: Bool = false
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
+  @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool = false
   @State private var commands: [VoiceCommand] = SettingsManager.shared.voiceCommands
   @State private var showAddCommand: Bool = false
 
@@ -451,7 +460,8 @@ struct AddVoiceCommandView: View {
 // MARK: - Advanced Settings
 
 struct AdvancedSettingsView: View {
-  @AppStorage("enableDetailedLogging") private var enableDetailedLogging: Bool = false
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
+  @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
   @State private var clearError: String?
   @State private var showClearError = false
 

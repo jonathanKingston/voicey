@@ -37,7 +37,7 @@
     <key>NSSupportsSuddenTermination</key>
     <false/>
 
-    <!-- App Store required keys -->
+    <!-- App metadata -->
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>CFBundleIconFile</key>
