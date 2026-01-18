@@ -61,9 +61,10 @@ struct OnboardingView: View {
     VStack(spacing: 0) {
       // Header
       VStack(spacing: 8) {
-        Image(systemName: "mic.circle.fill")
-          .font(.system(size: 60))
-          .foregroundStyle(.blue)
+        Image(nsImage: NSApp.applicationIconImage)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 80, height: 80)
 
         Text("Welcome to Voicey")
           .font(.title)

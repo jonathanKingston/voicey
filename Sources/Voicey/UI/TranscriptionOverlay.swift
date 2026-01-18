@@ -171,15 +171,8 @@ struct TranscriptionOverlayView: View {
     .padding(.horizontal, 20)
     .padding(.vertical, 16)
     .background(
-      ZStack {
-        // Solid dark background
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-          .fill(Color(nsColor: .windowBackgroundColor).opacity(0.85))
-
-        // Blur overlay
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-          .fill(.ultraThinMaterial.opacity(0.5))
-      }
+      RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        .fill(Color(nsColor: .windowBackgroundColor).opacity(0.95))
     )
     .overlay(
       RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
