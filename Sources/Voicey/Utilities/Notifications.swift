@@ -71,6 +71,13 @@ final class NotificationManager: NotificationProviding {
     )
   }
 
+  func showModelLoading() {
+    showNotification(
+      title: "Model Loading",
+      body: "Please wait a moment while the AI model loads."
+    )
+  }
+
   // MARK: - Performance Notifications
 
   func showPerformanceWarning(_ message: String) {

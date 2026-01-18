@@ -48,6 +48,7 @@ protocol NotificationProviding {
   func showModelDownloadComplete(model: WhisperModel)
   func showModelDownloadFailed(reason: String)
   func showModelUpgradeComplete(model: WhisperModel)
+  func showModelLoading()
   func showTranscriptionCopied()
   func showTranscriptionError(_ message: String)
   func showNetworkError()

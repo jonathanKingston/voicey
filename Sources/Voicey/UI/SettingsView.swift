@@ -43,7 +43,7 @@ struct SettingsView: View {
 // MARK: - General Settings
 
 struct GeneralSettingsView: View {
-  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
 
   @AppStorage("launchAtLogin", store: defaults) private var launchAtLogin: Bool = false
   @AppStorage("showDockIcon", store: defaults) private var showDockIcon: Bool = false
@@ -52,7 +52,7 @@ struct GeneralSettingsView: View {
   var body: some View {
     Form {
       Section("Output") {
-        Toggle("Auto-paste after transcription", isOn: $autoPasteEnabled)
+        Toggle("Auto-insert after transcription", isOn: $autoPasteEnabled)
           .onChange(of: autoPasteEnabled) { enabled in
             guard enabled else { return }
             if !PermissionsManager.shared.checkAccessibilityPermission() {
@@ -62,7 +62,7 @@ struct GeneralSettingsView: View {
 
         Text(
           autoPasteEnabled
-            ? "When enabled, Voicey will copy the transcription and then simulate ⌘V in the active app (requires Accessibility)."
+            ? "When enabled, Voicey will attempt to insert text directly into the focused text field (requires Accessibility)."
             : "Voicey copies transcriptions to your clipboard. Press ⌘V to paste."
         )
         .font(.caption)
@@ -182,7 +182,7 @@ struct AudioSettingsView: View {
 
 struct ModelSettingsView: View {
   @ObservedObject var modelManager = ModelManager.shared
-  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
   @AppStorage("selectedModel", store: defaults) private var selectedModel: String = WhisperModel.base.rawValue
 
   var body: some View {
@@ -304,7 +304,7 @@ struct ModelRowView: View {
 // MARK: - Voice Commands Settings
 
 struct VoiceCommandsSettingsView: View {
-  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
   @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool = false
   @State private var commands: [VoiceCommand] = SettingsManager.shared.voiceCommands
   @State private var showAddCommand: Bool = false
@@ -460,7 +460,7 @@ struct AddVoiceCommandView: View {
 // MARK: - Advanced Settings
 
 struct AdvancedSettingsView: View {
-  private static let defaults = UserDefaults(suiteName: "com.voicey.app") ?? .standard
+  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
   @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
   @State private var clearError: String?
   @State private var showClearError = false

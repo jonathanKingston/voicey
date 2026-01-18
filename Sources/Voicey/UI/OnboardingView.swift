@@ -129,12 +129,12 @@ struct OnboardingView: View {
           action: requestMicrophonePermission
         )
 
-        // Step 3: Accessibility (optional, only needed for auto-paste)
+        // Step 3: Accessibility (optional, enables auto-insert into text fields)
         SetupStepRow(
           stepNumber: 3,
           icon: "keyboard",
           title: "Accessibility Access",
-          description: "Optional: Required for auto-paste into other apps",
+          description: "Optional: Enables auto-insert into text fields",
           isComplete: accessibilityGranted,
           isInProgress: isCheckingAccessibility,
           progress: 0,

@@ -12,7 +12,7 @@ final class SettingsManager: SettingsProviding {
   private init() {
     // Use explicit suite name so settings work consistently when running from
     // command line (.build/debug/Voicey) or as app bundle (Voicey.app)
-    if let suite = UserDefaults(suiteName: "com.voicey.app") {
+    if let suite = UserDefaults(suiteName: "work.voicey.Voicey") {
       defaults = suite
     } else {
       defaults = UserDefaults.standard
@@ -26,7 +26,7 @@ final class SettingsManager: SettingsProviding {
       Keys.selectedModel: WhisperModel.base.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
-      Keys.autoPasteEnabled: false,
+      Keys.autoPasteEnabled: true,  // Enable by default - uses Accessibility API to insert text
       Keys.voiceCommandsEnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false,

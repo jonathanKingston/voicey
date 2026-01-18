@@ -165,10 +165,23 @@ install: sign
 	@cp -R $(APP_BUNDLE) /Applications/
 	@echo "Installed to /Applications/$(APP_BUNDLE)"
 
-# Xcode project generation
-xcode:
-	swift package generate-xcodeproj
-	@echo "Xcode project generated: $(APP_NAME).xcodeproj"
+# Xcode project generation (requires: brew install xcodegen)
+xcode: xcode-generate
+	@open Voicey.xcodeproj
+
+xcode-generate:
+	@if ! command -v xcodegen &> /dev/null; then \
+		echo "XcodeGen not found. Install with: brew install xcodegen"; \
+		exit 1; \
+	fi
+	@echo "Generating Xcode project from project.yml..."
+	@xcodegen generate
+	@echo "Xcode project generated: Voicey.xcodeproj"
+
+# Open Package.swift directly (alternative to xcode project)
+xcode-package:
+	@echo "Opening Package.swift in Xcode..."
+	open Package.swift
 
 # Format code
 format:
@@ -176,18 +189,18 @@ format:
 
 # Stream debug logs (run in separate terminal)
 logs:
-	log stream --predicate 'subsystem == "com.voicey.app"' --level debug
+	log stream --predicate 'subsystem == "work.voicey.Voicey"' --level debug
 
 # Reset app state (keeps downloaded models)
 reset-state:
 	@echo "Resetting app state (keeping models)..."
-	@defaults delete com.voicey.app 2>/dev/null || true
+	@defaults delete work.voicey.Voicey 2>/dev/null || true
 	@echo "Done. App will show onboarding on next launch."
 
 # Reset everything including models
 reset-all:
 	@echo "Resetting all app data..."
-	@defaults delete com.voicey.app 2>/dev/null || true
+	@defaults delete work.voicey.Voicey 2>/dev/null || true
 	@rm -rf ~/Library/Application\ Support/Voicey/Models
 	@echo "Done. App will show onboarding and require model download."
 
@@ -196,9 +209,9 @@ reset-permissions:
 	@echo "Resetting system permissions for Voicey..."
 	@echo ""
 	@echo "Resetting microphone permission..."
-	@tccutil reset Microphone com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@tccutil reset Microphone work.voicey.Voicey 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
 	@echo "Resetting accessibility permission (only needed for optional auto-paste)..."
-	@tccutil reset Accessibility com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@tccutil reset Accessibility work.voicey.Voicey 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
 	@echo "Resetting login items..."
 	@sfltool resetbtm 2>/dev/null || echo "  (requires admin privileges)"
 	@echo ""
@@ -212,9 +225,9 @@ reset-permissions-direct:
 	@echo "Resetting system permissions for Voicey (direct distribution)..."
 	@echo ""
 	@echo "Resetting microphone permission..."
-	@tccutil reset Microphone com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@tccutil reset Microphone work.voicey.Voicey 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
 	@echo "Resetting accessibility permission..."
-	@tccutil reset Accessibility com.voicey.app 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@tccutil reset Accessibility work.voicey.Voicey 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
 	@echo "Resetting login items..."
 	@sfltool resetbtm 2>/dev/null || echo "  (requires admin privileges)"
 	@echo ""
@@ -231,7 +244,7 @@ reset-full: reset-all reset-permissions
 # Show current app state
 show-state:
 	@echo "=== App Settings ==="
-	@defaults read com.voicey.app 2>/dev/null || echo "(no settings saved)"
+	@defaults read work.voicey.Voicey 2>/dev/null || echo "(no settings saved)"
 	@echo ""
 	@echo "=== Downloaded Models ==="
 	@ls -la ~/Library/Application\ Support/Voicey/Models/models/argmaxinc/whisperkit-coreml/ 2>/dev/null || echo "(no models downloaded)"
@@ -274,7 +287,9 @@ help:
 	@echo "  run-bundle        - Build and run as app bundle"
 	@echo "  logs              - Stream debug logs (run in separate terminal)"
 	@echo "  install           - Install to /Applications"
-	@echo "  xcode             - Generate Xcode project"
+	@echo "  xcode             - Generate and open Xcode project (requires xcodegen)"
+	@echo "  xcode-generate    - Generate Xcode project without opening"
+	@echo "  xcode-package     - Open Package.swift directly in Xcode"
 	@echo ""
 	@echo "App Store Distribution:"
 	@echo "  sign-appstore     - Sign for App Store (requires IDENTITY)"

@@ -35,9 +35,17 @@ final class TranscriptionOverlayController {
     hide()
   }
 
-  func show() {
+  /// Show the overlay on the specified screen (or screen of the last interacted window)
+  /// - Parameter targetScreen: The screen to show the overlay on. If nil, uses the screen
+  ///   containing the mouse cursor as a fallback.
+  func show(on targetScreen: NSScreen? = nil) {
+    let screen = targetScreen ?? screenWithMouse() ?? NSScreen.main
+
     if window == nil {
-      createWindow()
+      createWindow(on: screen)
+    } else {
+      // Reposition to the target screen each time we show
+      positionWindow(on: screen)
     }
     window?.orderFront(nil)
     // Make the panel key to receive keyboard events
@@ -48,7 +56,23 @@ final class TranscriptionOverlayController {
     window?.orderOut(nil)
   }
 
-  private func createWindow() {
+  /// Returns the screen containing the mouse cursor
+  private func screenWithMouse() -> NSScreen? {
+    let mouseLocation = NSEvent.mouseLocation
+    return NSScreen.screens.first { NSMouseInRect(mouseLocation, $0.frame, false) }
+  }
+
+  /// Position the window centered horizontally, slightly above center vertically on the given screen
+  private func positionWindow(on screen: NSScreen?) {
+    guard let window = window, let screen = screen else { return }
+    let screenFrame = screen.visibleFrame
+    let windowFrame = window.frame
+    let x = screenFrame.midX - windowFrame.width / 2
+    let y = screenFrame.midY - windowFrame.height / 2 + 200
+    window.setFrameOrigin(NSPoint(x: x, y: y))
+  }
+
+  private func createWindow(on screen: NSScreen?) {
     guard let appState = appState else { return }
 
     let contentView = TranscriptionOverlayView(onCancel: { [weak self] in
@@ -82,18 +106,10 @@ final class TranscriptionOverlayController {
       self?.onCancel?()
     }
 
-    // Enable position persistence - if user drags the panel, position is saved
-    panel.setFrameAutosaveName("VoiceyTranscriptionOverlay")
-
-    // If no saved position, center on main screen
-    if panel.frame.origin == .zero, let screen = NSScreen.main {
-      let screenFrame = screen.visibleFrame
-      let x = screenFrame.midX - hostingView.frame.width / 2
-      let y = screenFrame.midY - hostingView.frame.height / 2 + 200
-      panel.setFrameOrigin(NSPoint(x: x, y: y))
-    }
-
     window = panel
+
+    // Position on the target screen
+    positionWindow(on: screen ?? NSScreen.main)
   }
 }
 

@@ -25,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // The app that was frontmost when recording started (used for optional auto-paste)
   private var recordingTargetPID: pid_t?
 
+  // The screen where recording was triggered (for overlay positioning)
+  private var recordingTargetScreen: NSScreen?
+
   // ESC key monitors
   private var localEscKeyMonitor: Any?
 
@@ -92,13 +95,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   /// Check if onboarding is needed (any required step incomplete)
   private func checkIfOnboardingNeeded() async -> Bool {
-    // If user has never completed onboarding, always show it (even if model/mic already exist).
-    // This allows optional setup like Accessibility (auto-paste) to be configured early.
-    if !SettingsManager.shared.hasCompletedOnboarding {
-      debugPrint("🔍 Needs onboarding: true (hasCompletedOnboarding=false)", category: "STARTUP")
-      return true
-    }
-
     // Check model
     ModelManager.shared.loadDownloadedModels()
     let hasModel = ModelManager.shared.hasDownloadedModel
@@ -108,8 +104,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let hasMicrophone = await dependencies.permissions.checkMicrophonePermission()
     debugPrint("🔍 Has microphone: \(hasMicrophone)", category: "STARTUP")
 
-    // Need onboarding if any required step is missing
-    let needsOnboarding = !hasModel || !hasMicrophone
+    // Check accessibility (required if auto-paste is enabled)
+    let autoPasteEnabled = dependencies.settings.autoPasteEnabled
+    let hasAccessibility = dependencies.permissions.checkAccessibilityPermission()
+    let needsAccessibility = autoPasteEnabled && !hasAccessibility
+    debugPrint("🔍 Has accessibility: \(hasAccessibility), auto-paste enabled: \(autoPasteEnabled)", category: "STARTUP")
+
+    // Show onboarding if any required state is missing
+    // This ensures users are guided through setup even if permissions were revoked
+    let needsOnboarding = !hasModel || !hasMicrophone || needsAccessibility
     debugPrint("🔍 Needs onboarding: \(needsOnboarding)", category: "STARTUP")
 
     return needsOnboarding
@@ -242,44 +245,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func performModelUpgrade(to model: WhisperModel) {
     let previousModel = SettingsManager.shared.selectedModel
     debugPrint("🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
-    appState.modelStatus = .loading
+    
+    // DON'T set appState.modelStatus = .loading here - keep showing as ready so user knows they can still record
+    // The isUpgradingModel flag will be released immediately so recording continues to work with the old model
 
     Task {
-      defer {
-        // Always release the upgrade lock when done
-        Task { @MainActor in
-          self.isUpgradingModel = false
-        }
-      }
-
-      // Unload current model
-      debugPrint("🗑️ Unloading \(previousModel.displayName)...", category: "MODEL")
-      whisperEngine?.unloadModel()
-      whisperEngine?.resetPerformanceTracking()
-
-      // Update settings to use new model
+      // Release upgrade lock immediately - user can keep recording with old model during background load
       await MainActor.run {
-        SettingsManager.shared.selectedModel = model
-        appState.currentModel = model
-        ModelManager.shared.pendingUpgradeModel = nil
+        self.isUpgradingModel = false
       }
-
-      // Load the new model
+      
+      // Load the new model in background (old model stays loaded and usable)
       do {
-        debugPrint("📦 Loading \(model.displayName)...", category: "MODEL")
+        debugPrint("📦 Background loading \(model.displayName) (you can keep recording with \(previousModel.displayName))...", category: "MODEL")
         let startTime = CFAbsoluteTimeGetCurrent()
+        
+        // Note: WhisperEngine.loadModel will unload the old model internally when loading a new one
+        // We accept a brief interruption during the actual swap
         try await whisperEngine?.loadModel(variant: model.rawValue)
         let loadTime = CFAbsoluteTimeGetCurrent() - startTime
 
+        // Update settings after successful load
         await MainActor.run {
+          SettingsManager.shared.selectedModel = model
+          appState.currentModel = model
+          ModelManager.shared.pendingUpgradeModel = nil
           appState.modelStatus = .ready
+          whisperEngine?.resetPerformanceTracking()
           debugPrint("✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!", category: "MODEL")
           dependencies.notifications.showModelUpgradeComplete(model: model)
         }
       } catch {
         await MainActor.run {
-          appState.modelStatus = .failed("Failed to load \(model.displayName)")
-          debugPrint("❌ Upgrade failed: \(error)", category: "MODEL")
+          // Upgrade failed - keep using old model
+          ModelManager.shared.pendingUpgradeModel = nil
+          appState.modelStatus = .ready  // Old model is still ready
+          debugPrint("❌ Upgrade to \(model.displayName) failed: \(error). Continuing with \(previousModel.displayName)", category: "MODEL")
         }
       }
     }
@@ -513,20 +514,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func startRecording() {
-    // Prevent recording during model upgrade to avoid race condition
-    guard !isUpgradingModel else {
-      debugPrint("⚠️ Model upgrade in progress - cannot record", category: "RECORD")
-      return
-    }
-
     // Check if model is loaded FIRST - this is critical
     guard whisperEngine?.isModelLoaded == true else {
       debugPrint("⚠️ Model not loaded yet - cannot record", category: "RECORD")
 
       // Show user feedback
-      if appState.modelStatus.isLoading {
-        debugPrint("⏳ Model is still loading...", category: "RECORD")
-        // Could show a toast/notification here
+      if appState.modelStatus.isLoading || isUpgradingModel {
+        debugPrint("⏳ Model is loading/upgrading - please wait a moment...", category: "RECORD")
+        dependencies.notifications.showModelLoading()
       } else {
         debugPrint("❌ No model loaded - check model status", category: "RECORD")
       }
@@ -602,13 +597,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let frontmost = NSWorkspace.shared.frontmostApplication
     if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
       recordingTargetPID = frontmost?.processIdentifier
+      // Capture the screen where the frontmost window is located
+      recordingTargetScreen = screenForApplication(frontmost)
     } else {
       recordingTargetPID = nil
+      recordingTargetScreen = nil
     }
 
     appState.transcriptionState = .recording(startTime: Date())
 
-    // Show overlay (or update it if already showing)
+    // Show overlay on the screen where the user was last interacting
     showOverlay()
 
     // Start audio capture
@@ -616,6 +614,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Update menubar
     statusBarController?.updateIcon(recording: true)
+  }
+
+  /// Determine which screen contains the key window of the given application
+  private func screenForApplication(_ app: NSRunningApplication?) -> NSScreen? {
+    guard let app = app else { return nil }
+
+    // Get the window list for all on-screen windows
+    let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+    guard let windowInfoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+      return nil
+    }
+
+    // Find windows belonging to this application
+    let appWindows = windowInfoList.filter { info in
+      guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t else { return false }
+      return ownerPID == app.processIdentifier
+    }
+
+    // Get the frontmost window (first in the list for this app, as list is front-to-back)
+    guard let frontWindow = appWindows.first,
+          let boundsDict = frontWindow[kCGWindowBounds as String] as? [String: CGFloat],
+          let x = boundsDict["X"],
+          let y = boundsDict["Y"],
+          let width = boundsDict["Width"],
+          let height = boundsDict["Height"] else {
+      return nil
+    }
+
+    // Create the window rect (note: CGWindowBounds uses top-left origin)
+    let windowRect = CGRect(x: x, y: y, width: width, height: height)
+
+    // Find which screen contains the center of this window
+    let windowCenter = CGPoint(x: windowRect.midX, y: windowRect.midY)
+
+    // Convert from screen coordinates (top-left origin) to Cocoa coordinates (bottom-left origin)
+    // to compare with NSScreen frames
+    guard let mainScreen = NSScreen.screens.first else { return nil }
+    let mainScreenHeight = mainScreen.frame.height
+    let cocoaCenter = CGPoint(x: windowCenter.x, y: mainScreenHeight - windowCenter.y)
+
+    // Find screen containing this point
+    return NSScreen.screens.first { screen in
+      screen.frame.contains(cocoaCenter)
+    }
   }
 
   func stopRecording() {
@@ -730,8 +772,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           self?.tryPerformPendingUpgrade()
         }
 
-        // Clear target after attempting output
+        // Clear targets after attempting output
         self.recordingTargetPID = nil
+        self.recordingTargetScreen = nil
       }
     } catch {
       debugPrint("❌ Transcription error: \(error)", category: "ERROR")
@@ -754,7 +797,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.cancelTranscription()
       }
     }
-    transcriptionOverlay?.show()
+    // Show on the screen where the user was last interacting
+    transcriptionOverlay?.show(on: recordingTargetScreen)
   }
 
   private func hideOverlay() {

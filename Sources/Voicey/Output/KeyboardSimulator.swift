@@ -1,3 +1,8 @@
+// Auto-paste functionality is only available in direct distribution builds.
+// App Store/TestFlight builds are sandboxed and cannot post CGEvents to other apps.
+
+#if VOICEY_DIRECT_DISTRIBUTION
+
 import ApplicationServices
 import Carbon.HIToolbox
 import Foundation
@@ -5,7 +10,9 @@ import Foundation
 /// Simulates keyboard input for direct distribution builds only.
 ///
 /// IMPORTANT:
+/// - Only available in non-sandboxed (direct distribution) builds.
 /// - Requires Accessibility permission when enabled.
+/// - Sandboxed apps (App Store/TestFlight) cannot post CGEvents to other apps.
 enum KeyboardSimulator {
   static func simulatePaste() {
     guard AXIsProcessTrusted() else {
@@ -36,3 +43,5 @@ enum KeyboardSimulator {
     keyUp.post(tap: .cgSessionEventTap)
   }
 }
+
+#endif
