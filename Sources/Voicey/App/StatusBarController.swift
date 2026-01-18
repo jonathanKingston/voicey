@@ -108,14 +108,6 @@ final class StatusBarController {
     settingsItem.target = self
     menu.addItem(settingsItem)
 
-    let modelsItem = NSMenuItem(
-      title: "Download Models...",
-      action: #selector(openModelDownloader),
-      keyEquivalent: ""
-    )
-    modelsItem.target = self
-    menu.addItem(modelsItem)
-
     menu.addItem(NSMenuItem.separator())
 
     let aboutItem = NSMenuItem(
@@ -189,10 +181,6 @@ final class StatusBarController {
 
   @objc private func openSettings() {
     delegate?.openSettings()
-  }
-
-  @objc private func openModelDownloader() {
-    delegate?.openModelDownloader()
   }
 
   @objc private func showAbout() {
