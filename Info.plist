@@ -36,5 +36,13 @@
     <false/>
     <key>NSSupportsSuddenTermination</key>
     <false/>
+
+    <!-- App Store required keys -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>

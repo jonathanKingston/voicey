@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icon.svg" width="128" height="128" alt="Voicey icon">
+</p>
+
 # Voicey
 
 A macOS menubar application that provides system-wide voice-to-text transcription using on-device Whisper models powered by WhisperKit.

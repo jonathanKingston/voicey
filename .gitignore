@@ -52,3 +52,12 @@ Models/
 
 # App bundle
 Voicey.app/
+
+# Distribution artifacts
+*.pkg
+*.dmg
+*.zip
+
+# Icon generation temporaries (source SVG and Resources/AppIcon.icns should be tracked)
+AppIcon.iconset/
+icon_1024.png
