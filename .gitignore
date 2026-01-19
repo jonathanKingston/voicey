@@ -17,6 +17,9 @@ xcuserdata/
 .swiftpm/
 Package.resolved
 
+# Makefile Xcode build output
+.xcode-build/
+
 # macOS
 .DS_Store
 .AppleDouble

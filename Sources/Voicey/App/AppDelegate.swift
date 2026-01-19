@@ -25,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // The app that was frontmost when recording started (used for optional auto-paste)
   private var recordingTargetPID: pid_t?
 
+  // The focused accessibility element when recording started (captured before overlay steals focus)
+  private var recordingTargetElement: AXUIElement?
+
   // The screen where recording was triggered (for overlay positioning)
   private var recordingTargetScreen: NSScreen?
 
@@ -599,9 +602,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       recordingTargetPID = frontmost?.processIdentifier
       // Capture the screen where the frontmost window is located
       recordingTargetScreen = screenForApplication(frontmost)
+      
+      // Capture the focused accessibility element BEFORE showing overlay (which steals focus)
+      recordingTargetElement = captureFocusedElement()
+      if recordingTargetElement != nil {
+        AppLogger.output.info("Captured focused element before recording")
+      } else {
+        AppLogger.output.warning("Could not capture focused element before recording")
+      }
     } else {
       recordingTargetPID = nil
       recordingTargetScreen = nil
+      recordingTargetElement = nil
     }
 
     appState.transcriptionState = .recording(startTime: Date())
@@ -614,6 +626,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Update menubar
     statusBarController?.updateIcon(recording: true)
+  }
+  
+  /// Capture the currently focused accessibility element (before showing overlay)
+  private func captureFocusedElement() -> AXUIElement? {
+    // Log thread info
+    let threadName = Thread.isMainThread ? "MAIN" : "background"
+    AppLogger.output.info("captureFocusedElement: Running on \(threadName, privacy: .public) thread")
+    
+    // Log frontmost app info
+    let frontApp = NSWorkspace.shared.frontmostApplication
+    let bundleId = frontApp?.bundleIdentifier ?? "nil"
+    let appName = frontApp?.localizedName ?? "nil"
+    AppLogger.output.info("captureFocusedElement: Frontmost app: \(bundleId, privacy: .public), name: \(appName, privacy: .public)")
+    
+    // Check if Voicey is frontmost (would indicate focus was already stolen)
+    if frontApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
+      AppLogger.output.error("captureFocusedElement: Voicey is frontmost at capture time! Focus already stolen.")
+      return nil
+    }
+    
+    // Try system-wide focused element first
+    let systemWide = AXUIElementCreateSystemWide()
+    var focusedElement: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(
+      systemWide,
+      kAXFocusedUIElementAttribute as CFString,
+      &focusedElement
+    )
+    
+    if result == .success, let element = focusedElement {
+      AppLogger.output.info("captureFocusedElement: Got element via system-wide")
+      return (element as! AXUIElement)
+    }
+    let errorName = axErrorName(result)
+    AppLogger.output.warning("captureFocusedElement: System-wide failed (error: \(result.rawValue, privacy: .public) = \(errorName, privacy: .public))")
+    
+    // Fallback: try via frontmost app
+    guard let app = frontApp else {
+      AppLogger.output.error("captureFocusedElement: No frontmost app")
+      return nil
+    }
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    
+    var appFocused: CFTypeRef?
+    let appResult = AXUIElementCopyAttributeValue(
+      appElement,
+      kAXFocusedUIElementAttribute as CFString,
+      &appFocused
+    )
+    
+    if appResult == .success, let element = appFocused {
+      AppLogger.output.info("captureFocusedElement: Got element via app element")
+      return (element as! AXUIElement)
+    }
+    let appErrorName = axErrorName(appResult)
+    AppLogger.output.warning("captureFocusedElement: App element failed (error: \(appResult.rawValue, privacy: .public) = \(appErrorName, privacy: .public))")
+    
+    return nil
+  }
+  
+  /// Convert AXError to human-readable name
+  private func axErrorName(_ error: AXError) -> String {
+    switch error {
+    case .success: return "success"
+    case .failure: return "failure"
+    case .illegalArgument: return "illegalArgument"
+    case .invalidUIElement: return "invalidUIElement"
+    case .invalidUIElementObserver: return "invalidUIElementObserver"
+    case .cannotComplete: return "cannotComplete"
+    case .attributeUnsupported: return "attributeUnsupported"
+    case .actionUnsupported: return "actionUnsupported"
+    case .notificationUnsupported: return "notificationUnsupported"
+    case .notImplemented: return "notImplemented"
+    case .notificationAlreadyRegistered: return "notificationAlreadyRegistered"
+    case .notificationNotRegistered: return "notificationNotRegistered"
+    case .apiDisabled: return "apiDisabled"
+    case .noValue: return "noValue"
+    case .parameterizedAttributeUnsupported: return "parameterizedAttributeUnsupported"
+    case .notEnoughPrecision: return "notEnoughPrecision"
+    @unknown default: return "unknown(\(error.rawValue))"
+    }
   }
 
   /// Determine which screen contains the key window of the given application
@@ -764,17 +857,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
         // Deliver text to clipboard and show notification
-        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) {
+        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID, targetElement: self.recordingTargetElement) {
           [weak self] in
           debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
           self?.hideOverlay()
           self?.appState.transcriptionState = .idle
+          self?.recordingTargetElement = nil  // Clear captured element
           self?.tryPerformPendingUpgrade()
         }
 
         // Clear targets after attempting output
         self.recordingTargetPID = nil
         self.recordingTargetScreen = nil
+        self.recordingTargetElement = nil
       }
     } catch {
       debugPrint("❌ Transcription error: \(error)", category: "ERROR")

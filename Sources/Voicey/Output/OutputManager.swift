@@ -1,3 +1,4 @@
+import ApplicationServices
 import AppKit
 import Foundation
 import os
@@ -20,7 +21,12 @@ final class OutputManager {
   }
 
   /// Deliver transcribed text by copying to clipboard and showing notification
-  func deliver(text: String, targetPID: pid_t? = nil, completion: (() -> Void)? = nil) {
+  /// - Parameters:
+  ///   - text: The transcribed text to deliver
+  ///   - targetPID: The PID of the app to paste into (for activation)
+  ///   - targetElement: Pre-captured focused element (captured before overlay stole focus)
+  ///   - completion: Called after delivery is complete
+  func deliver(text: String, targetPID: pid_t? = nil, targetElement: AXUIElement? = nil, completion: (() -> Void)? = nil) {
     AppLogger.output.info("Deliver: TextLength=\(text.count)")
     AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
 
@@ -87,7 +93,8 @@ final class OutputManager {
         }
 
         // Try Accessibility API first (works in sandbox for some apps)
-        if AccessibilityPaster.paste(text) {
+        // If we have a pre-captured element, use it directly (avoids focus issues)
+        if AccessibilityPaster.paste(text, targetElement: targetElement) {
           debugPrint("✅ Auto-paste: Successfully inserted via Accessibility API!", category: "OUTPUT")
           AppLogger.output.info("Auto-paste: Successfully inserted via Accessibility API")
           return
