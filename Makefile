@@ -8,7 +8,7 @@ CONTENTS_DIR = $(APP_BUNDLE)/Contents
 MACOS_DIR = $(CONTENTS_DIR)/MacOS
 RESOURCES_DIR = $(CONTENTS_DIR)/Resources
 
-.PHONY: all build release clean run install logs reset-permissions reset-full
+.PHONY: all build release clean run install logs logs-direct reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
 
 all: build
 
@@ -191,16 +191,33 @@ format:
 logs:
 	log stream --predicate 'subsystem == "work.voicey.Voicey"' --level debug
 
+# Stream debug logs for direct distribution build
+logs-direct:
+	log stream --predicate 'subsystem == "work.voicey.VoiceyDirect"' --level debug
+
 # Reset app state (keeps downloaded models)
 reset-state:
 	@echo "Resetting app state (keeping models)..."
 	@defaults delete work.voicey.Voicey 2>/dev/null || true
 	@echo "Done. App will show onboarding on next launch."
 
+# Reset app state for direct distribution (keeps downloaded models)
+reset-state-direct:
+	@echo "Resetting app state for direct distribution (keeping models)..."
+	@defaults delete work.voicey.VoiceyDirect 2>/dev/null || true
+	@echo "Done. App will show onboarding on next launch."
+
 # Reset everything including models
 reset-all:
 	@echo "Resetting all app data..."
 	@defaults delete work.voicey.Voicey 2>/dev/null || true
+	@rm -rf ~/Library/Application\ Support/Voicey/Models
+	@echo "Done. App will show onboarding and require model download."
+
+# Reset everything for direct distribution including models
+reset-all-direct:
+	@echo "Resetting all app data for direct distribution..."
+	@defaults delete work.voicey.VoiceyDirect 2>/dev/null || true
 	@rm -rf ~/Library/Application\ Support/Voicey/Models
 	@echo "Done. App will show onboarding and require model download."
 
@@ -225,9 +242,9 @@ reset-permissions-direct:
 	@echo "Resetting system permissions for Voicey (direct distribution)..."
 	@echo ""
 	@echo "Resetting microphone permission..."
-	@tccutil reset Microphone work.voicey.Voicey 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@tccutil reset Microphone work.voicey.VoiceyDirect 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
 	@echo "Resetting accessibility permission..."
-	@tccutil reset Accessibility work.voicey.Voicey 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
+	@tccutil reset Accessibility work.voicey.VoiceyDirect 2>/dev/null || echo "  (requires running as admin or SIP disabled)"
 	@echo "Resetting login items..."
 	@sfltool resetbtm 2>/dev/null || echo "  (requires admin privileges)"
 	@echo ""
@@ -243,8 +260,11 @@ reset-full: reset-all reset-permissions
 
 # Show current app state
 show-state:
-	@echo "=== App Settings ==="
+	@echo "=== App Settings (App Store) ==="
 	@defaults read work.voicey.Voicey 2>/dev/null || echo "(no settings saved)"
+	@echo ""
+	@echo "=== App Settings (Direct) ==="
+	@defaults read work.voicey.VoiceyDirect 2>/dev/null || echo "(no settings saved)"
 	@echo ""
 	@echo "=== Downloaded Models ==="
 	@ls -la ~/Library/Application\ Support/Voicey/Models/models/argmaxinc/whisperkit-coreml/ 2>/dev/null || echo "(no models downloaded)"

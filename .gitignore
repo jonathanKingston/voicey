@@ -1,5 +1,6 @@
 # Xcode
 build/
+.xcode-build/
 DerivedData/
 *.xcodeproj/
 *.xcworkspace/

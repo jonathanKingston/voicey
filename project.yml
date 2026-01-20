@@ -88,7 +88,7 @@ targets:
       - sdk: CoreML.framework
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: work.voicey.Voicey
+        PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyDirect
         PRODUCT_NAME: Voicey
         INFOPLIST_FILE: Info.direct.plist
         CODE_SIGN_ENTITLEMENTS: VoiceyDirect.entitlements

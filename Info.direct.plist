@@ -9,7 +9,7 @@
     <key>CFBundleExecutable</key>
     <string>Voicey</string>
     <key>CFBundleIdentifier</key>
-    <string>work.voicey.Voicey</string>
+    <string>work.voicey.VoiceyDirect</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
