@@ -464,6 +464,9 @@ struct AdvancedSettingsView: View {
   @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
   @State private var clearError: String?
   @State private var showClearError = false
+  #if VOICEY_DIRECT_DISTRIBUTION
+  @ObservedObject private var sparkleUpdater = SparkleUpdater.shared
+  #endif
 
   var body: some View {
     Form {
@@ -491,6 +494,21 @@ struct AdvancedSettingsView: View {
           value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
         LabeledContent(
           "Build", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
+        
+        #if VOICEY_DIRECT_DISTRIBUTION
+        LabeledContent("Distribution", value: "Direct Install")
+        
+        Button("Check for Updates") {
+          sparkleUpdater.checkForUpdates()
+        }
+        .disabled(!sparkleUpdater.canCheckForUpdates)
+        
+        Text("Updates are delivered directly from voicy.work")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        #else
+        LabeledContent("Distribution", value: "App Store")
+        #endif
       }
     }
     .formStyle(.grouped)

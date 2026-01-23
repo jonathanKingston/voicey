@@ -86,7 +86,7 @@ final class OutputManager {
           AppLogger.output.warning("Auto-paste: No valid target app PID captured; pasting into current focus")
         }
 
-        // Try Accessibility API first (works in sandbox for some apps)
+        // Try Accessibility API first
         if AccessibilityPaster.paste(text) {
           debugPrint("✅ Auto-paste: Successfully inserted via Accessibility API!", category: "OUTPUT")
           AppLogger.output.info("Auto-paste: Successfully inserted via Accessibility API")
@@ -96,7 +96,7 @@ final class OutputManager {
         debugPrint("❌ Auto-paste: Accessibility API failed", category: "OUTPUT")
         
         #if VOICEY_DIRECT_DISTRIBUTION
-        // Fallback to CGEvents for direct distribution builds (not sandboxed)
+        // Direct distribution: Try CGEvents as fallback (not sandboxed)
         debugPrint("🔄 Auto-paste: Falling back to CGEvents (direct distribution)", category: "OUTPUT")
         AppLogger.output.info("Auto-paste: Accessibility API failed, falling back to CGEvents")
         KeyboardSimulator.simulatePaste()
