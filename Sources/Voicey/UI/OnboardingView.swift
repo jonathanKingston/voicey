@@ -6,9 +6,9 @@ import SwiftUI
 struct OnboardingView: View {
   @State private var microphoneGranted = false
   @State private var accessibilityGranted = false
-  @State private var launchAtLoginEnabled = false
   @State private var isCheckingAccessibility = false
   @State private var accessibilityCheckTask: Task<Void, Never>?
+  @State private var launchAtLoginEnabled = false
 
   // Observe model status from shared state
   @ObservedObject private var modelManager = ModelManager.shared
@@ -22,6 +22,7 @@ struct OnboardingView: View {
   private let qualityModel = WhisperModel.largeTurbo
 
   /// Whether all required setup is complete (fast model is enough to proceed)
+  /// Direct distribution builds don't need accessibility permission
   private var isSetupComplete: Bool {
     microphoneGranted && modelManager.hasDownloadedModel
   }

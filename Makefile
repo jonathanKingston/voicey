@@ -16,17 +16,17 @@ all: build
 build:
 	swift build
 
-# Debug build (direct distribution features enabled)
+# Debug build (direct distribution features enabled, includes Sparkle)
 build-direct:
-	swift build -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
+	VOICEY_DIRECT=1 swift build -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
 
 # Release build
 release:
 	swift build -c release
 
-# Release build (direct distribution features enabled)
+# Release build (direct distribution features enabled, includes Sparkle)
 release-direct:
-	swift build -c release -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
+	VOICEY_DIRECT=1 swift build -c release -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
 
 # Create app bundle from release build
 bundle: release
@@ -56,18 +56,31 @@ bundle-debug: build
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "Debug app bundle created: $(APP_BUNDLE)"
 
-# Create app bundle with direct-distribution features (auto-paste)
+# Create app bundle with direct-distribution features (Sparkle auto-updates)
+FRAMEWORKS_DIR = $(CONTENTS_DIR)/Frameworks
+SPARKLE_FRAMEWORK = .build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework
+
 bundle-direct: release-direct
 	@echo "Creating app bundle (direct distribution)..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(MACOS_DIR)
 	@mkdir -p $(RESOURCES_DIR)
+	@mkdir -p $(FRAMEWORKS_DIR)
 	@cp $(RELEASE_DIR)/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
 	@if [ -f VoiceyDirect.entitlements ]; then cp VoiceyDirect.entitlements $(CONTENTS_DIR)/Voicey.entitlements; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
+	@# Copy Sparkle.framework for auto-updates
+	@if [ -d "$(SPARKLE_FRAMEWORK)" ]; then \
+		cp -R "$(SPARKLE_FRAMEWORK)" "$(FRAMEWORKS_DIR)/"; \
+		echo "Sparkle.framework copied to bundle"; \
+		echo "Adding @rpath for Sparkle.framework..."; \
+		install_name_tool -add_rpath "@executable_path/../Frameworks" "$(MACOS_DIR)/$(APP_NAME)" 2>/dev/null || true; \
+	else \
+		echo "Warning: Sparkle.framework not found at $(SPARKLE_FRAMEWORK)"; \
+	fi
 	@echo "App bundle created: $(APP_BUNDLE)"
 
 # Sign the app for development (ad-hoc)
@@ -140,11 +153,90 @@ dmg: notarize
 	@xcrun stapler staple Voicey.dmg
 	@echo "DMG created and notarized: Voicey.dmg"
 
+# Sparkle tools location (after running VOICEY_DIRECT=1 swift package resolve)
+SPARKLE_BIN = .build/artifacts/sparkle/Sparkle/bin
+
+# Create ZIP for Sparkle updates (notarized app bundle)
+sparkle-zip: notarize
+	@echo "Creating Sparkle update archive..."
+	@ditto -c -k --keepParent $(APP_BUNDLE) Voicey-$(VERSION).zip
+	@echo "Update archive created: Voicey-$(VERSION).zip"
+	@echo ""
+	@echo "Next steps for Sparkle update:"
+	@echo "1. Generate EdDSA signature: $(SPARKLE_BIN)/sign_update Voicey-$(VERSION).zip"
+	@echo "2. Upload to voicy.work/releases/Voicey-$(VERSION).zip"
+	@echo "3. Update appcast.xml with version, signature, and download URL"
+
+# Sign a Sparkle update archive with EdDSA
+# Usage: make sparkle-sign FILE=Voicey-1.0.0.zip
+FILE ?=
+sparkle-sign:
+	@if [ -z "$(FILE)" ]; then echo "Usage: make sparkle-sign FILE=Voicey-X.Y.Z.zip"; exit 1; fi
+	@if [ ! -f "$(SPARKLE_BIN)/sign_update" ]; then \
+		echo "Sparkle tools not found. Run: VOICEY_DIRECT=1 swift package resolve"; \
+		exit 1; \
+	fi
+	@$(SPARKLE_BIN)/sign_update "$(FILE)"
+
+# Generate Sparkle EdDSA keys (one-time setup)
+# Store the private key securely and add public key to Info.direct.plist SUPublicEDKey
+sparkle-generate-keys:
+	@echo "Generating Sparkle EdDSA keys..."
+	@echo ""
+	@if [ ! -f "$(SPARKLE_BIN)/generate_keys" ]; then \
+		echo "Sparkle tools not found. Fetching..."; \
+		VOICEY_DIRECT=1 swift package resolve; \
+	fi
+	@echo "⚠️  IMPORTANT: Save the private key securely (GitHub Secret, 1Password, etc.)"
+	@echo "⚠️  The public key goes in Info.direct.plist as SUPublicEDKey"
+	@echo ""
+	@$(SPARKLE_BIN)/generate_keys
+
+# Export the Sparkle private key from Keychain (for CI setup)
+# Copy the output to GitHub Secrets as SPARKLE_PRIVATE_KEY
+sparkle-export-private-key:
+	@if [ ! -f "$(SPARKLE_BIN)/generate_keys" ]; then \
+		echo "Sparkle tools not found. Run: VOICEY_DIRECT=1 swift package resolve"; \
+		exit 1; \
+	fi
+	@echo "⚠️  Copy this private key to GitHub Secrets as SPARKLE_PRIVATE_KEY:"
+	@echo ""
+	@TMPFILE=$$(mktemp) && rm -f "$$TMPFILE" && $(SPARKLE_BIN)/generate_keys -x "$$TMPFILE" && cat "$$TMPFILE" && rm -f "$$TMPFILE"
+
+# VERSION should be set when creating releases
+VERSION ?= $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Info.direct.plist)
+
 # Clean build artifacts
 clean:
 	swift package clean
 	rm -rf $(APP_BUNDLE)
 	rm -rf $(BUILD_DIR)
+
+# Test that Sparkle is correctly linked only in direct distribution builds
+test-sparkle-linking:
+	@echo "🧪 Testing Sparkle linking configuration..."
+	@echo ""
+	@echo "Step 1: Building App Store version (should NOT have Sparkle)..."
+	@rm -rf $(BUILD_DIR)
+	@swift build -q 2>/dev/null
+	@if otool -L $(BUILD_DIR)/debug/Voicey 2>/dev/null | grep -q Sparkle; then \
+		echo "❌ FAIL: App Store build has Sparkle linked (it should NOT)"; \
+		exit 1; \
+	else \
+		echo "✅ PASS: App Store build does NOT have Sparkle linked"; \
+	fi
+	@echo ""
+	@echo "Step 2: Building Direct distribution version (should HAVE Sparkle)..."
+	@rm -rf $(BUILD_DIR)
+	@VOICEY_DIRECT=1 swift build -q -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION 2>/dev/null
+	@if otool -L $(BUILD_DIR)/debug/Voicey 2>/dev/null | grep -q Sparkle; then \
+		echo "✅ PASS: Direct build HAS Sparkle linked"; \
+	else \
+		echo "❌ FAIL: Direct build does NOT have Sparkle linked (it should)"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "🎉 All Sparkle linking tests passed!"
 
 # Run debug build
 run: build
@@ -156,6 +248,12 @@ run-bundle: bundle
 
 # Run the debug app bundle
 run-bundle-debug: bundle-debug
+	@open -n $(APP_BUNDLE)
+
+# Run direct distribution bundle (with Sparkle, ad-hoc signed for testing)
+run-bundle-direct: bundle-direct
+	@echo "Ad-hoc signing for local testing..."
+	@codesign --force --deep --sign - $(APP_BUNDLE)
 	@open -n $(APP_BUNDLE)
 
 # Install to Applications
@@ -317,10 +415,13 @@ help:
 	@echo "  icon              - Generate AppIcon.icns from SOURCE image"
 	@echo ""
 	@echo "Direct Distribution:"
-	@echo "  bundle-direct     - Create bundle with auto-paste enabled"
+	@echo "  bundle-direct     - Create bundle with clipboard-only mode"
 	@echo "  sign-direct       - Sign for notarization (requires DEVELOPER_ID)"
 	@echo "  notarize          - Notarize the app (requires APPLE_ID, TEAM_ID, APP_PASSWORD)"
 	@echo "  dmg               - Create notarized DMG for distribution"
+	@echo "  sparkle-zip       - Create ZIP for Sparkle auto-updates"
+	@echo "  sparkle-sign      - Sign a ZIP with EdDSA (FILE=Voicey-X.Y.Z.zip)"
+	@echo "  sparkle-generate-keys - Generate EdDSA keys for Sparkle signing"
 	@echo ""
 	@echo "Reset & Debug:"
 	@echo "  reset-state       - Reset app state (keeps models)"
@@ -329,3 +430,6 @@ help:
 	@echo "  reset-full        - Reset everything: state, models, and permissions"
 	@echo "  show-state        - Show current app settings and models"
 	@echo "  help              - Show this help"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test-sparkle-linking - Verify Sparkle is only linked in direct builds"

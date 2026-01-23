@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // Dependencies
   private let dependencies: Dependencies
 
+  #if VOICEY_DIRECT_DISTRIBUTION
+  // Sparkle updater for direct distribution builds
+  private let sparkleUpdater = SparkleUpdater.shared
+  #endif
+
   // Keep strong reference to prevent deallocation while visible
   private var modelDownloadWindow: NSWindow?
   private var onboardingWindow: NSWindow?
@@ -113,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Show onboarding if any required state is missing
     // This ensures users are guided through setup even if permissions were revoked
     let needsOnboarding = !hasModel || !hasMicrophone || needsAccessibility
+    
     debugPrint("🔍 Needs onboarding: \(needsOnboarding)", category: "STARTUP")
 
     return needsOnboarding
@@ -763,7 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
-        // Deliver text to clipboard and show notification
+        // Deliver text to clipboard and optionally auto-paste
         outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) {
           [weak self] in
           debugPrint("✅ Text copied to clipboard", category: "OUTPUT")

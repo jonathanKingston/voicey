@@ -108,6 +108,16 @@ final class StatusBarController {
     settingsItem.target = self
     menu.addItem(settingsItem)
 
+    #if VOICEY_DIRECT_DISTRIBUTION
+    let updateItem = NSMenuItem(
+      title: "Check for Updates...",
+      action: #selector(checkForUpdates),
+      keyEquivalent: ""
+    )
+    updateItem.target = self
+    menu.addItem(updateItem)
+    #endif
+
     menu.addItem(NSMenuItem.separator())
 
     let aboutItem = NSMenuItem(
@@ -182,6 +192,12 @@ final class StatusBarController {
   @objc private func openSettings() {
     delegate?.openSettings()
   }
+
+  #if VOICEY_DIRECT_DISTRIBUTION
+  @objc private func checkForUpdates() {
+    SparkleUpdater.shared.checkForUpdates()
+  }
+  #endif
 
   @objc private func showAbout() {
     delegate?.showAbout()

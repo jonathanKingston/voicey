@@ -44,5 +44,17 @@
     <string>AppIcon</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+
+    <!-- Sparkle auto-update configuration -->
+    <key>SUFeedURL</key>
+    <string>https://voicy.work/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>y6NFJFzTGp6DYgAYXYZVxZUDDYqdaAJLQhy5ZVRWWFU=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>
