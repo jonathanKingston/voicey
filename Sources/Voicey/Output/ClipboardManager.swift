@@ -7,7 +7,12 @@ final class ClipboardManager {
 
   private let pasteboard = NSPasteboard.general
 
+  /// Stored clipboard data for restore
+  private var savedItems: [(NSPasteboard.PasteboardType, Data)]?
+
   private init() {}
+
+  // MARK: - Basic Operations
 
   /// Copy text to the system clipboard
   func copy(_ text: String) {
@@ -39,5 +44,53 @@ final class ClipboardManager {
   /// Check if clipboard has text content
   var hasText: Bool {
     pasteboard.string(forType: .string) != nil
+  }
+
+  // MARK: - Save/Restore for AXPaste Flow
+
+  /// Save current clipboard contents for later restoration
+  func saveContents() {
+    savedItems = []
+
+    guard let types = pasteboard.types else {
+      AppLogger.output.info("Clipboard: No types to save")
+      return
+    }
+
+    for type in types {
+      if let data = pasteboard.data(forType: type) {
+        savedItems?.append((type, data))
+      }
+    }
+
+    AppLogger.output.info("Clipboard: Saved \(self.savedItems?.count ?? 0) items")
+  }
+
+  /// Restore previously saved clipboard contents
+  func restoreContents() {
+    guard let items = savedItems, !items.isEmpty else {
+      AppLogger.output.info("Clipboard: Nothing to restore")
+      return
+    }
+
+    pasteboard.clearContents()
+
+    for (type, data) in items {
+      pasteboard.setData(data, forType: type)
+    }
+
+    let count = items.count
+    savedItems = nil
+    AppLogger.output.info("Clipboard: Restored \(count) items")
+  }
+
+  /// Discard saved contents (user wants to keep transcription on clipboard)
+  func discardSavedContents() {
+    savedItems = nil
+  }
+
+  /// Check if there are saved contents pending restore
+  var hasSavedContents: Bool {
+    savedItems != nil && !(savedItems?.isEmpty ?? true)
   }
 }

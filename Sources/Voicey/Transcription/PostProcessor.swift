@@ -6,7 +6,7 @@ final class PostProcessor {
   private let textExpansions: [String: String]
 
   init() {
-    self.textExpansions = Self.defaultTextExpansions
+    self.textExpansions = TextCleanup.defaultTextExpansions
   }
 
   /// Get current voice commands settings (read fresh each time)
@@ -17,92 +17,6 @@ final class PostProcessor {
   private var voiceCommands: [VoiceCommand] {
     SettingsManager.shared.voiceCommands.filter { $0.enabled }
   }
-
-  // MARK: - Noise Words Filter
-
-  /// Words/phrases that Whisper often outputs for non-speech sounds
-  /// These should be filtered out as they're typically noise artifacts
-  private static let noiseWords: Set<String> = [
-    // Onomatopoeia for sounds
-    "bang", "click", "clicks", "clicking", "clack", "clunk",
-    "beep", "beeps", "beeping", "boop",
-    "thud", "thump", "thumping",
-    "tap", "taps", "tapping",
-    "knock", "knocks", "knocking",
-    "buzz", "buzzing", "hum", "humming",
-    "ring", "rings", "ringing", "ding", "dong",
-    "pop", "pops", "popping",
-    "crack", "crackle", "crackling",
-    "snap", "snaps", "snapping",
-    "whoosh", "swoosh", "swish",
-    "rustle", "rustling",
-    "scratch", "scratching",
-    "squeak", "squeaking", "creak", "creaking",
-    "slam", "slamming",
-    "crash", "crashing",
-    "bang", "banging",
-    "clatter", "clattering",
-    "rattle", "rattling",
-    "shuffle", "shuffling",
-    "footsteps", "footstep",
-
-    // Breathing/vocal sounds
-    "sigh", "sighs", "sighing",
-    "cough", "coughs", "coughing",
-    "sneeze", "sneezes", "sneezing",
-    "sniff", "sniffs", "sniffling",
-    "gasp", "gasps", "gasping",
-    "yawn", "yawns", "yawning",
-    "grunt", "grunts", "grunting",
-    "groan", "groans", "groaning",
-    "moan", "moans", "moaning",
-    "huff", "huffs", "huffing",
-    "puff", "puffs", "puffing",
-    "wheeze", "wheezes", "wheezing",
-    "inhale", "inhales", "exhale", "exhales",
-    "breath", "breathing",
-
-    // Music/ambient descriptions
-    "music", "music playing", "playing music",
-    "silence", "static", "noise",
-    "applause", "clapping", "cheering",
-    "laughter", "laughing", "chuckling",
-
-    // Whisper artifacts for silence
-    "...", "…",
-    "[silence]", "[music]", "[noise]", "[applause]",
-    "(silence)", "(music)", "(noise)", "(applause)",
-    "*silence*", "*music*", "*noise*",
-    "[inaudible]", "(inaudible)", "*inaudible*",
-    "[unintelligible]", "(unintelligible)",
-    "[background noise]", "(background noise)",
-    "[typing]", "(typing)", "typing",
-    "[keyboard]", "(keyboard)", "keyboard sounds",
-  ]
-
-  /// Patterns that indicate noise (regex patterns)
-  private static let noisePatterns: [String] = [
-    "^\\s*\\*[^*]+\\*\\s*$",  // *anything in asterisks*
-    "^\\s*\\[[^\\]]+\\]\\s*$",  // [anything in brackets]
-    "^\\s*\\([^)]+\\)\\s*$",  // (anything in parentheses) when it's the whole text
-    "^\\s*\\.+\\s*$",  // Just dots/ellipsis
-    "^\\s*…+\\s*$",  // Just ellipsis character
-  ]
-
-  // MARK: - Default Text Expansions
-
-  private static let defaultTextExpansions: [String: String] = [
-    "etcetera": "etc.",
-    "et cetera": "etc.",
-    "for example": "e.g.",
-    "that is": "i.e.",
-    "versus": "vs.",
-    "mister": "Mr.",
-    "missus": "Mrs.",
-    "doctor": "Dr.",
-    "okay": "OK",
-    "o k": "OK",
-  ]
 
   // MARK: - Processing
 
@@ -135,7 +49,7 @@ final class PostProcessor {
     }
 
     // Final cleanup
-    text = finalCleanup(text)
+    text = TextCleanup.cleanupSpacingAndPunctuation(text)
 
     AppLogger.transcription.info("PostProcessor: Final output: \"\(text)\"")
 
@@ -145,137 +59,82 @@ final class PostProcessor {
   // MARK: - Noise Filtering
 
   private func filterNoise(_ text: String) -> String {
-    var result = text
-
-    // Check if entire text matches a noise pattern
-    for pattern in Self.noisePatterns {
-      if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-        let range = NSRange(result.startIndex..., in: result)
-        if regex.firstMatch(in: result, range: range) != nil {
-          // Entire text is noise
-          return ""
-        }
-      }
+    if NoiseFilter.matchesNoisePattern(text) {
+      return ""
     }
 
-    // Remove individual noise words/phrases (case insensitive, whole word matching)
-    for noiseWord in Self.noiseWords {
-      // Match the noise word as a complete phrase, possibly with punctuation
+    var result = text
+    result = removeNoiseWords(from: result)
+    result = removeBracketedAnnotations(from: result)
+    result = removeAsteriskWrappedWords(from: result)
+    return result
+  }
+
+  private func removeNoiseWords(from text: String) -> String {
+    var result = text
+    for noiseWord in NoiseFilter.noiseWords {
       let pattern =
         "(?:^|\\s)\\*?\(NSRegularExpression.escapedPattern(for: noiseWord))\\*?[.,!?]*(?:\\s|$)"
-      if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-        result = regex.stringByReplacingMatches(
-          in: result,
-          range: NSRange(result.startIndex..., in: result),
-          withTemplate: " "
-        )
-      }
-    }
-
-    // Remove bracketed annotations like [music] or (typing)
-    let bracketPatterns = [
-      "\\[[^\\]]*\\]",  // [anything]
-      "\\([^)]*\\)",  // (anything) - but be careful not to remove legitimate parentheses
-    ]
-
-    for pattern in bracketPatterns {
-      if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-        // Only remove if the content looks like a noise annotation
-        let matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
-        for match in matches.reversed() {
-          if let range = Range(match.range, in: result) {
-            let matchedText = String(result[range]).lowercased()
-            // Check if this looks like a noise annotation
-            let isNoiseAnnotation =
-              Self.noiseWords.contains { matchedText.contains($0) } || matchedText.contains("music")
-              || matchedText.contains("noise") || matchedText.contains("silence")
-              || matchedText.contains("inaudible") || matchedText.contains("typing")
-              || matchedText.contains("applause")
-
-            if isNoiseAnnotation {
-              result.replaceSubrange(range, with: "")
-            }
-          }
-        }
-      }
-    }
-
-    // Remove asterisk-wrapped words like *click*
-    if let regex = try? NSRegularExpression(pattern: "\\*[^*]+\\*", options: .caseInsensitive) {
+      guard let regex = try? NSRegularExpression(
+        pattern: pattern,
+        options: .caseInsensitive
+      ) else { continue }
       result = regex.stringByReplacingMatches(
         in: result,
         range: NSRange(result.startIndex..., in: result),
-        withTemplate: ""
+        withTemplate: " "
       )
     }
-
     return result
+  }
+
+  private func removeBracketedAnnotations(from text: String) -> String {
+    var result = text
+    let bracketPatterns = ["\\[[^\\]]*\\]", "\\([^)]*\\)"]
+
+    for pattern in bracketPatterns {
+      guard let regex = try? NSRegularExpression(
+        pattern: pattern,
+        options: .caseInsensitive
+      ) else { continue }
+
+      let matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
+      for match in matches.reversed() {
+        guard let range = Range(match.range, in: result) else { continue }
+        let matchedText = String(result[range])
+        if NoiseFilter.isNoiseAnnotation(matchedText) {
+          result.replaceSubrange(range, with: "")
+        }
+      }
+    }
+    return result
+  }
+
+  private func removeAsteriskWrappedWords(from text: String) -> String {
+    guard let regex = try? NSRegularExpression(
+      pattern: "\\*[^*]+\\*",
+      options: .caseInsensitive
+    ) else { return text }
+    return regex.stringByReplacingMatches(
+      in: text,
+      range: NSRange(text.startIndex..., in: text),
+      withTemplate: ""
+    )
   }
 
   // MARK: - Intelligent Punctuation
 
-  private func applyIntelligentPunctuation(_ text: String, segments: [TranscriptionSegment])
-    -> String
-  {
+  private func applyIntelligentPunctuation(
+    _ text: String,
+    segments: [TranscriptionSegment]
+  ) -> String {
     guard !segments.isEmpty else { return text }
 
-    var result = text
+    let processedSegments = analyzeSegments(segments)
+    var result = reconstructText(from: processedSegments)
 
-    // Analyze segment timing for pause-based punctuation
-    var previousEndTime: TimeInterval = 0
-    var processedSegments: [(text: String, punctuation: String)] = []
+    result = TextCleanup.capitalizeFirst(result)
 
-    for (index, segment) in segments.enumerated() {
-      let pauseBeforeSegment = segment.startTime - previousEndTime
-      let segmentText = segment.text.trimmingCharacters(in: .whitespaces)
-      var punctuation = ""
-
-      // Determine punctuation based on pause duration
-      if index > 0 {
-        if pauseBeforeSegment > 1.5 {
-          // Long pause - paragraph break or ellipsis
-          punctuation = "..."
-        } else if pauseBeforeSegment > 0.6 {
-          // Medium pause - sentence ending
-          punctuation = inferSentenceEndPunctuation(segment)
-        } else if pauseBeforeSegment > 0.3 {
-          // Short pause - comma
-          if !segmentText.isEmpty && !isConjunction(segmentText) {
-            punctuation = ","
-          }
-        }
-      }
-
-      processedSegments.append((segmentText, punctuation))
-      previousEndTime = segment.endTime
-    }
-
-    // Reconstruct text with punctuation
-    result = ""
-    for (index, segment) in processedSegments.enumerated() {
-      if index > 0 && !segment.punctuation.isEmpty {
-        // Remove trailing space before adding punctuation
-        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " "))
-        result += segment.punctuation + " "
-      } else if index > 0 {
-        result += " "
-      }
-
-      // Capitalize after sentence-ending punctuation
-      var segmentText = segment.text
-      if index > 0, let lastChar = processedSegments[index - 1].punctuation.last,
-        ".!?".contains(lastChar)
-      {
-        segmentText = capitalizeFirst(segmentText)
-      }
-
-      result += segmentText
-    }
-
-    // Ensure first letter is capitalized
-    result = capitalizeFirst(result)
-
-    // Add final punctuation if missing
     if let lastChar = result.last, !".!?".contains(lastChar) {
       result += "."
     }
@@ -283,72 +142,96 @@ final class PostProcessor {
     return result
   }
 
+  private func analyzeSegments(
+    _ segments: [TranscriptionSegment]
+  ) -> [(text: String, punctuation: String)] {
+    var previousEndTime: TimeInterval = 0
+    var processedSegments: [(text: String, punctuation: String)] = []
+
+    for (index, segment) in segments.enumerated() {
+      let pauseBeforeSegment = segment.startTime - previousEndTime
+      let segmentText = segment.text.trimmingCharacters(in: .whitespaces)
+      let punctuation = determinePunctuation(
+        pauseBeforeSegment: pauseBeforeSegment,
+        segmentText: segmentText,
+        segment: segment,
+        isFirstSegment: index == 0
+      )
+      processedSegments.append((segmentText, punctuation))
+      previousEndTime = segment.endTime
+    }
+
+    return processedSegments
+  }
+
+  private func determinePunctuation(
+    pauseBeforeSegment: TimeInterval,
+    segmentText: String,
+    segment: TranscriptionSegment,
+    isFirstSegment: Bool
+  ) -> String {
+    guard !isFirstSegment else { return "" }
+
+    if pauseBeforeSegment > 1.5 {
+      return "..."
+    } else if pauseBeforeSegment > 0.6 {
+      return inferSentenceEndPunctuation(segment)
+    } else if pauseBeforeSegment > 0.3 && !segmentText.isEmpty
+        && !TextCleanup.isConjunction(segmentText) {
+      return ","
+    }
+    return ""
+  }
+
+  private func reconstructText(
+    from processedSegments: [(text: String, punctuation: String)]
+  ) -> String {
+    var result = ""
+    for (index, segment) in processedSegments.enumerated() {
+      if index > 0 && !segment.punctuation.isEmpty {
+        result = result.trimmingCharacters(in: CharacterSet(charactersIn: " "))
+        result += segment.punctuation + " "
+      } else if index > 0 {
+        result += " "
+      }
+
+      var segmentText = segment.text
+      if index > 0, let lastChar = processedSegments[index - 1].punctuation.last,
+        ".!?".contains(lastChar) {
+        segmentText = TextCleanup.capitalizeFirst(segmentText)
+      }
+
+      result += segmentText
+    }
+    return result
+  }
+
   private func inferSentenceEndPunctuation(_ segment: TranscriptionSegment) -> String {
-    // Analyze token probabilities and patterns for question detection
     let text = segment.text.lowercased()
 
-    // Question word patterns
     let questionStarters = [
       "what", "where", "when", "why", "who", "how", "which", "whose", "whom",
       "is it", "are you", "do you", "can you", "will you", "would you",
-      "could you", "should", "have you", "has", "does", "did",
+      "could you", "should", "have you", "has", "does", "did"
     ]
 
-    for starter in questionStarters {
-      if text.hasPrefix(starter) || text.contains(" \(starter) ") {
-        return "?"
-      }
+    for starter in questionStarters where text.hasPrefix(starter) || text.contains(" \(starter) ") {
+      return "?"
     }
 
-    // Question ending patterns
     let questionEnders = ["right", "correct", "isn't it", "aren't you", "don't you", "won't you"]
-    for ender in questionEnders {
-      if text.hasSuffix(ender) {
-        return "?"
-      }
+    for ender in questionEnders where text.hasSuffix(ender) {
+      return "?"
     }
 
-    // Default to period
     return "."
-  }
-
-  private func isConjunction(_ text: String) -> Bool {
-    let conjunctions = [
-      "and", "but", "or", "so", "yet", "for", "nor", "because", "although", "while", "if", "when",
-    ]
-    let firstWord = text.lowercased().split(separator: " ").first.map(String.init) ?? ""
-    return conjunctions.contains(firstWord)
-  }
-
-  private func capitalizeFirst(_ text: String) -> String {
-    guard let first = text.first else { return text }
-    return first.uppercased() + text.dropFirst()
   }
 
   // MARK: - Text Expansions
 
   private func applyTextExpansions(_ text: String) -> String {
-    var result = text
-
-    for (spoken, written) in textExpansions {
-      // Case-insensitive replacement
-      let pattern = "\\b\(NSRegularExpression.escapedPattern(for: spoken))\\b"
-      if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-        result = regex.stringByReplacingMatches(
-          in: result,
-          range: NSRange(result.startIndex..., in: result),
-          withTemplate: written
-        )
-      }
-    }
-
-    // Always capitalize "I"
-    result = result.replacingOccurrences(of: " i ", with: " I ")
-    result = result.replacingOccurrences(of: " i'", with: " I'")
-    if result.hasPrefix("i ") {
-      result = "I" + result.dropFirst()
-    }
-
+    var result = TextCleanup.applyExpansions(text, expansions: textExpansions)
+    result = TextCleanup.capitalizeI(result)
     return result
   }
 
@@ -359,104 +242,52 @@ final class PostProcessor {
 
     for command in voiceCommands {
       let pattern = "\\b\(NSRegularExpression.escapedPattern(for: command.phrase))\\b"
-      guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
-        continue
-      }
-
-      switch command.action {
-      case .newLine:
-        result = regex.stringByReplacingMatches(
-          in: result,
-          range: NSRange(result.startIndex..., in: result),
-          withTemplate: "\n"
-        )
-      case .newParagraph:
-        result = regex.stringByReplacingMatches(
-          in: result,
-          range: NSRange(result.startIndex..., in: result),
-          withTemplate: "\n\n"
-        )
-      case .scratchThat:
-        // Find and remove the last segment before this command
-        if let range = result.range(of: command.phrase, options: [.caseInsensitive, .backwards]) {
-          // Remove from the previous sentence end to this command
-          let beforeCommand = result[..<range.lowerBound]
-          if let lastSentenceEnd = beforeCommand.lastIndex(where: { ".!?".contains($0) }) {
-            let afterSentence = result.index(after: lastSentenceEnd)
-            result.removeSubrange(afterSentence..<range.upperBound)
-          } else {
-            // Remove everything before the command
-            result.removeSubrange(result.startIndex..<range.upperBound)
-          }
-        }
-      case .custom(let replacement):
-        result = regex.stringByReplacingMatches(
-          in: result,
-          range: NSRange(result.startIndex..., in: result),
-          withTemplate: replacement
-        )
-      }
+      guard let regex = try? NSRegularExpression(
+        pattern: pattern,
+        options: .caseInsensitive
+      ) else { continue }
+      result = applyVoiceCommand(command, regex: regex, to: result)
     }
 
     return result
   }
 
-  // MARK: - Final Cleanup
-
-  private func finalCleanup(_ text: String) -> String {
+  private func applyVoiceCommand(
+    _ command: VoiceCommand,
+    regex: NSRegularExpression,
+    to text: String
+  ) -> String {
     var result = text
+    let range = NSRange(result.startIndex..., in: result)
 
-    // Fix multiple spaces
-    while result.contains("  ") {
-      result = result.replacingOccurrences(of: "  ", with: " ")
+    switch command.action {
+    case .newLine:
+      result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "\n")
+    case .newParagraph:
+      result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "\n\n")
+    case .scratchThat:
+      result = applyScratchThat(command: command, to: result)
+    case .custom(let replacement):
+      result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
     }
-
-    // Fix space before punctuation
-    result = result.replacingOccurrences(of: " .", with: ".")
-    result = result.replacingOccurrences(of: " ,", with: ",")
-    result = result.replacingOccurrences(of: " ?", with: "?")
-    result = result.replacingOccurrences(of: " !", with: "!")
-
-    // Fix multiple punctuation
-    result = result.replacingOccurrences(of: "..", with: ".")
-    result = result.replacingOccurrences(of: ",,", with: ",")
-    result = result.replacingOccurrences(of: "....", with: "...")
-
-    // Ensure space after punctuation
-    let punctuationPattern = "([.!?,])([A-Za-z])"
-    if let regex = try? NSRegularExpression(pattern: punctuationPattern) {
-      result = regex.stringByReplacingMatches(
-        in: result,
-        range: NSRange(result.startIndex..., in: result),
-        withTemplate: "$1 $2"
-      )
-    }
-
-    // Trim
-    result = result.trimmingCharacters(in: .whitespacesAndNewlines)
 
     return result
   }
-}
 
-// MARK: - Voice Command Types
+  private func applyScratchThat(command: VoiceCommand, to text: String) -> String {
+    var result = text
+    guard let range = result.range(
+      of: command.phrase,
+      options: [.caseInsensitive, .backwards]
+    ) else { return result }
 
-enum VoiceCommandAction: Codable, Equatable {
-  case newLine
-  case newParagraph
-  case scratchThat
-  case custom(String)
-}
-
-struct VoiceCommand: Identifiable, Codable {
-  let id: UUID
-  var phrase: String
-  var action: VoiceCommandAction
-  var enabled: Bool
-
-  static let defaults: [VoiceCommand] = [
-    VoiceCommand(id: UUID(), phrase: "new line", action: .newLine, enabled: true),
-    VoiceCommand(id: UUID(), phrase: "new paragraph", action: .newParagraph, enabled: true),
-    VoiceCommand(id: UUID(), phrase: "scratch that", action: .scratchThat, enabled: true),
-  ]
+    let beforeCommand = result[..<range.lowerBound]
+    if let lastSentenceEnd = beforeCommand.lastIndex(where: { ".!?".contains($0) }) {
+      let afterSentence = result.index(after: lastSentenceEnd)
+      result.removeSubrange(afterSentence..<range.upperBound)
+    } else {
+      result.removeSubrange(result.startIndex..<range.upperBound)
+    }
+    return result
+  }
 }

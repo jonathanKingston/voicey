@@ -24,8 +24,7 @@ final class NotificationManager: NotificationProviding {
 
   private func requestNotificationPermission() {
     guard notificationsAvailable else { return }
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
-      granted, error in
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
       if let error = error {
         AppLogger.general.error("Notification permission error: \(error)")
       }

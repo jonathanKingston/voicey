@@ -8,6 +8,7 @@ protocol SettingsProviding {
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
   var autoPasteEnabled: Bool { get set }
+  var restoreClipboardAfterPaste: Bool { get set }
   var voiceCommandsEnabled: Bool { get set }
   var voiceCommands: [VoiceCommand] { get set }
   var enableDetailedLogging: Bool { get set }

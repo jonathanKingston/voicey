@@ -160,7 +160,7 @@ struct KeybindingRecorderView: View {
       UInt32(kVK_F7): "F7", UInt32(kVK_F8): "F8", UInt32(kVK_F9): "F9",
       UInt32(kVK_F10): "F10", UInt32(kVK_F11): "F11", UInt32(kVK_F12): "F12",
       UInt32(kVK_LeftArrow): "←", UInt32(kVK_RightArrow): "→",
-      UInt32(kVK_UpArrow): "↑", UInt32(kVK_DownArrow): "↓",
+      UInt32(kVK_UpArrow): "↑", UInt32(kVK_DownArrow): "↓"
     ]
     return keyMap[keyCode]
   }

@@ -26,10 +26,11 @@ final class SettingsManager: SettingsProviding {
       Keys.selectedModel: WhisperModel.base.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
-      Keys.autoPasteEnabled: true,  // Enable by default - uses Accessibility API to insert text
+      Keys.autoPasteEnabled: false,  // Disabled by default - advanced feature requiring Accessibility
+      Keys.restoreClipboardAfterPaste: true,  // Restore original clipboard after paste
       Keys.voiceCommandsEnabled: false,
       Keys.enableDetailedLogging: false,
-      Keys.hasCompletedOnboarding: false,
+      Keys.hasCompletedOnboarding: false
     ])
   }
 
@@ -40,6 +41,7 @@ final class SettingsManager: SettingsProviding {
     static let launchAtLogin = "launchAtLogin"
     static let showDockIcon = "showDockIcon"
     static let autoPasteEnabled = "autoPasteEnabled"
+    static let restoreClipboardAfterPaste = "restoreClipboardAfterPaste"
     static let voiceCommandsEnabled = "voiceCommandsEnabled"
     static let voiceCommands = "voiceCommands"
     static let enableDetailedLogging = "enableDetailedLogging"
@@ -78,6 +80,13 @@ final class SettingsManager: SettingsProviding {
   var autoPasteEnabled: Bool {
     get { defaults.bool(forKey: Keys.autoPasteEnabled) }
     set { defaults.set(newValue, forKey: Keys.autoPasteEnabled) }
+  }
+
+  /// Whether to restore original clipboard after auto-paste.
+  /// When enabled, the user's clipboard is preserved after transcription is pasted.
+  var restoreClipboardAfterPaste: Bool {
+    get { defaults.bool(forKey: Keys.restoreClipboardAfterPaste) }
+    set { defaults.set(newValue, forKey: Keys.restoreClipboardAfterPaste) }
   }
 
   func configureLaunchAtLogin(enabled: Bool) {

@@ -47,26 +47,17 @@ struct GeneralSettingsView: View {
 
   @AppStorage("launchAtLogin", store: defaults) private var launchAtLogin: Bool = false
   @AppStorage("showDockIcon", store: defaults) private var showDockIcon: Bool = false
-  @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
 
   var body: some View {
     Form {
       Section("Output") {
-        Toggle("Auto-insert after transcription", isOn: $autoPasteEnabled)
-          .onChange(of: autoPasteEnabled) { enabled in
-            guard enabled else { return }
-            if !PermissionsManager.shared.checkAccessibilityPermission() {
-              PermissionsManager.shared.promptForAccessibilityPermission()
-            }
-          }
+        Text("Voicey copies transcriptions to your clipboard. Press ⌘V to paste.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
 
-        Text(
-          autoPasteEnabled
-            ? "When enabled, Voicey will attempt to insert text directly into the focused text field (requires Accessibility)."
-            : "Voicey copies transcriptions to your clipboard. Press ⌘V to paste."
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        Text("💡 Enable auto-insert in Advanced settings to paste directly into text fields.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
 
       Section {
@@ -165,7 +156,7 @@ struct AudioSettingsView: View {
     .padding()
   }
 
-  private func testMicrophone() {
+  func testMicrophone() {
     isTestingMic = true
     testPassed = nil
 
@@ -462,6 +453,9 @@ struct AddVoiceCommandView: View {
 struct AdvancedSettingsView: View {
   private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
   @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
+  @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
+  @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste: Bool = true
+  @State private var accessibilityGranted = false
   @State private var clearError: String?
   @State private var showClearError = false
   #if VOICEY_DIRECT_DISTRIBUTION
@@ -470,6 +464,54 @@ struct AdvancedSettingsView: View {
 
   var body: some View {
     Form {
+      Section("Auto-Insert") {
+        Toggle("Auto-insert after transcription", isOn: $autoPasteEnabled)
+          .onChange(of: autoPasteEnabled) { enabled in
+            guard enabled else { return }
+            if !PermissionsManager.shared.checkAccessibilityPermission() {
+              PermissionsManager.shared.promptForAccessibilityPermission()
+            }
+            checkAccessibility()
+          }
+
+        Text(
+          autoPasteEnabled
+            ? "Voicey will attempt to insert text directly into the focused text field."
+            : "Voicey copies transcriptions to your clipboard. Press ⌘V to paste."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+        if autoPasteEnabled {
+          Toggle("Restore clipboard after paste", isOn: $restoreClipboardAfterPaste)
+
+          Text("When enabled, restores your original clipboard after pasting transcription.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          // Accessibility permission status
+          HStack {
+            Text("Accessibility Permission")
+            Spacer()
+            if accessibilityGranted {
+              Label("Granted", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            } else {
+              Button("Open Settings") {
+                PermissionsManager.shared.promptForAccessibilityPermission()
+              }
+              .buttonStyle(.bordered)
+            }
+          }
+
+          if !accessibilityGranted {
+            Text("Accessibility permission is required for auto-insert to work.")
+              .font(.caption)
+              .foregroundStyle(.orange)
+          }
+        }
+      }
+
       Section("Debugging") {
         Toggle("Enable Detailed Logging", isOn: $enableDetailedLogging)
 
@@ -494,15 +536,15 @@ struct AdvancedSettingsView: View {
           value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
         LabeledContent(
           "Build", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
-        
+
         #if VOICEY_DIRECT_DISTRIBUTION
         LabeledContent("Distribution", value: "Direct Install")
-        
+
         Button("Check for Updates") {
           sparkleUpdater.checkForUpdates()
         }
         .disabled(!sparkleUpdater.canCheckForUpdates)
-        
+
         Text("Updates are delivered directly from voicy.work")
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -518,6 +560,13 @@ struct AdvancedSettingsView: View {
     } message: {
       Text(clearError ?? "Unknown error")
     }
+    .onAppear {
+      checkAccessibility()
+    }
+  }
+
+  private func checkAccessibility() {
+    accessibilityGranted = PermissionsManager.shared.checkAccessibilityPermission()
   }
 
   private func clearAllData() {

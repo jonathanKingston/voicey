@@ -74,8 +74,7 @@ final class PermissionsManager: PermissionsProviding {
   /// Open System Settings to Accessibility pane
   func openAccessibilitySettings() {
     if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-    {
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
       NSWorkspace.shared.open(url)
     }
   }
@@ -85,8 +84,7 @@ final class PermissionsManager: PermissionsProviding {
   /// Open System Settings to Microphone pane
   func openMicrophoneSettings() {
     if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-    {
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
       NSWorkspace.shared.open(url)
     }
   }

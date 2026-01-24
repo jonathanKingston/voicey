@@ -118,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Show onboarding if any required state is missing
     // This ensures users are guided through setup even if permissions were revoked
     let needsOnboarding = !hasModel || !hasMicrophone || needsAccessibility
-    
+
     debugPrint("🔍 Needs onboarding: \(needsOnboarding)", category: "STARTUP")
 
     return needsOnboarding
@@ -220,13 +220,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint("🎉 Quality model ready for upgrade: \(model.displayName)", category: "MODEL")
     tryPerformPendingUpgrade()
   }
-  
+
   /// Try to perform a pending model upgrade if conditions are right
   private func tryPerformPendingUpgrade() {
     guard let pendingModel = ModelManager.shared.pendingUpgradeModel else {
       return
     }
-    
+
     // Only upgrade if we're NOT already using the quality model
     let currentModel = SettingsManager.shared.selectedModel
     guard currentModel != ModelManager.qualityModel else {
@@ -251,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func performModelUpgrade(to model: WhisperModel) {
     let previousModel = SettingsManager.shared.selectedModel
     debugPrint("🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
-    
+
     // DON'T set appState.modelStatus = .loading here - keep showing as ready so user knows they can still record
     // The isUpgradingModel flag will be released immediately so recording continues to work with the old model
 
@@ -260,12 +260,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       await MainActor.run {
         self.isUpgradingModel = false
       }
-      
+
       // Load the new model in background (old model stays loaded and usable)
       do {
         debugPrint("📦 Background loading \(model.displayName) (you can keep recording with \(previousModel.displayName))...", category: "MODEL")
         let startTime = CFAbsoluteTimeGetCurrent()
-        
+
         // Note: WhisperEngine.loadModel will unload the old model internally when loading a new one
         // We accept a brief interruption during the actual swap
         try await whisperEngine?.loadModel(variant: model.rawValue)
@@ -554,8 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // If selected model isn't downloaded, switch to first available model
     if !ModelManager.shared.isDownloaded(selectedModel),
-      let firstDownloaded = downloadedModels.first
-    {
+      let firstDownloaded = downloadedModels.first {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(firstDownloaded.rawValue)")
       SettingsManager.shared.selectedModel = firstDownloaded
@@ -641,15 +640,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Get the frontmost window (first in the list for this app, as list is front-to-back)
     guard let frontWindow = appWindows.first,
           let boundsDict = frontWindow[kCGWindowBounds as String] as? [String: CGFloat],
-          let x = boundsDict["X"],
-          let y = boundsDict["Y"],
+          let originX = boundsDict["X"],
+          let originY = boundsDict["Y"],
           let width = boundsDict["Width"],
           let height = boundsDict["Height"] else {
       return nil
     }
 
     // Create the window rect (note: CGWindowBounds uses top-left origin)
-    let windowRect = CGRect(x: x, y: y, width: width, height: height)
+    let windowRect = CGRect(x: originX, y: originY, width: width, height: height)
 
     // Find which screen contains the center of this window
     let windowCenter = CGPoint(x: windowRect.midX, y: windowRect.midY)
@@ -724,7 +723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Update menubar
     statusBarController?.updateIcon(recording: false)
-    
+
     // Check for pending model upgrade now that we're idle
     tryPerformPendingUpgrade()
   }
@@ -770,8 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
         // Deliver text to clipboard and optionally auto-paste
-        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) {
-          [weak self] in
+        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) { [weak self] in
           debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
           self?.hideOverlay()
           self?.appState.transcriptionState = .idle

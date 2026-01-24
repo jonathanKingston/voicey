@@ -67,9 +67,9 @@ final class TranscriptionOverlayController {
     guard let window = window, let screen = screen else { return }
     let screenFrame = screen.visibleFrame
     let windowFrame = window.frame
-    let x = screenFrame.midX - windowFrame.width / 2
-    let y = screenFrame.midY - windowFrame.height / 2 + 200
-    window.setFrameOrigin(NSPoint(x: x, y: y))
+    let posX = screenFrame.midX - windowFrame.width / 2
+    let posY = screenFrame.midY - windowFrame.height / 2 + 200
+    window.setFrameOrigin(NSPoint(x: posX, y: posY))
   }
 
   private func createWindow(on screen: NSScreen?) {

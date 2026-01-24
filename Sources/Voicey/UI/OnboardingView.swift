@@ -5,9 +5,6 @@ import SwiftUI
 /// First-run onboarding view to guide users through required permissions
 struct OnboardingView: View {
   @State private var microphoneGranted = false
-  @State private var accessibilityGranted = false
-  @State private var isCheckingAccessibility = false
-  @State private var accessibilityCheckTask: Task<Void, Never>?
   @State private var launchAtLoginEnabled = false
 
   // Observe model status from shared state
@@ -131,24 +128,9 @@ struct OnboardingView: View {
           action: requestMicrophonePermission
         )
 
-        // Step 3: Accessibility (optional, enables auto-insert into text fields)
+        // Step 3: Launch at Login (optional)
         SetupStepRow(
           stepNumber: 3,
-          icon: "keyboard",
-          title: "Accessibility Access",
-          description: "Optional: Enables auto-insert into text fields",
-          isComplete: accessibilityGranted,
-          isInProgress: isCheckingAccessibility,
-          progress: 0,
-          isOptional: true,
-          buttonTitle: accessibilityGranted
-            ? "Granted" : (isCheckingAccessibility ? "Checking..." : "Open Settings"),
-          action: requestAccessibilityPermission
-        )
-
-        // Step 4: Launch at Login (optional)
-        SetupStepRow(
-          stepNumber: 4,
           icon: "arrow.clockwise",
           title: "Launch at Login",
           description: "Start automatically (optional)",
@@ -247,7 +229,7 @@ struct OnboardingView: View {
       }
       .padding(.bottom, 30)
     }
-    .frame(width: 480, height: 780)  // Slightly taller for the extra model row
+    .frame(width: 480, height: 680)  // Compact: model downloads, mic, launch at login
     .onAppear {
       checkCurrentPermissions()
       // Only auto-download if the user has no models yet.
@@ -255,16 +237,11 @@ struct OnboardingView: View {
         startFastModelDownload()
       }
     }
-    .onDisappear {
-      accessibilityCheckTask?.cancel()
-      accessibilityCheckTask = nil
-    }
   }
 
   private func checkCurrentPermissions() {
     Task {
       microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
-      accessibilityGranted = PermissionsManager.shared.checkAccessibilityPermission()
       launchAtLoginEnabled = SettingsManager.shared.launchAtLogin
     }
   }
@@ -345,45 +322,6 @@ struct OnboardingView: View {
       window.makeKeyAndOrderFront(nil)
     } else if let window = NSApp.windows.first {
       window.makeKeyAndOrderFront(nil)
-    }
-  }
-
-  private func requestAccessibilityPermission() {
-    // Cancel any existing check
-    accessibilityCheckTask?.cancel()
-    accessibilityCheckTask = nil
-
-    PermissionsManager.shared.promptForAccessibilityPermission()
-    isCheckingAccessibility = true
-
-    // Poll for accessibility permission since we can't get a callback
-    accessibilityCheckTask = Task {
-      for i in 0..<60 {  // Check for 60 seconds
-        if Task.isCancelled { break }
-
-        try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 second
-
-        let granted = PermissionsManager.shared.checkAccessibilityPermission()
-
-        await MainActor.run {
-          accessibilityGranted = granted
-          // Stop showing "Checking..." after a few seconds
-          if i > 6 {
-            isCheckingAccessibility = false
-          }
-        }
-
-        if granted {
-          await MainActor.run {
-            isCheckingAccessibility = false
-          }
-          break
-        }
-      }
-
-      await MainActor.run {
-        isCheckingAccessibility = false
-      }
     }
   }
 

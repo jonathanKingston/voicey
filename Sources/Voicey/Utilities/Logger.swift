@@ -6,6 +6,7 @@ enum AppLogger {
   static let audio = Logger(subsystem: "work.voicey.Voicey", category: "audio")
   static let transcription = Logger(subsystem: "work.voicey.Voicey", category: "transcription")
   static let output = Logger(subsystem: "work.voicey.Voicey", category: "output")
+  // swiftlint:disable:next identifier_name
   static let ui = Logger(subsystem: "work.voicey.Voicey", category: "ui")
   static let general = Logger(subsystem: "work.voicey.Voicey", category: "general")
   static let model = Logger(subsystem: "work.voicey.Voicey", category: "model")

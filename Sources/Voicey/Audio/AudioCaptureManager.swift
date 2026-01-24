@@ -63,8 +63,7 @@ final class AudioCaptureManager {
 
     // Install tap on input node
     let bufferSize: AVAudioFrameCount = 1024
-    inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) {
-      [weak self] buffer, time in
+    inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
       self?.processAudioBuffer(buffer)
     }
 
@@ -153,7 +152,7 @@ final class AudioCaptureManager {
     }
 
     var error: NSError?
-    let status = converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
+    let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
       outStatus.pointee = .haveData
       return buffer
     }
@@ -197,8 +196,8 @@ final class AudioCaptureManager {
     vDSP_rmsqv(samples, 1, &rms, vDSP_Length(samples.count))
 
     // Convert to dB and normalize to 0-1 range
-    let db = 20 * log10(max(rms, 0.00001))
-    let normalizedLevel = (db + 60) / 60  // Assuming -60dB to 0dB range
+    let decibels = 20 * log10(max(rms, 0.00001))
+    let normalizedLevel = (decibels + 60) / 60  // Assuming -60dB to 0dB range
     return max(0, min(1, normalizedLevel))
   }
 

@@ -75,8 +75,8 @@ extension AudioLevelMonitor {
       var rms: Float = 0
       vDSP_rmsqv(channelData[0], 1, &rms, vDSP_Length(frameLength))
 
-      let db = 20 * log10(max(rms, 0.00001))
-      let normalizedLevel = (db + 60) / 60
+      let decibels = 20 * log10(max(rms, 0.00001))
+      let normalizedLevel = (decibels + 60) / 60
       let level = max(0, min(1, normalizedLevel))
 
       tracker.update(with: level)

@@ -90,9 +90,15 @@ sign: bundle
 	@echo "App signed"
 
 # Sign for App Store submission (requires Apple Developer certificate)
-# Usage: make sign-appstore IDENTITY="3rd Party Mac Developer Application: Your Name (TEAM_ID)"
-IDENTITY ?= -
+# Auto-detects certificate hash if not provided. Override with: make sign-appstore IDENTITY="..." or IDENTITY=HASH
+IDENTITY ?= $(shell security find-identity -v -p codesigning | grep "Apple Distribution" | head -1 | awk '{print $$2}')
 sign-appstore: bundle
+	@if [ "$(IDENTITY)" = "" ] || [ "$(IDENTITY)" = "-" ]; then \
+		echo "Error: No valid 'Apple Distribution' certificate found."; \
+		echo "Install one via Xcode or Apple Developer portal, or specify manually:"; \
+		echo "  make sign-appstore IDENTITY=\"Apple Distribution: Your Name (TEAM_ID)\""; \
+		exit 1; \
+	fi
 	@echo "Signing app for App Store..."
 	@codesign --force --deep \
 		--sign "$(IDENTITY)" \
@@ -101,9 +107,15 @@ sign-appstore: bundle
 	@echo "App signed for App Store"
 
 # Create installer package for App Store
-# Usage: make package-appstore IDENTITY="..." INSTALLER_IDENTITY="3rd Party Mac Developer Installer: Your Name (TEAM_ID)"
-INSTALLER_IDENTITY ?= -
+# Auto-detects certificate hash if not provided. Override with: make package-appstore INSTALLER_IDENTITY="..." or INSTALLER_IDENTITY=HASH
+INSTALLER_IDENTITY ?= $(shell security find-identity -v -p basic | grep "3rd Party Mac Developer Installer" | head -1 | awk '{print $$2}')
 package-appstore: sign-appstore
+	@if [ "$(INSTALLER_IDENTITY)" = "" ] || [ "$(INSTALLER_IDENTITY)" = "-" ]; then \
+		echo "Error: No valid '3rd Party Mac Developer Installer' certificate found."; \
+		echo "Install one via Xcode or Apple Developer portal, or specify manually:"; \
+		echo "  make package-appstore INSTALLER_IDENTITY=\"3rd Party Mac Developer Installer: Your Name (TEAM_ID)\""; \
+		exit 1; \
+	fi
 	@echo "Creating installer package..."
 	@productbuild --component $(APP_BUNDLE) /Applications \
 		--sign "$(INSTALLER_IDENTITY)" \
@@ -356,6 +368,33 @@ reset-full: reset-all reset-permissions
 	@echo ""
 	@echo "Full reset complete."
 
+# Show detected signing identities
+show-identities:
+	@echo "=== Detected Signing Identities ==="
+	@echo ""
+	@echo "App Store (Apple Distribution):"
+	@security find-identity -v -p codesigning | grep "Apple Distribution" | while read line; do \
+		HASH=$$(echo "$$line" | awk '{print $$2}'); \
+		NAME=$$(echo "$$line" | sed 's/.*"\(.*\)".*/\1/'); \
+		echo "  $$HASH  $$NAME"; \
+	done || echo "  ❌ Not found"
+	@echo ""
+	@echo "Installer (3rd Party Mac Developer Installer):"
+	@security find-identity -v -p basic | grep "3rd Party Mac Developer Installer" | while read line; do \
+		HASH=$$(echo "$$line" | awk '{print $$2}'); \
+		NAME=$$(echo "$$line" | sed 's/.*"\(.*\)".*/\1/'); \
+		echo "  $$HASH  $$NAME"; \
+	done || echo "  ❌ Not found"
+	@echo ""
+	@echo "Direct Distribution (Developer ID Application):"
+	@security find-identity -v -p codesigning | grep "Developer ID Application" | while read line; do \
+		HASH=$$(echo "$$line" | awk '{print $$2}'); \
+		NAME=$$(echo "$$line" | sed 's/.*"\(.*\)".*/\1/'); \
+		echo "  $$HASH  $$NAME"; \
+	done || echo "  ❌ Not found"
+	@echo ""
+	@echo "To use a specific cert by hash: make package-appstore IDENTITY=HASH_HERE"
+
 # Show current app state
 show-state:
 	@echo "=== App Settings (App Store) ==="
@@ -410,9 +449,10 @@ help:
 	@echo "  xcode-package     - Open Package.swift directly in Xcode"
 	@echo ""
 	@echo "App Store Distribution:"
-	@echo "  sign-appstore     - Sign for App Store (requires IDENTITY)"
-	@echo "  package-appstore  - Create .pkg for App Store upload"
+	@echo "  sign-appstore     - Sign for App Store (auto-detects certificate)"
+	@echo "  package-appstore  - Create .pkg for App Store upload (auto-detects certs)"
 	@echo "  icon              - Generate AppIcon.icns from SOURCE image"
+	@echo "  show-identities   - Show detected signing certificates"
 	@echo ""
 	@echo "Direct Distribution:"
 	@echo "  bundle-direct     - Create bundle with clipboard-only mode"

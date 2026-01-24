@@ -105,35 +105,35 @@ final class ModelManager: ObservableObject {
   }
 
   // MARK: - Model Hierarchy
-  
+
   /// The fast model used for quick startup
   static let fastModel = WhisperModel.base
-  
+
   /// The quality model used for better accuracy
   static let qualityModel = WhisperModel.largeTurbo
-  
+
   /// Check if we should upgrade from fast to quality model
   var shouldUpgradeToQuality: Bool {
     let currentModel = SettingsManager.shared.selectedModel
     return currentModel == Self.fastModel && isDownloaded(Self.qualityModel)
   }
-  
+
   // MARK: - CoreML Compilation Check
-  
+
   /// Check if a model has likely been compiled by CoreML before (fast to load)
   /// CoreML caches compiled models, so subsequent loads are much faster
   func isLikelyCompiled(_ model: WhisperModel) -> Bool {
     // Check for CoreML cache - this is where device-specific optimizations are stored
     // The cache location varies but we can check for common indicators
-    
+
     guard let modelPath = modelPath(for: model) else { return false }
     let modelURL = URL(fileURLWithPath: modelPath)
-    
+
     // Check if the AudioEncoder has a compiled data file (coremldata.bin)
     // This is created after first successful load
     let audioEncoderCompiled = modelURL
       .appendingPathComponent("AudioEncoder.mlmodelc/coremldata.bin")
-    
+
     if fileManager.fileExists(atPath: audioEncoderCompiled.path) {
       // Check file size - compiled models have substantial coremldata.bin files
       if let attrs = try? fileManager.attributesOfItem(atPath: audioEncoderCompiled.path),
@@ -142,7 +142,7 @@ final class ModelManager: ObservableObject {
         return true
       }
     }
-    
+
     return false
   }
 
@@ -186,7 +186,7 @@ final class ModelManager: ObservableObject {
     // Verify essential model components exist with their weight files
     // A complete model must have MelSpectrogram, AudioEncoder, and TextDecoder
     let essentialComponents = [
-      "MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc", "TextDecoder.mlmodelc",
+      "MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc", "TextDecoder.mlmodelc"
     ]
 
     for component in essentialComponents {
@@ -347,14 +347,12 @@ final class ModelManager: ObservableObject {
 
     // Check for common error patterns in the message
     if errorString.contains("network") || errorString.contains("internet")
-      || errorString.contains("connection")
-    {
+      || errorString.contains("connection") {
       return "Network error: Please check your internet connection and try again."
     }
 
     if errorString.contains("disk") || errorString.contains("space")
-      || errorString.contains("storage")
-    {
+      || errorString.contains("storage") {
       return "Insufficient disk space. Please free up some storage and try again."
     }
 
@@ -494,7 +492,7 @@ final class ModelManager: ObservableObject {
     // Create a temporary engine to prewarm the model
     // This compiles CoreML models if needed
     let prewarmEngine = WhisperEngine()
-    
+
     // Start a progress indicator task
     let modelName = model.displayName
     let progressTask = Task {
@@ -512,7 +510,7 @@ final class ModelManager: ObservableObject {
       let startTime = CFAbsoluteTimeGetCurrent()
       try await prewarmEngine.loadModel(variant: model.rawValue)
       let loadTime = CFAbsoluteTimeGetCurrent() - startTime
-      
+
       progressTask.cancel()
 
       await MainActor.run {
@@ -527,7 +525,7 @@ final class ModelManager: ObservableObject {
       }
     } catch {
       progressTask.cancel()
-      
+
       await MainActor.run {
         isPrewarming[model] = false
         debugPrint("❌ Failed to prewarm \(model.displayName): \(error)", category: "MODEL")

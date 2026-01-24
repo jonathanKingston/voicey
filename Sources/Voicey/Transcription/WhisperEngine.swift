@@ -153,8 +153,7 @@ final class WhisperEngine {
       // If it doesn't look compiled yet, prefer the best startup model for quick availability.
       if !ModelManager.shared.isLikelyCompiled(modelToLoad),
         let bestStartup = Self.selectBestAvailableModel(from: ModelManager.shared.downloadedModels),
-        bestStartup != modelToLoad
-      {
+        bestStartup != modelToLoad {
         debugPrint(
           "⚠️ Selected model '\(modelToLoad.rawValue)' not compiled yet; preloading '\(bestStartup.rawValue)' first for faster startup",
           category: "MODEL"
@@ -173,12 +172,12 @@ final class WhisperEngine {
       AppLogger.model.error("WhisperEngine: Failed to preload model: \(error)")
     }
   }
-  
+
   /// Select the best available model from downloaded models
   /// Prefers already-compiled models, then smaller/faster models for quick startup
   private static func selectBestAvailableModel(from models: Set<WhisperModel>) -> WhisperModel? {
     guard !models.isEmpty else { return nil }
-    
+
     // First, check if any model is already compiled (will load fast)
     // Prefer quality model if it's already compiled
     let qualityFirst: [WhisperModel] = [.largeTurbo, .large, .distilLarge, .small, .base, .tiny]
@@ -188,7 +187,7 @@ final class WhisperEngine {
         return model
       }
     }
-    
+
     // No compiled models found - prefer smaller/faster models for quick first-time compilation
     // Quality model (largeTurbo) will be loaded in background and swapped in later
     let smallFirst: [WhisperModel] = [.tiny, .base, .small, .distilLarge, .large, .largeTurbo]
@@ -198,7 +197,7 @@ final class WhisperEngine {
         return model
       }
     }
-    
+
     // Fallback to any available model
     return models.first
   }

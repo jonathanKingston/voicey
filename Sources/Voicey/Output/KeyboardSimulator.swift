@@ -1,47 +1,88 @@
-// Auto-paste functionality is only available in direct distribution builds.
-// App Store/TestFlight builds are sandboxed and cannot post CGEvents to other apps.
-
-#if VOICEY_DIRECT_DISTRIBUTION
-
-import ApplicationServices
+import AppKit
 import Carbon.HIToolbox
-import Foundation
 
-/// Simulates keyboard input for direct distribution builds only.
-///
-/// IMPORTANT:
-/// - Only available in non-sandboxed (direct distribution) builds.
-/// - Requires Accessibility permission when enabled.
-/// - Sandboxed apps (App Store/TestFlight) cannot post CGEvents to other apps.
+/// Keyboard simulation using CGEventPost
+/// Used as a last-resort fallback for pasting when Accessibility API methods fail.
+/// Voice Type (a sandboxed App Store app) uses this approach successfully.
 enum KeyboardSimulator {
-  static func simulatePaste() {
-    guard AXIsProcessTrusted() else {
-      AppLogger.output.error("Auto-paste requested but Accessibility permission is not granted")
-      return
-    }
+
+  /// Post Cmd+V via CGEventPost to trigger paste in the frontmost app.
+  /// This simulates the exact sequence Voice Type uses:
+  /// 1. flagsChanged → set Command
+  /// 2. keyDown V with Command
+  /// 3. keyUp V with Command  
+  /// 4. flagsChanged → clear modifiers
+  @discardableResult
+  static func postPasteCommand() -> Bool {
+    debugPrint("🔧 KeyboardSimulator: Posting Cmd+V via CGEventPost", category: "AX")
 
     guard let source = CGEventSource(stateID: .combinedSessionState) else {
-      AppLogger.output.error("Failed to create CGEventSource for auto-paste")
-      return
+      debugPrint("❌ KeyboardSimulator: Failed to create CGEventSource", category: "AX")
+      return false
     }
 
-    let vKey = CGKeyCode(kVK_ANSI_V)
-    let cmdDown = CGEventFlags.maskCommand
+    let vKeyCode = CGKeyCode(kVK_ANSI_V)
 
-    guard
-      let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
-      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
-    else {
-      AppLogger.output.error("Failed to create CGEvents for auto-paste")
-      return
+    // Create key events
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
+      debugPrint("❌ KeyboardSimulator: Failed to create key events", category: "AX")
+      return false
     }
 
-    keyDown.flags = cmdDown
-    keyUp.flags = cmdDown
+    // Create flags changed events (mimics Voice Type's exact sequence)
+    guard let flagsDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+          let flagsUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+      debugPrint("❌ KeyboardSimulator: Failed to create flag events", category: "AX")
+      return false
+    }
 
-    keyDown.post(tap: .cgSessionEventTap)
-    keyUp.post(tap: .cgSessionEventTap)
+    // Set Command flag on all events that need it
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+    flagsDown.flags = .maskCommand
+    flagsDown.type = .flagsChanged
+    flagsUp.flags = []
+    flagsUp.type = .flagsChanged
+
+    // Post the complete sequence (matches Voice Type's pattern)
+    flagsDown.post(tap: .cgSessionEventTap)  // Set Command modifier
+    keyDown.post(tap: .cgSessionEventTap)    // V key down with Command
+    keyUp.post(tap: .cgSessionEventTap)      // V key up with Command
+    flagsUp.post(tap: .cgSessionEventTap)    // Clear modifiers
+
+    debugPrint("✅ KeyboardSimulator: Posted Cmd+V sequence via CGEventPost", category: "AX")
+    AppLogger.output.info("KeyboardSimulator: Posted Cmd+V via CGEventPost (system-wide)")
+    return true
+  }
+
+  /// Post Cmd+V to a specific process by PID.
+  /// Fallback if system-wide posting doesn't work.
+  @discardableResult
+  static func postPasteCommandToPid(_ pid: pid_t) -> Bool {
+    debugPrint("🔧 KeyboardSimulator: Posting Cmd+V to PID \(pid)", category: "AX")
+
+    guard let source = CGEventSource(stateID: .combinedSessionState) else {
+      debugPrint("❌ KeyboardSimulator: Failed to create CGEventSource", category: "AX")
+      return false
+    }
+
+    let vKeyCode = CGKeyCode(kVK_ANSI_V)
+
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
+      debugPrint("❌ KeyboardSimulator: Failed to create key events", category: "AX")
+      return false
+    }
+
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+
+    keyDown.postToPid(pid)
+    keyUp.postToPid(pid)
+
+    debugPrint("✅ KeyboardSimulator: Posted Cmd+V to PID \(pid)", category: "AX")
+    AppLogger.output.info("KeyboardSimulator: Posted Cmd+V to PID \(pid)")
+    return true
   }
 }
-
-#endif
