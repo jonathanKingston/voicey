@@ -742,6 +742,7 @@ struct AdvancedSettingsView: View {
 
   var body: some View {
     Form {
+      #if VOICEY_DIRECT_DISTRIBUTION
       Section("Auto-Insert") {
         Toggle("Auto-insert after transcription", isOn: $autoPasteEnabled)
           .onChange(of: autoPasteEnabled) { enabled in
@@ -789,6 +790,7 @@ struct AdvancedSettingsView: View {
           }
         }
       }
+      #endif
 
       Section("Debugging") {
         Toggle("Enable Detailed Logging", isOn: $enableDetailedLogging)

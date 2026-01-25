@@ -71,12 +71,17 @@ final class PermissionsManager: PermissionsProviding {
     openAccessibilitySettings()
   }
 
-  /// Open System Settings to Accessibility pane
+  /// Open System Settings to Accessibility pane (only used in direct distribution)
   func openAccessibilitySettings() {
+    #if VOICEY_DIRECT_DISTRIBUTION
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
       NSWorkspace.shared.open(url)
     }
+    #else
+    // App Store builds don't use this - auto-insert UI is hidden
+    AppLogger.general.info("openAccessibilitySettings called in App Store build (no-op)")
+    #endif
   }
 
   // MARK: - Helper Methods
