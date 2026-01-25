@@ -19,7 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // Keep strong reference to prevent deallocation while visible
   private var modelDownloadWindow: NSWindow?
-  private var onboardingWindow: NSWindow?
   private var loadingWindow: NSWindow?
 
   private var audioCaptureManager: AudioCaptureManager?
@@ -133,49 +132,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Clean up
     transcriptionOverlay = nil
     modelDownloadWindow = nil
-    onboardingWindow = nil
   }
 
-  // MARK: - Onboarding
+  // MARK: - Onboarding (now uses Settings window with Setup tab)
 
   private func showOnboarding() {
-    let onboardingView = OnboardingView { [weak self] in
-      AppLogger.general.info("Onboarding complete callback triggered")
-
-      // Mark onboarding as complete
-      SettingsManager.shared.hasCompletedOnboarding = true
-      AppLogger.general.info("Marked onboarding as complete")
-
-      // Close onboarding window
-      self?.onboardingWindow?.close()
-      self?.onboardingWindow = nil
-      AppLogger.general.info("Closed onboarding window")
-
-      // Update permission state silently (onboarding already handled prompts)
-      Task {
-        await self?.checkPermissionsSilently()
-      }
-
-      // Now start model loading (will show model downloader if needed)
-      self?.checkModelStatusAndPreload(showUI: true)
-    }
-
-    let hostingController = NSHostingController(rootView: onboardingView)
-
-    let window = NSWindow(contentViewController: hostingController)
-    window.title = "Welcome to Voicey"
-    // No close button - user must complete setup
-    window.styleMask = [.titled]
-    window.setContentSize(NSSize(width: 480, height: 720))
-    window.center()
-
-    // Prevent closing without completing
-    window.isReleasedWhenClosed = false
-
-    onboardingWindow = window
-
-    window.makeKeyAndOrderFront(nil)
-    NSApp.activate(ignoringOtherApps: true)
+    // Open settings window - the Setup tab provides onboarding experience
+    openSettings()
+    
+    // Mark onboarding as shown
+    SettingsManager.shared.hasCompletedOnboarding = true
+    
+    // Start model loading in background
+    checkModelStatusAndPreload(showUI: false)
   }
 
   private func setupComponents() {
@@ -821,7 +790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let window = NSWindow(contentViewController: hostingController)
     window.title = "Voicey Settings"
     window.styleMask = [.titled, .closable]
-    window.setContentSize(NSSize(width: 500, height: 400))
+    window.setContentSize(NSSize(width: 500, height: 550))
     window.center()
 
     window.makeKeyAndOrderFront(nil)

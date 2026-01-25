@@ -1,42 +1,320 @@
+import AppKit
 import AVFoundation
 import KeyboardShortcuts
 import SwiftUI
 
 /// Main settings view with tabbed interface
 struct SettingsView: View {
+  enum Tab: Hashable {
+    case setup, general, hotkey, audio, model, voiceCommands, advanced
+  }
+
+  @State private var selectedTab: Tab = .setup
+  @ObservedObject private var modelManager = ModelManager.shared
+  @State private var microphoneGranted = false
+
+  /// Whether setup is complete (model downloaded + mic permission)
+  private var isSetupComplete: Bool {
+    microphoneGranted && modelManager.hasDownloadedModel
+  }
+
   var body: some View {
-    TabView {
+    TabView(selection: $selectedTab) {
+      SetupSettingsView()
+        .tabItem {
+          Label("Setup", systemImage: "checkmark.circle")
+        }
+        .tag(Tab.setup)
+
       GeneralSettingsView()
         .tabItem {
           Label("General", systemImage: "gear")
         }
+        .tag(Tab.general)
 
       HotkeySettingsView()
         .tabItem {
           Label("Hotkey", systemImage: "keyboard")
         }
+        .tag(Tab.hotkey)
 
       AudioSettingsView()
         .tabItem {
           Label("Audio", systemImage: "mic")
         }
+        .tag(Tab.audio)
 
       ModelSettingsView()
         .tabItem {
           Label("Model", systemImage: "cpu")
         }
+        .tag(Tab.model)
 
       VoiceCommandsSettingsView()
         .tabItem {
           Label("Voice Commands", systemImage: "text.bubble")
         }
+        .tag(Tab.voiceCommands)
 
       AdvancedSettingsView()
         .tabItem {
           Label("Advanced", systemImage: "wrench.and.screwdriver")
         }
+        .tag(Tab.advanced)
     }
-    .frame(width: 500, height: 400)
+    .frame(width: 500, height: 550)
+    .task {
+      microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
+      if isSetupComplete {
+        selectedTab = .general
+      }
+    }
+  }
+}
+
+// MARK: - Setup Settings (Onboarding-style status view)
+
+struct SetupSettingsView: View {
+  @State private var microphoneGranted = false
+  @State private var launchAtLoginEnabled = false
+
+  @ObservedObject private var modelManager = ModelManager.shared
+
+  /// The fast model to download first for quick startup
+  private let fastModel = WhisperModel.base
+
+  /// The high-quality model to download in background
+  private let qualityModel = WhisperModel.largeTurbo
+
+  /// Whether all required setup is complete
+  private var isSetupComplete: Bool {
+    microphoneGranted && modelManager.hasDownloadedModel
+  }
+
+  /// Whether fast model is currently downloading
+  private var isFastModelDownloading: Bool {
+    modelManager.isDownloading[fastModel] == true
+  }
+
+  /// Whether quality model is currently downloading
+  private var isQualityModelDownloading: Bool {
+    modelManager.isDownloading[qualityModel] == true
+  }
+
+  /// Whether fast model is ready
+  private var isFastModelReady: Bool {
+    modelManager.hasDownloadedModel || modelManager.isDownloaded(fastModel)
+  }
+
+  /// Whether quality model is ready
+  private var isQualityModelReady: Bool {
+    modelManager.isDownloaded(qualityModel)
+  }
+
+  /// Download progress for fast model (0-1)
+  private var fastDownloadProgress: Double {
+    modelManager.downloadProgress[fastModel] ?? 0
+  }
+
+  /// Download progress for quality model (0-1)
+  private var qualityDownloadProgress: Double {
+    modelManager.downloadProgress[qualityModel] ?? 0
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      // Header
+      VStack(spacing: 8) {
+        Image(nsImage: NSApp.applicationIconImage)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 64, height: 64)
+
+        Text("Voicey")
+          .font(.title2)
+          .fontWeight(.bold)
+
+        Text("Voice-to-text transcription for macOS")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+      }
+      .padding(.top, 20)
+      .padding(.bottom, 16)
+
+      Divider()
+        .padding(.horizontal, 20)
+
+      // Setup steps
+      VStack(spacing: 10) {
+        // Step 1: Model Download
+        SetupStepRow(
+          stepNumber: 1,
+          icon: "cpu",
+          title: "Download Model",
+          description: "Any model works. Default: \(fastModel.displayName) (~80MB)",
+          isComplete: isFastModelReady,
+          isInProgress: isFastModelDownloading,
+          progress: fastDownloadProgress,
+          buttonTitle: isFastModelReady
+            ? "Ready" : (isFastModelDownloading ? "Downloading..." : "Download"),
+          action: startFastModelDownload
+        )
+
+        // Step 1b: Quality Model Download (optional upgrade)
+        SetupStepRow(
+          stepNumber: 0,
+          icon: "sparkles",
+          title: "Download Quality Model",
+          description: "\(qualityModel.displayName) (~1.5GB) - Better accuracy",
+          isComplete: isQualityModelReady,
+          isInProgress: isQualityModelDownloading,
+          progress: qualityDownloadProgress,
+          isOptional: true,
+          buttonTitle: isQualityModelReady
+            ? "Ready"
+            : (isQualityModelDownloading
+              ? "Downloading..." : (isFastModelReady ? "Download" : "After fast model")),
+          action: startQualityModelDownload
+        )
+        .disabled(!isFastModelReady && !isQualityModelDownloading)
+        .opacity(isFastModelReady || isQualityModelDownloading || isQualityModelReady ? 1.0 : 0.6)
+
+        // Step 2: Microphone
+        SetupStepRow(
+          stepNumber: 2,
+          icon: "mic.fill",
+          title: "Microphone Access",
+          description: "Required to hear your voice",
+          isComplete: microphoneGranted,
+          buttonTitle: microphoneGranted ? "Granted" : "Allow",
+          action: requestMicrophonePermission
+        )
+
+        // Step 3: Launch at Login (optional)
+        SetupStepRow(
+          stepNumber: 3,
+          icon: "arrow.clockwise",
+          title: "Launch at Login",
+          description: "Start automatically (optional)",
+          isComplete: launchAtLoginEnabled,
+          isOptional: true,
+          buttonTitle: launchAtLoginEnabled ? "Enabled" : "Enable",
+          action: enableLaunchAtLogin
+        )
+      }
+      .padding(.top, 20)
+
+      Spacer()
+
+      // Status footer
+      VStack(spacing: 12) {
+        if isSetupComplete {
+          HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+              .foregroundStyle(.green)
+            if isQualityModelReady {
+              Text("All set! Using quality model.")
+            } else if isQualityModelDownloading {
+              Text("Ready! Quality model downloading...")
+            } else {
+              Text("Ready to use!")
+            }
+          }
+          .font(.subheadline)
+          .foregroundStyle(.green)
+        } else {
+          HStack(spacing: 8) {
+            if isFastModelDownloading {
+              ProgressView()
+                .scaleEffect(0.7)
+              Text("Downloading model... \(Int(fastDownloadProgress * 100))%")
+            } else if !isFastModelReady {
+              Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+              Text("Model download required")
+            } else if !microphoneGranted {
+              Image(systemName: "mic.slash")
+                .foregroundStyle(.orange)
+              Text("Microphone access required")
+            }
+          }
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+          if isFastModelDownloading {
+            ProgressView(value: fastDownloadProgress)
+              .progressViewStyle(.linear)
+              .padding(.horizontal, 30)
+          }
+        }
+      }
+      .padding(.bottom, 20)
+    }
+    .padding(.horizontal, 10)
+    .onAppear {
+      checkCurrentPermissions()
+    }
+  }
+
+  private func checkCurrentPermissions() {
+    Task {
+      microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
+      launchAtLoginEnabled = SettingsManager.shared.launchAtLogin
+    }
+  }
+
+  private func startFastModelDownload() {
+    guard !modelManager.hasDownloadedModel else { return }
+    guard !modelManager.isDownloaded(fastModel),
+      modelManager.isDownloading[fastModel] != true
+    else {
+      if isFastModelReady {
+        startQualityModelDownload()
+      }
+      return
+    }
+
+    modelManager.downloadModel(fastModel)
+
+    Task {
+      await waitForFastModelThenStartQualityDownload()
+    }
+  }
+
+  private func waitForFastModelThenStartQualityDownload() async {
+    while modelManager.isDownloading[fastModel] == true {
+      try? await Task.sleep(nanoseconds: 500_000_000)
+    }
+
+    if modelManager.isDownloaded(fastModel) {
+      await MainActor.run {
+        startQualityModelDownload()
+      }
+    }
+  }
+
+  private func startQualityModelDownload() {
+    guard !modelManager.isDownloaded(qualityModel),
+      modelManager.isDownloading[qualityModel] != true
+    else {
+      return
+    }
+
+    modelManager.downloadModel(qualityModel)
+  }
+
+  private func requestMicrophonePermission() {
+    Task {
+      let granted = await PermissionsManager.shared.requestMicrophonePermission()
+      await MainActor.run {
+        microphoneGranted = granted
+      }
+    }
+  }
+
+  private func enableLaunchAtLogin() {
+    SettingsManager.shared.configureLaunchAtLogin(enabled: true)
+    launchAtLoginEnabled = true
   }
 }
 
@@ -588,6 +866,101 @@ struct AdvancedSettingsView: View {
       clearError = errors.joined(separator: "\n")
       showClearError = true
     }
+  }
+}
+
+// MARK: - Setup Step Row
+
+/// Setup step row with progress support
+struct SetupStepRow: View {
+  let stepNumber: Int
+  let icon: String
+  let title: String
+  let description: String
+  let isComplete: Bool
+  var isInProgress: Bool = false
+  var progress: Double = 0
+  var isOptional: Bool = false
+  let buttonTitle: String
+  let action: () -> Void
+
+  var body: some View {
+    HStack(spacing: 16) {
+      // Step number / status indicator
+      ZStack {
+        Circle()
+          .fill(
+            isComplete
+              ? Color.green.opacity(0.15)
+              : (isInProgress ? Color.blue.opacity(0.15) : Color.gray.opacity(0.1))
+          )
+          .frame(width: 44, height: 44)
+
+        if isComplete {
+          Image(systemName: "checkmark")
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(.green)
+        } else if isInProgress {
+          if progress > 0 {
+            // Circular progress
+            Circle()
+              .stroke(Color.blue.opacity(0.3), lineWidth: 3)
+              .frame(width: 30, height: 30)
+            Circle()
+              .trim(from: 0, to: progress)
+              .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+              .frame(width: 30, height: 30)
+              .rotationEffect(.degrees(-90))
+          } else {
+            ProgressView()
+              .scaleEffect(0.8)
+          }
+        } else {
+          Text("\(stepNumber)")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(.secondary)
+        }
+      }
+
+      // Text
+      VStack(alignment: .leading, spacing: 2) {
+        HStack {
+          Text(title)
+            .font(.headline)
+            .foregroundStyle(isComplete ? .secondary : .primary)
+
+          if isOptional {
+            Text("Optional")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+              .padding(.horizontal, 5)
+              .padding(.vertical, 2)
+              .background(Color.secondary.opacity(0.2))
+              .cornerRadius(3)
+          }
+        }
+
+        Text(description)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer()
+
+      // Button
+      Button(action: action) {
+        Text(buttonTitle)
+          .font(.subheadline)
+      }
+      .buttonStyle(.bordered)
+      .disabled(isComplete || isInProgress)
+    }
+    .padding(.vertical, 10)
+    .padding(.horizontal, 12)
+    .background(
+      RoundedRectangle(cornerRadius: 10)
+        .fill(isComplete ? Color.green.opacity(0.05) : Color.clear)
+    )
   }
 }
 
