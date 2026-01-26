@@ -308,6 +308,8 @@ struct SetupSettingsView: View {
       let granted = await PermissionsManager.shared.requestMicrophonePermission()
       await MainActor.run {
         microphoneGranted = granted
+        // Re-activate app after permission dialog closes to prevent window from going behind other apps
+        NSApp.activate(ignoringOtherApps: true)
       }
     }
   }

@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // Keep strong reference to prevent deallocation while visible
   private var modelDownloadWindow: NSWindow?
   private var loadingWindow: NSWindow?
+  private var settingsWindow: NSWindow?
 
   private var audioCaptureManager: AudioCaptureManager?
   private var whisperEngine: WhisperEngine?
@@ -781,6 +782,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Public Actions
 
   func openSettings() {
+    // Reuse existing settings window if it's still open
+    if let existingWindow = settingsWindow, existingWindow.isVisible {
+      existingWindow.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+      return
+    }
+
     // Create settings window manually since SwiftUI Settings scene doesn't work well with accessory apps
     let settingsView = SettingsView()
       .environmentObject(appState)
@@ -792,6 +800,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     window.styleMask = [.titled, .closable]
     window.setContentSize(NSSize(width: 500, height: 550))
     window.center()
+
+    settingsWindow = window
 
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
