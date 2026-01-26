@@ -22,8 +22,8 @@ final class SettingsManager: SettingsProviding {
 
   private func registerDefaults() {
     defaults.register(defaults: [
-      // Default to fast model - onboarding will upgrade to quality model in background
-      Keys.selectedModel: WhisperModel.base.rawValue,
+      // Default to locale-appropriate fast model - onboarding will upgrade to quality model in background
+      Keys.selectedModel: ModelManager.fastModel.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
       Keys.autoPasteEnabled: false,  // Disabled by default - advanced feature requiring Accessibility

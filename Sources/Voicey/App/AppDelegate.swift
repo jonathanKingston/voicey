@@ -378,9 +378,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func startBackgroundUpgradeIfNeeded() {
     let currentModel = SettingsManager.shared.selectedModel
 
-    // Only auto-upgrade when we started with the fast model.
-    // If user manually selected another model, don't force-download the quality model.
-    guard currentModel == ModelManager.fastModel else {
+    // Only auto-upgrade when using a fast model (base, tiny, small - English or multilingual).
+    // If user manually selected a larger model, don't force-download the quality model.
+    guard currentModel.isFastModel else {
       return
     }
 

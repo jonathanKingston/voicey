@@ -193,9 +193,9 @@ struct ModelDownloadRow: View {
     case .largeTurbo: return "bolt.fill"
     case .large: return "star.fill"
     case .distilLarge: return "brain.head.profile"
-    case .small: return "scalemass"
-    case .base: return "gauge.medium"
-    case .tiny: return "hare"
+    case .small, .smallEn: return "scalemass"
+    case .base, .baseEn: return "gauge.medium"
+    case .tiny, .tinyEn: return "hare"
     }
   }
 

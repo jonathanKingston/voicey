@@ -80,11 +80,11 @@ struct SetupSettingsView: View {
 
   @ObservedObject private var modelManager = ModelManager.shared
 
-  /// The fast model to download first for quick startup
-  private let fastModel = WhisperModel.base
+  /// The fast model to download first for quick startup (language-aware)
+  private var fastModel: WhisperModel { ModelManager.fastModel }
 
   /// The high-quality model to download in background
-  private let qualityModel = WhisperModel.largeTurbo
+  private let qualityModel = ModelManager.qualityModel
 
   /// Whether all required setup is complete
   private var isSetupComplete: Bool {
@@ -452,7 +452,7 @@ struct AudioSettingsView: View {
 struct ModelSettingsView: View {
   @ObservedObject var modelManager = ModelManager.shared
   private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
-  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = WhisperModel.base.rawValue
+  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = WhisperModel.baseEn.rawValue
 
   var body: some View {
     Form {

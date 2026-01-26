@@ -6,12 +6,17 @@ import os
 /// Available Whisper model variants
 enum WhisperModel: String, CaseIterable, Identifiable {
   // Note: WhisperKit uses underscores for turbo variants (large-v3_turbo, not large-v3-turbo)
+  // Multilingual models (support 99+ languages)
   case largeTurbo = "large-v3_turbo"
   case large = "large-v3"
   case distilLarge = "distil-large-v3"
-  case small = "small.en"
-  case base = "base.en"
-  case tiny = "tiny.en"
+  case small = "small"
+  case base = "base"
+  case tiny = "tiny"
+  // English-only models (optimized for English, smaller/faster)
+  case smallEn = "small.en"
+  case baseEn = "base.en"
+  case tinyEn = "tiny.en"
 
   var id: String { rawValue }
 
@@ -20,9 +25,12 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     case .largeTurbo: return "Large v3 Turbo"
     case .large: return "Large v3"
     case .distilLarge: return "Distil Large v3"
-    case .small: return "Small (English)"
-    case .base: return "Base (English)"
-    case .tiny: return "Tiny (English)"
+    case .small: return "Small (Multilingual)"
+    case .base: return "Base (Multilingual)"
+    case .tiny: return "Tiny (Multilingual)"
+    case .smallEn: return "Small (English)"
+    case .baseEn: return "Base (English)"
+    case .tinyEn: return "Tiny (English)"
     }
   }
 
@@ -31,9 +39,12 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     case .largeTurbo: return "Fast & accurate, 8x faster than Large (~1.5GB)"
     case .large: return "Maximum accuracy, slower (~3GB)"
     case .distilLarge: return "Distilled model, fast & accurate (~800MB)"
-    case .small: return "Balanced speed/accuracy (~250MB)"
-    case .base: return "Fast, basic accuracy (~80MB)"
-    case .tiny: return "Fastest, lowest accuracy (~40MB)"
+    case .small: return "Balanced speed/accuracy, multilingual (~250MB)"
+    case .base: return "Fast, basic accuracy, multilingual (~80MB)"
+    case .tiny: return "Fastest, lowest accuracy, multilingual (~40MB)"
+    case .smallEn: return "Balanced speed/accuracy, English only (~250MB)"
+    case .baseEn: return "Fast, basic accuracy, English only (~80MB)"
+    case .tinyEn: return "Fastest, lowest accuracy, English only (~40MB)"
     }
   }
 
@@ -41,14 +52,30 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     self == .largeTurbo
   }
 
+  /// Whether this model only supports English
+  var isEnglishOnly: Bool {
+    switch self {
+    case .smallEn, .baseEn, .tinyEn: return true
+    default: return false
+    }
+  }
+
+  /// Whether this is a "fast" model suitable for quick startup
+  var isFastModel: Bool {
+    switch self {
+    case .base, .baseEn, .tiny, .tinyEn, .small, .smallEn: return true
+    default: return false
+    }
+  }
+
   var diskSize: Int64 {
     switch self {
     case .largeTurbo: return 1_500_000_000
     case .large: return 3_000_000_000
     case .distilLarge: return 800_000_000
-    case .small: return 250_000_000
-    case .base: return 80_000_000
-    case .tiny: return 40_000_000
+    case .small, .smallEn: return 250_000_000
+    case .base, .baseEn: return 80_000_000
+    case .tiny, .tinyEn: return 40_000_000
     }
   }
 
@@ -57,9 +84,9 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     case .largeTurbo: return 3_000_000_000
     case .large: return 6_000_000_000
     case .distilLarge: return 2_000_000_000
-    case .small: return 600_000_000
-    case .base: return 200_000_000
-    case .tiny: return 100_000_000
+    case .small, .smallEn: return 600_000_000
+    case .base, .baseEn: return 200_000_000
+    case .tiny, .tinyEn: return 100_000_000
     }
   }
 
@@ -69,9 +96,12 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     case .largeTurbo: return "openai_whisper-large-v3_turbo"
     case .large: return "openai_whisper-large-v3"
     case .distilLarge: return "distil-whisper_distil-large-v3"
-    case .small: return "openai_whisper-small.en"
-    case .base: return "openai_whisper-base.en"
-    case .tiny: return "openai_whisper-tiny.en"
+    case .small: return "openai_whisper-small"
+    case .base: return "openai_whisper-base"
+    case .tiny: return "openai_whisper-tiny"
+    case .smallEn: return "openai_whisper-small.en"
+    case .baseEn: return "openai_whisper-base.en"
+    case .tinyEn: return "openai_whisper-tiny.en"
     }
   }
 }
@@ -106,16 +136,36 @@ final class ModelManager: ObservableObject {
 
   // MARK: - Model Hierarchy
 
-  /// The fast model used for quick startup
-  static let fastModel = WhisperModel.base
+  /// The fast model for English users
+  static let fastModelEnglish = WhisperModel.baseEn
 
-  /// The quality model used for better accuracy
+  /// The fast model for non-English users (multilingual)
+  static let fastModelMultilingual = WhisperModel.base
+
+  /// The quality model used for better accuracy (multilingual)
   static let qualityModel = WhisperModel.largeTurbo
 
-  /// Check if we should upgrade from fast to quality model
+  /// Returns the appropriate fast model based on the user's system language
+  /// - English users get the English-optimized model (slightly better for English)
+  /// - Non-English users get the multilingual model
+  static var fastModelForCurrentLocale: WhisperModel {
+    let languageCode = Locale.current.language.languageCode?.identifier ?? "en"
+    if languageCode == "en" {
+      return fastModelEnglish
+    } else {
+      return fastModelMultilingual
+    }
+  }
+
+  /// For backward compatibility - returns the locale-appropriate fast model
+  static var fastModel: WhisperModel {
+    fastModelForCurrentLocale
+  }
+
+  /// Check if we should upgrade from a fast model to quality model
   var shouldUpgradeToQuality: Bool {
     let currentModel = SettingsManager.shared.selectedModel
-    return currentModel == Self.fastModel && isDownloaded(Self.qualityModel)
+    return currentModel.isFastModel && isDownloaded(Self.qualityModel)
   }
 
   // MARK: - CoreML Compilation Check
