@@ -66,17 +66,17 @@ enum TranscriptionState: Equatable {
   var displayText: String {
     switch self {
     case .idle:
-      return "Ready"
+      return L10n.State.ready
     case .loadingModel:
-      return "Loading model..."
+      return L10n.State.loadingModel
     case .recording:
-      return "Listening..."
+      return L10n.State.listening
     case .processing:
-      return "Transcribing..."
+      return L10n.State.transcribing
     case .completed:
-      return "Done"
+      return L10n.State.done
     case .error(let message):
-      return "Error: \(message)"
+      return L10n.State.error(message)
     }
   }
 }
@@ -100,10 +100,10 @@ enum ModelStatus: Equatable {
 
   var statusText: String {
     switch self {
-    case .notDownloaded: return "No model"
-    case .loading: return "Loading..."
-    case .ready: return "Ready"
-    case .failed(let error): return "Error: \(error)"
+    case .notDownloaded: return L10n.ModelStatus.noModel
+    case .loading: return L10n.ModelStatus.loading
+    case .ready: return L10n.ModelStatus.ready
+    case .failed(let error): return L10n.ModelStatus.error(error)
     }
   }
 }

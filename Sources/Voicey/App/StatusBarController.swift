@@ -47,13 +47,13 @@ final class StatusBarController {
 
     switch status {
     case .notDownloaded:
-      button.toolTip = "Voicey - No model downloaded\nClick to download a model"
+      button.toolTip = L10n.Tooltip.noModelDownloaded
     case .loading:
-      button.toolTip = "Voicey - Loading model...\nPlease wait before recording"
+      button.toolTip = L10n.Tooltip.loadingModel
     case .ready:
-      button.toolTip = "Voicey - Ready\nPress Ctrl+V to start recording"
+      button.toolTip = L10n.Tooltip.ready
     case .failed(let error):
-      button.toolTip = "Voicey - Error: \(error)"
+      button.toolTip = L10n.Tooltip.error(error)
     }
   }
 
@@ -89,7 +89,7 @@ final class StatusBarController {
 
   private func setupMenu() {
     let startItem = NSMenuItem(
-      title: "Start Transcription",
+      title: L10n.Menu.startTranscription,
       action: #selector(toggleTranscription),
       keyEquivalent: ""
     )
@@ -101,7 +101,7 @@ final class StatusBarController {
     menu.addItem(NSMenuItem.separator())
 
     let settingsItem = NSMenuItem(
-      title: "Settings...",
+      title: L10n.Menu.settings,
       action: #selector(openSettings),
       keyEquivalent: ","
     )
@@ -110,7 +110,7 @@ final class StatusBarController {
 
     #if VOICEY_DIRECT_DISTRIBUTION
     let updateItem = NSMenuItem(
-      title: "Check for Updates...",
+      title: L10n.Menu.checkForUpdates,
       action: #selector(checkForUpdates),
       keyEquivalent: ""
     )
@@ -121,7 +121,7 @@ final class StatusBarController {
     menu.addItem(NSMenuItem.separator())
 
     let aboutItem = NSMenuItem(
-      title: "About Voicey",
+      title: L10n.Menu.about,
       action: #selector(showAbout),
       keyEquivalent: ""
     )
@@ -129,7 +129,7 @@ final class StatusBarController {
     menu.addItem(aboutItem)
 
     let quitItem = NSMenuItem(
-      title: "Quit",
+      title: L10n.Menu.quit,
       action: #selector(quit),
       keyEquivalent: "q"
     )
@@ -146,7 +146,7 @@ final class StatusBarController {
 
     // Update menu item title
     if let startItem = menu.items.first {
-      startItem.title = recording ? "Stop Transcription" : "Start Transcription"
+      startItem.title = recording ? L10n.Menu.stopTranscription : L10n.Menu.startTranscription
     }
   }
 

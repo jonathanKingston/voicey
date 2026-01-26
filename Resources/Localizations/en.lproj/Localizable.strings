@@ -1,0 +1,166 @@
+/* English - Base localization */
+
+/* App General */
+"app.name" = "Voicey";
+"app.tagline" = "Voice-to-text transcription for macOS";
+
+/* Transcription States */
+"state.ready" = "Ready";
+"state.loadingModel" = "Loading model...";
+"state.listening" = "Listening...";
+"state.transcribing" = "Transcribing...";
+"state.done" = "Done";
+"state.error" = "Error: %@";
+
+/* Model Status */
+"modelStatus.noModel" = "No model";
+"modelStatus.loading" = "Loading...";
+"modelStatus.ready" = "Ready";
+"modelStatus.error" = "Error: %@";
+
+/* Menu Items */
+"menu.startTranscription" = "Start Transcription";
+"menu.stopTranscription" = "Stop Transcription";
+"menu.settings" = "Settings...";
+"menu.checkForUpdates" = "Check for Updates...";
+"menu.about" = "About Voicey";
+"menu.quit" = "Quit";
+
+/* Tooltips */
+"tooltip.noModelDownloaded" = "Voicey - No model downloaded\nClick to download a model";
+"tooltip.loadingModel" = "Voicey - Loading model...\nPlease wait before recording";
+"tooltip.ready" = "Voicey - Ready\nPress Ctrl+V to start recording";
+"tooltip.error" = "Voicey - Error: %@";
+
+/* Settings Tabs */
+"settings.setup" = "Setup";
+"settings.general" = "General";
+"settings.hotkey" = "Hotkey";
+"settings.audio" = "Audio";
+"settings.model" = "Model";
+"settings.voiceCommands" = "Voice Commands";
+"settings.advanced" = "Advanced";
+
+/* Setup View */
+"setup.downloadModel" = "Download Model";
+"setup.downloadModelDesc" = "Any model works. Default: %@ (~80MB)";
+"setup.downloadQualityModel" = "Download Quality Model";
+"setup.downloadQualityModelDesc" = "%@ (~1.5GB) - Better accuracy";
+"setup.microphoneAccess" = "Microphone Access";
+"setup.microphoneAccessDesc" = "Required to hear your voice";
+"setup.launchAtLogin" = "Launch at Login";
+"setup.launchAtLoginDesc" = "Start automatically (optional)";
+"setup.ready" = "Ready";
+"setup.download" = "Download";
+"setup.downloading" = "Downloading...";
+"setup.afterFastModel" = "After fast model";
+"setup.granted" = "Granted";
+"setup.allow" = "Allow";
+"setup.enabled" = "Enabled";
+"setup.enable" = "Enable";
+"setup.optional" = "Optional";
+"setup.allSetQualityModel" = "All set! Using quality model.";
+"setup.qualityModelDownloading" = "Ready! Quality model downloading...";
+"setup.readyToUse" = "Ready to use!";
+"setup.downloadingProgress" = "Downloading model... %d%%";
+"setup.modelDownloadRequired" = "Model download required";
+"setup.microphoneRequired" = "Microphone access required";
+
+/* General Settings */
+"general.output" = "Output";
+"general.outputDescription" = "Voicey copies transcriptions to your clipboard. Press ⌘V to paste.";
+"general.outputTip" = "💡 Enable auto-insert in Advanced settings to paste directly into text fields.";
+"general.launchAtLogin" = "Launch at Login";
+"general.showDockIcon" = "Show Dock Icon";
+
+/* Hotkey Settings */
+"hotkey.transcriptionHotkey" = "Transcription Hotkey";
+"hotkey.toggleRecording" = "Toggle Recording:";
+"hotkey.hotkeyDescription" = "Press this hotkey to start recording. Press again to stop and transcribe.";
+"hotkey.resetToDefault" = "Reset to Default (⌃V)";
+"hotkey.escapeKey" = "Escape Key";
+"hotkey.escapeDescription" = "Press ESC while recording to cancel without transcribing.";
+
+/* Audio Settings */
+"audio.inputDevice" = "Input Device";
+"audio.microphone" = "Microphone";
+"audio.systemDefault" = "System Default";
+"audio.inputDeviceDescription" = "Voicey uses your system's default audio input device.";
+"audio.testMicrophone" = "Test Microphone";
+"audio.testInput" = "Test Input";
+"audio.testing" = "Testing...";
+"audio.testDescription" = "Speak into your microphone to verify it's working.";
+
+/* Model Settings */
+"model.selectedModel" = "Selected Model";
+"model.modelLabel" = "Model";
+"model.availableModels" = "Available Models";
+"model.performance" = "Performance";
+"model.performanceDescription" = "GPU acceleration is automatically enabled via Metal on Apple Silicon.";
+"model.recommended" = "Recommended";
+"model.download" = "Download";
+"model.delete" = "Delete";
+"model.failedToDelete" = "Failed to Delete Model";
+"model.ok" = "OK";
+"model.unknownError" = "Unknown error";
+
+/* Voice Commands */
+"voiceCommands.enable" = "Enable Voice Commands";
+"voiceCommands.description" = "When enabled, specific phrases will trigger actions instead of being transcribed as text.";
+"voiceCommands.commands" = "Commands";
+"voiceCommands.addCustomCommand" = "Add Custom Command";
+"voiceCommands.resetToDefaults" = "Reset to Defaults";
+"voiceCommands.phrase" = "Phrase";
+"voiceCommands.newLine" = "Insert new line";
+"voiceCommands.newParagraph" = "Insert new paragraph";
+"voiceCommands.scratchThat" = "Delete last utterance";
+"voiceCommands.customText" = "Insert: %@";
+"voiceCommands.addVoiceCommand" = "Add Voice Command";
+"voiceCommands.triggerPhrase" = "Trigger Phrase";
+"voiceCommands.action" = "Action";
+"voiceCommands.actionNewLine" = "New Line";
+"voiceCommands.actionNewParagraph" = "New Paragraph";
+"voiceCommands.actionCustomText" = "Custom Text";
+"voiceCommands.customTextLabel" = "Custom Text";
+"voiceCommands.cancel" = "Cancel";
+"voiceCommands.add" = "Add";
+
+/* Advanced Settings */
+"advanced.autoInsert" = "Auto-Insert";
+"advanced.autoInsertToggle" = "Auto-insert after transcription";
+"advanced.autoInsertEnabledDesc" = "Voicey will attempt to insert text directly into the focused text field.";
+"advanced.autoInsertDisabledDesc" = "Voicey copies transcriptions to your clipboard. Press ⌘V to paste.";
+"advanced.restoreClipboard" = "Restore clipboard after paste";
+"advanced.restoreClipboardDesc" = "When enabled, restores your original clipboard after pasting transcription.";
+"advanced.accessibilityPermission" = "Accessibility Permission";
+"advanced.accessibilityGranted" = "Granted";
+"advanced.openSettings" = "Open Settings";
+"advanced.accessibilityRequired" = "Accessibility permission is required for auto-insert to work.";
+"advanced.debugging" = "Debugging";
+"advanced.enableDetailedLogging" = "Enable Detailed Logging";
+"advanced.loggingDescription" = "Logs additional information for troubleshooting. May impact performance.";
+"advanced.data" = "Data";
+"advanced.clearAllData" = "Clear All Data";
+"advanced.clearDataDescription" = "Removes all downloaded models and resets settings to defaults.";
+"advanced.failedToClear" = "Failed to Clear Data";
+"advanced.about" = "About";
+"advanced.version" = "Version";
+"advanced.build" = "Build";
+"advanced.distribution" = "Distribution";
+"advanced.directInstall" = "Direct Install";
+"advanced.appStore" = "App Store";
+"advanced.checkForUpdates" = "Check for Updates";
+"advanced.updatesDeliveredFrom" = "Updates are delivered directly from voicy.work";
+
+/* Model Download Window */
+"download.whisperModels" = "Whisper Models";
+"download.description" = "Download a speech recognition model to enable transcription.\nLarger models are more accurate but require more memory.";
+"download.done" = "Done";
+
+/* Overlay */
+"overlay.cancelHelp" = "Cancel (ESC)";
+
+/* Common */
+"common.ok" = "OK";
+"common.cancel" = "Cancel";
+"common.error" = "Error";

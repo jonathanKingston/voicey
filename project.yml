@@ -38,6 +38,8 @@ targets:
         buildPhase: resources
       - path: Resources/AppIcon.icns
         buildPhase: resources
+      - path: Resources/Localizations
+        buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
       - package: WhisperKit
@@ -77,6 +79,8 @@ targets:
       - path: Resources/Assets.xcassets
         buildPhase: resources
       - path: Resources/AppIcon.icns
+        buildPhase: resources
+      - path: Resources/Localizations
         buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts

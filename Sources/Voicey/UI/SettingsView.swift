@@ -22,43 +22,43 @@ struct SettingsView: View {
     TabView(selection: $selectedTab) {
       SetupSettingsView()
         .tabItem {
-          Label("Setup", systemImage: "checkmark.circle")
+          Label(L10n.Settings.setup, systemImage: "checkmark.circle")
         }
         .tag(Tab.setup)
 
       GeneralSettingsView()
         .tabItem {
-          Label("General", systemImage: "gear")
+          Label(L10n.Settings.general, systemImage: "gear")
         }
         .tag(Tab.general)
 
       HotkeySettingsView()
         .tabItem {
-          Label("Hotkey", systemImage: "keyboard")
+          Label(L10n.Settings.hotkey, systemImage: "keyboard")
         }
         .tag(Tab.hotkey)
 
       AudioSettingsView()
         .tabItem {
-          Label("Audio", systemImage: "mic")
+          Label(L10n.Settings.audio, systemImage: "mic")
         }
         .tag(Tab.audio)
 
       ModelSettingsView()
         .tabItem {
-          Label("Model", systemImage: "cpu")
+          Label(L10n.Settings.model, systemImage: "cpu")
         }
         .tag(Tab.model)
 
       VoiceCommandsSettingsView()
         .tabItem {
-          Label("Voice Commands", systemImage: "text.bubble")
+          Label(L10n.Settings.voiceCommands, systemImage: "text.bubble")
         }
         .tag(Tab.voiceCommands)
 
       AdvancedSettingsView()
         .tabItem {
-          Label("Advanced", systemImage: "wrench.and.screwdriver")
+          Label(L10n.Settings.advanced, systemImage: "wrench.and.screwdriver")
         }
         .tag(Tab.advanced)
     }
@@ -130,11 +130,11 @@ struct SetupSettingsView: View {
           .aspectRatio(contentMode: .fit)
           .frame(width: 64, height: 64)
 
-        Text("Voicey")
+        Text(L10n.App.name)
           .font(.title2)
           .fontWeight(.bold)
 
-        Text("Voice-to-text transcription for macOS")
+        Text(L10n.App.tagline)
           .font(.subheadline)
           .foregroundStyle(.secondary)
       }
@@ -150,13 +150,13 @@ struct SetupSettingsView: View {
         SetupStepRow(
           stepNumber: 1,
           icon: "cpu",
-          title: "Download Model",
-          description: "Any model works. Default: \(fastModel.displayName) (~80MB)",
+          title: L10n.Setup.downloadModel,
+          description: L10n.Setup.downloadModelDesc(fastModel.displayName),
           isComplete: isFastModelReady,
           isInProgress: isFastModelDownloading,
           progress: fastDownloadProgress,
           buttonTitle: isFastModelReady
-            ? "Ready" : (isFastModelDownloading ? "Downloading..." : "Download"),
+            ? L10n.Setup.ready : (isFastModelDownloading ? L10n.Setup.downloading : L10n.Setup.download),
           action: startFastModelDownload
         )
 
@@ -164,16 +164,16 @@ struct SetupSettingsView: View {
         SetupStepRow(
           stepNumber: 0,
           icon: "sparkles",
-          title: "Download Quality Model",
-          description: "\(qualityModel.displayName) (~1.5GB) - Better accuracy",
+          title: L10n.Setup.downloadQualityModel,
+          description: L10n.Setup.downloadQualityModelDesc(qualityModel.displayName),
           isComplete: isQualityModelReady,
           isInProgress: isQualityModelDownloading,
           progress: qualityDownloadProgress,
           isOptional: true,
           buttonTitle: isQualityModelReady
-            ? "Ready"
+            ? L10n.Setup.ready
             : (isQualityModelDownloading
-              ? "Downloading..." : (isFastModelReady ? "Download" : "After fast model")),
+              ? L10n.Setup.downloading : (isFastModelReady ? L10n.Setup.download : L10n.Setup.afterFastModel)),
           action: startQualityModelDownload
         )
         .disabled(!isFastModelReady && !isQualityModelDownloading)
@@ -183,10 +183,10 @@ struct SetupSettingsView: View {
         SetupStepRow(
           stepNumber: 2,
           icon: "mic.fill",
-          title: "Microphone Access",
-          description: "Required to hear your voice",
+          title: L10n.Setup.microphoneAccess,
+          description: L10n.Setup.microphoneAccessDesc,
           isComplete: microphoneGranted,
-          buttonTitle: microphoneGranted ? "Granted" : "Allow",
+          buttonTitle: microphoneGranted ? L10n.Setup.granted : L10n.Setup.allow,
           action: requestMicrophonePermission
         )
 
@@ -194,11 +194,11 @@ struct SetupSettingsView: View {
         SetupStepRow(
           stepNumber: 3,
           icon: "arrow.clockwise",
-          title: "Launch at Login",
-          description: "Start automatically (optional)",
+          title: L10n.Setup.launchAtLogin,
+          description: L10n.Setup.launchAtLoginDesc,
           isComplete: launchAtLoginEnabled,
           isOptional: true,
-          buttonTitle: launchAtLoginEnabled ? "Enabled" : "Enable",
+          buttonTitle: launchAtLoginEnabled ? L10n.Setup.enabled : L10n.Setup.enable,
           action: enableLaunchAtLogin
         )
       }
@@ -213,11 +213,11 @@ struct SetupSettingsView: View {
             Image(systemName: "checkmark.circle.fill")
               .foregroundStyle(.green)
             if isQualityModelReady {
-              Text("All set! Using quality model.")
+              Text(L10n.Setup.allSetQualityModel)
             } else if isQualityModelDownloading {
-              Text("Ready! Quality model downloading...")
+              Text(L10n.Setup.qualityModelDownloading)
             } else {
-              Text("Ready to use!")
+              Text(L10n.Setup.readyToUse)
             }
           }
           .font(.subheadline)
@@ -227,15 +227,15 @@ struct SetupSettingsView: View {
             if isFastModelDownloading {
               ProgressView()
                 .scaleEffect(0.7)
-              Text("Downloading model... \(Int(fastDownloadProgress * 100))%")
+              Text(L10n.Setup.downloadingProgress(Int(fastDownloadProgress * 100)))
             } else if !isFastModelReady {
               Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
-              Text("Model download required")
+              Text(L10n.Setup.modelDownloadRequired)
             } else if !microphoneGranted {
               Image(systemName: "mic.slash")
                 .foregroundStyle(.orange)
-              Text("Microphone access required")
+              Text(L10n.Setup.microphoneRequired)
             }
           }
           .font(.caption)
@@ -328,23 +328,23 @@ struct GeneralSettingsView: View {
 
   var body: some View {
     Form {
-      Section("Output") {
-        Text("Voicey copies transcriptions to your clipboard. Press ⌘V to paste.")
+      Section(L10n.General.output) {
+        Text(L10n.General.outputDescription)
           .font(.callout)
           .foregroundStyle(.secondary)
 
-        Text("💡 Enable auto-insert in Advanced settings to paste directly into text fields.")
+        Text(L10n.General.outputTip)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
 
       Section {
-        Toggle("Launch at Login", isOn: $launchAtLogin)
+        Toggle(L10n.General.launchAtLogin, isOn: $launchAtLogin)
           .onChange(of: launchAtLogin) { newValue in
             SettingsManager.shared.configureLaunchAtLogin(enabled: newValue)
           }
 
-        Toggle("Show Dock Icon", isOn: $showDockIcon)
+        Toggle(L10n.General.showDockIcon, isOn: $showDockIcon)
           .onChange(of: showDockIcon) { newValue in
             NSApp.setActivationPolicy(newValue ? .regular : .accessory)
           }
@@ -360,22 +360,22 @@ struct GeneralSettingsView: View {
 struct HotkeySettingsView: View {
   var body: some View {
     Form {
-      Section("Transcription Hotkey") {
-        KeyboardShortcuts.Recorder("Toggle Recording:", name: .toggleTranscription)
+      Section(L10n.Hotkey.transcriptionHotkey) {
+        KeyboardShortcuts.Recorder(L10n.Hotkey.toggleRecording, name: .toggleTranscription)
 
-        Text("Press this hotkey to start recording. Press again to stop and transcribe.")
+        Text(L10n.Hotkey.hotkeyDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
 
       Section {
-        Button("Reset to Default (⌃V)") {
+        Button(L10n.Hotkey.resetToDefault) {
           KeyboardShortcuts.reset(.toggleTranscription)
         }
       }
 
-      Section("Escape Key") {
-        Text("Press ESC while recording to cancel without transcribing.")
+      Section(L10n.Hotkey.escapeKey) {
+        Text(L10n.Hotkey.escapeDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -394,22 +394,22 @@ struct AudioSettingsView: View {
 
   var body: some View {
     Form {
-      Section("Input Device") {
+      Section(L10n.Audio.inputDevice) {
         HStack {
-          Text("Microphone")
+          Text(L10n.Audio.microphone)
           Spacer()
-          Text(AudioCaptureManager.defaultInputDevice?.localizedName ?? "System Default")
+          Text(AudioCaptureManager.defaultInputDevice?.localizedName ?? L10n.Audio.systemDefault)
             .foregroundStyle(.secondary)
         }
 
-        Text("Voicey uses your system's default audio input device.")
+        Text(L10n.Audio.inputDeviceDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
 
-      Section("Test Microphone") {
+      Section(L10n.Audio.testMicrophone) {
         HStack {
-          Button(isTestingMic ? "Testing..." : "Test Input") {
+          Button(isTestingMic ? L10n.Audio.testing : L10n.Audio.testInput) {
             testMicrophone()
           }
           .disabled(isTestingMic)
@@ -425,7 +425,7 @@ struct AudioSettingsView: View {
           }
         }
 
-        Text("Speak into your microphone to verify it's working.")
+        Text(L10n.Audio.testDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -456,8 +456,8 @@ struct ModelSettingsView: View {
 
   var body: some View {
     Form {
-      Section("Selected Model") {
-        Picker("Model", selection: $selectedModel) {
+      Section(L10n.Model.selectedModel) {
+        Picker(L10n.Model.modelLabel, selection: $selectedModel) {
           ForEach(WhisperModel.allCases) { model in
             HStack {
               Text(model.displayName)
@@ -478,14 +478,14 @@ struct ModelSettingsView: View {
         }
       }
 
-      Section("Available Models") {
+      Section(L10n.Model.availableModels) {
         ForEach(WhisperModel.allCases) { model in
           ModelRowView(model: model)
         }
       }
 
-      Section("Performance") {
-        Text("GPU acceleration is automatically enabled via Metal on Apple Silicon.")
+      Section(L10n.Model.performance) {
+        Text(L10n.Model.performanceDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -509,7 +509,7 @@ struct ModelRowView: View {
             .font(.headline)
 
           if model.isRecommended {
-            Text("Recommended")
+            Text(L10n.Model.recommended)
               .font(.caption2)
               .fontWeight(.medium)
               .padding(.horizontal, 6)
@@ -543,7 +543,7 @@ struct ModelRowView: View {
           Image(systemName: "checkmark.circle.fill")
             .foregroundStyle(.green)
 
-          Button("Delete") {
+          Button(L10n.Model.delete) {
             do {
               try modelManager.deleteModel(model)
             } catch {
@@ -555,17 +555,17 @@ struct ModelRowView: View {
           .foregroundStyle(.red)
         }
       } else {
-        Button("Download") {
+        Button(L10n.Model.download) {
           modelManager.downloadModel(model)
         }
         .buttonStyle(.borderedProminent)
       }
     }
     .padding(.vertical, 4)
-    .alert("Failed to Delete Model", isPresented: $showDeleteError) {
-      Button("OK", role: .cancel) {}
+    .alert(L10n.Model.failedToDelete, isPresented: $showDeleteError) {
+      Button(L10n.Model.ok, role: .cancel) {}
     } message: {
-      Text(deleteError ?? "Unknown error")
+      Text(deleteError ?? L10n.Model.unknownError)
     }
   }
 }
@@ -581,17 +581,15 @@ struct VoiceCommandsSettingsView: View {
   var body: some View {
     Form {
       Section {
-        Toggle("Enable Voice Commands", isOn: $voiceCommandsEnabled)
+        Toggle(L10n.VoiceCommands.enable, isOn: $voiceCommandsEnabled)
 
-        Text(
-          "When enabled, specific phrases will trigger actions instead of being transcribed as text."
-        )
+        Text(L10n.VoiceCommands.description)
         .font(.caption)
         .foregroundStyle(.secondary)
       }
 
       if voiceCommandsEnabled {
-        Section("Commands") {
+        Section(L10n.VoiceCommands.commands) {
           ForEach($commands) { $command in
             VoiceCommandRow(command: $command)
           }
@@ -602,11 +600,11 @@ struct VoiceCommandsSettingsView: View {
         }
 
         Section {
-          Button("Add Custom Command") {
+          Button(L10n.VoiceCommands.addCustomCommand) {
             showAddCommand = true
           }
 
-          Button("Reset to Defaults") {
+          Button(L10n.VoiceCommands.resetToDefaults) {
             commands = VoiceCommand.defaults
             saveCommands()
           }
@@ -638,7 +636,7 @@ struct VoiceCommandRow: View {
         .labelsHidden()
 
       VStack(alignment: .leading, spacing: 2) {
-        TextField("Phrase", text: $command.phrase)
+        TextField(L10n.VoiceCommands.phrase, text: $command.phrase)
           .textFieldStyle(.plain)
           .font(.headline)
 
@@ -651,10 +649,10 @@ struct VoiceCommandRow: View {
 
   private var actionDescription: String {
     switch command.action {
-    case .newLine: return "Insert new line"
-    case .newParagraph: return "Insert new paragraph"
-    case .scratchThat: return "Delete last utterance"
-    case .custom(let text): return "Insert: \(text)"
+    case .newLine: return L10n.VoiceCommands.newLine
+    case .newParagraph: return L10n.VoiceCommands.newParagraph
+    case .scratchThat: return L10n.VoiceCommands.scratchThat
+    case .custom(let text): return L10n.VoiceCommands.customText(text)
     }
   }
 }
@@ -668,39 +666,47 @@ struct AddVoiceCommandView: View {
 
   var onAdd: (VoiceCommand) -> Void
 
-  enum ActionType: String, CaseIterable {
-    case newLine = "New Line"
-    case newParagraph = "New Paragraph"
-    case custom = "Custom Text"
+  enum ActionType: CaseIterable {
+    case newLine
+    case newParagraph
+    case custom
+
+    var displayName: String {
+      switch self {
+      case .newLine: return L10n.VoiceCommands.actionNewLine
+      case .newParagraph: return L10n.VoiceCommands.actionNewParagraph
+      case .custom: return L10n.VoiceCommands.actionCustomText
+      }
+    }
   }
 
   var body: some View {
     VStack(spacing: 20) {
-      Text("Add Voice Command")
+      Text(L10n.VoiceCommands.addVoiceCommand)
         .font(.headline)
 
       Form {
-        TextField("Trigger Phrase", text: $phrase)
+        TextField(L10n.VoiceCommands.triggerPhrase, text: $phrase)
 
-        Picker("Action", selection: $actionType) {
+        Picker(L10n.VoiceCommands.action, selection: $actionType) {
           ForEach(ActionType.allCases, id: \.self) { type in
-            Text(type.rawValue).tag(type)
+            Text(type.displayName).tag(type)
           }
         }
 
         if actionType == .custom {
-          TextField("Custom Text", text: $customText)
+          TextField(L10n.VoiceCommands.customTextLabel, text: $customText)
         }
       }
       .formStyle(.grouped)
 
       HStack {
-        Button("Cancel") {
+        Button(L10n.VoiceCommands.cancel) {
           dismiss()
         }
         .keyboardShortcut(.cancelAction)
 
-        Button("Add") {
+        Button(L10n.VoiceCommands.add) {
           let action: VoiceCommandAction
           switch actionType {
           case .newLine: action = .newLine
@@ -743,8 +749,8 @@ struct AdvancedSettingsView: View {
   var body: some View {
     Form {
       #if VOICEY_DIRECT_DISTRIBUTION
-      Section("Auto-Insert") {
-        Toggle("Auto-insert after transcription", isOn: $autoPasteEnabled)
+      Section(L10n.Advanced.autoInsert) {
+        Toggle(L10n.Advanced.autoInsertToggle, isOn: $autoPasteEnabled)
           .onChange(of: autoPasteEnabled) { enabled in
             guard enabled else { return }
             if !PermissionsManager.shared.checkAccessibilityPermission() {
@@ -755,28 +761,28 @@ struct AdvancedSettingsView: View {
 
         Text(
           autoPasteEnabled
-            ? "Voicey will attempt to insert text directly into the focused text field."
-            : "Voicey copies transcriptions to your clipboard. Press ⌘V to paste."
+            ? L10n.Advanced.autoInsertEnabledDesc
+            : L10n.Advanced.autoInsertDisabledDesc
         )
         .font(.caption)
         .foregroundStyle(.secondary)
 
         if autoPasteEnabled {
-          Toggle("Restore clipboard after paste", isOn: $restoreClipboardAfterPaste)
+          Toggle(L10n.Advanced.restoreClipboard, isOn: $restoreClipboardAfterPaste)
 
-          Text("When enabled, restores your original clipboard after pasting transcription.")
+          Text(L10n.Advanced.restoreClipboardDesc)
             .font(.caption)
             .foregroundStyle(.secondary)
 
           // Accessibility permission status
           HStack {
-            Text("Accessibility Permission")
+            Text(L10n.Advanced.accessibilityPermission)
             Spacer()
             if accessibilityGranted {
-              Label("Granted", systemImage: "checkmark.circle.fill")
+              Label(L10n.Advanced.accessibilityGranted, systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
             } else {
-              Button("Open Settings") {
+              Button(L10n.Advanced.openSettings) {
                 PermissionsManager.shared.promptForAccessibilityPermission()
               }
               .buttonStyle(.bordered)
@@ -784,7 +790,7 @@ struct AdvancedSettingsView: View {
           }
 
           if !accessibilityGranted {
-            Text("Accessibility permission is required for auto-insert to work.")
+            Text(L10n.Advanced.accessibilityRequired)
               .font(.caption)
               .foregroundStyle(.orange)
           }
@@ -792,53 +798,53 @@ struct AdvancedSettingsView: View {
       }
       #endif
 
-      Section("Debugging") {
-        Toggle("Enable Detailed Logging", isOn: $enableDetailedLogging)
+      Section(L10n.Advanced.debugging) {
+        Toggle(L10n.Advanced.enableDetailedLogging, isOn: $enableDetailedLogging)
 
-        Text("Logs additional information for troubleshooting. May impact performance.")
+        Text(L10n.Advanced.loggingDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
 
-      Section("Data") {
-        Button("Clear All Data", role: .destructive) {
+      Section(L10n.Advanced.data) {
+        Button(L10n.Advanced.clearAllData, role: .destructive) {
           clearAllData()
         }
 
-        Text("Removes all downloaded models and resets settings to defaults.")
+        Text(L10n.Advanced.clearDataDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
 
-      Section("About") {
+      Section(L10n.Advanced.about) {
         LabeledContent(
-          "Version",
+          L10n.Advanced.version,
           value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
         LabeledContent(
-          "Build", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
+          L10n.Advanced.build, value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
 
         #if VOICEY_DIRECT_DISTRIBUTION
-        LabeledContent("Distribution", value: "Direct Install")
+        LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.directInstall)
 
-        Button("Check for Updates") {
+        Button(L10n.Advanced.checkForUpdates) {
           sparkleUpdater.checkForUpdates()
         }
         .disabled(!sparkleUpdater.canCheckForUpdates)
 
-        Text("Updates are delivered directly from voicy.work")
+        Text(L10n.Advanced.updatesDeliveredFrom)
           .font(.caption)
           .foregroundStyle(.secondary)
         #else
-        LabeledContent("Distribution", value: "App Store")
+        LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.appStore)
         #endif
       }
     }
     .formStyle(.grouped)
     .padding()
-    .alert("Failed to Clear Data", isPresented: $showClearError) {
-      Button("OK", role: .cancel) {}
+    .alert(L10n.Advanced.failedToClear, isPresented: $showClearError) {
+      Button(L10n.Model.ok, role: .cancel) {}
     } message: {
-      Text(clearError ?? "Unknown error")
+      Text(clearError ?? L10n.Model.unknownError)
     }
     .onAppear {
       checkAccessibility()
@@ -932,7 +938,7 @@ struct SetupStepRow: View {
             .foregroundStyle(isComplete ? .secondary : .primary)
 
           if isOptional {
-            Text("Optional")
+            Text(L10n.Setup.optional)
               .font(.caption2)
               .foregroundStyle(.secondary)
               .padding(.horizontal, 5)

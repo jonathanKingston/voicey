@@ -166,7 +166,7 @@ struct TranscriptionOverlayView: View {
           .foregroundStyle(.secondary)
       }
       .buttonStyle(.plain)
-      .help("Cancel (ESC)")
+      .help(L10n.Overlay.cancelHelp)
     }
     .padding(.horizontal, 20)
     .padding(.vertical, 16)

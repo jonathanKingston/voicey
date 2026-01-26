@@ -1,0 +1,166 @@
+/* Simplified Chinese localization */
+
+/* App General */
+"app.name" = "Voicey";
+"app.tagline" = "macOS 语音转文字";
+
+/* Transcription States */
+"state.ready" = "就绪";
+"state.loadingModel" = "正在加载模型...";
+"state.listening" = "正在聆听...";
+"state.transcribing" = "正在转录...";
+"state.done" = "完成";
+"state.error" = "错误：%@";
+
+/* Model Status */
+"modelStatus.noModel" = "无模型";
+"modelStatus.loading" = "加载中...";
+"modelStatus.ready" = "就绪";
+"modelStatus.error" = "错误：%@";
+
+/* Menu Items */
+"menu.startTranscription" = "开始转录";
+"menu.stopTranscription" = "停止转录";
+"menu.settings" = "设置...";
+"menu.checkForUpdates" = "检查更新...";
+"menu.about" = "关于 Voicey";
+"menu.quit" = "退出";
+
+/* Tooltips */
+"tooltip.noModelDownloaded" = "Voicey - 未下载模型\n点击下载模型";
+"tooltip.loadingModel" = "Voicey - 正在加载模型...\n请在录音前稍候";
+"tooltip.ready" = "Voicey - 就绪\n按 Ctrl+V 开始录音";
+"tooltip.error" = "Voicey - 错误：%@";
+
+/* Settings Tabs */
+"settings.setup" = "设置";
+"settings.general" = "通用";
+"settings.hotkey" = "快捷键";
+"settings.audio" = "音频";
+"settings.model" = "模型";
+"settings.voiceCommands" = "语音命令";
+"settings.advanced" = "高级";
+
+/* Setup View */
+"setup.downloadModel" = "下载模型";
+"setup.downloadModelDesc" = "任何模型都可以。默认：%@（约80MB）";
+"setup.downloadQualityModel" = "下载高质量模型";
+"setup.downloadQualityModelDesc" = "%@（约1.5GB）- 更高精度";
+"setup.microphoneAccess" = "麦克风权限";
+"setup.microphoneAccessDesc" = "需要用于听取您的声音";
+"setup.launchAtLogin" = "登录时启动";
+"setup.launchAtLoginDesc" = "自动启动（可选）";
+"setup.ready" = "就绪";
+"setup.download" = "下载";
+"setup.downloading" = "下载中...";
+"setup.afterFastModel" = "快速模型完成后";
+"setup.granted" = "已授权";
+"setup.allow" = "允许";
+"setup.enabled" = "已启用";
+"setup.enable" = "启用";
+"setup.optional" = "可选";
+"setup.allSetQualityModel" = "全部就绪！正在使用高质量模型。";
+"setup.qualityModelDownloading" = "就绪！正在下载高质量模型...";
+"setup.readyToUse" = "准备就绪！";
+"setup.downloadingProgress" = "正在下载模型... %d%%";
+"setup.modelDownloadRequired" = "需要下载模型";
+"setup.microphoneRequired" = "需要麦克风权限";
+
+/* General Settings */
+"general.output" = "输出";
+"general.outputDescription" = "Voicey 将转录内容复制到剪贴板。按 ⌘V 粘贴。";
+"general.outputTip" = "💡 在高级设置中启用自动插入，可直接粘贴到文本框中。";
+"general.launchAtLogin" = "登录时启动";
+"general.showDockIcon" = "显示 Dock 图标";
+
+/* Hotkey Settings */
+"hotkey.transcriptionHotkey" = "转录快捷键";
+"hotkey.toggleRecording" = "切换录音：";
+"hotkey.hotkeyDescription" = "按此快捷键开始录音。再次按下停止并转录。";
+"hotkey.resetToDefault" = "重置为默认 (⌃V)";
+"hotkey.escapeKey" = "Escape 键";
+"hotkey.escapeDescription" = "录音时按 ESC 可取消而不进行转录。";
+
+/* Audio Settings */
+"audio.inputDevice" = "输入设备";
+"audio.microphone" = "麦克风";
+"audio.systemDefault" = "系统默认";
+"audio.inputDeviceDescription" = "Voicey 使用系统的默认音频输入设备。";
+"audio.testMicrophone" = "测试麦克风";
+"audio.testInput" = "测试输入";
+"audio.testing" = "测试中...";
+"audio.testDescription" = "对着麦克风说话以验证其是否正常工作。";
+
+/* Model Settings */
+"model.selectedModel" = "已选模型";
+"model.modelLabel" = "模型";
+"model.availableModels" = "可用模型";
+"model.performance" = "性能";
+"model.performanceDescription" = "在 Apple Silicon 上通过 Metal 自动启用 GPU 加速。";
+"model.recommended" = "推荐";
+"model.download" = "下载";
+"model.delete" = "删除";
+"model.failedToDelete" = "删除模型失败";
+"model.ok" = "确定";
+"model.unknownError" = "未知错误";
+
+/* Voice Commands */
+"voiceCommands.enable" = "启用语音命令";
+"voiceCommands.description" = "启用后，特定短语将触发操作而不是被转录为文字。";
+"voiceCommands.commands" = "命令";
+"voiceCommands.addCustomCommand" = "添加自定义命令";
+"voiceCommands.resetToDefaults" = "重置为默认值";
+"voiceCommands.phrase" = "短语";
+"voiceCommands.newLine" = "插入换行";
+"voiceCommands.newParagraph" = "插入新段落";
+"voiceCommands.scratchThat" = "删除上一句";
+"voiceCommands.customText" = "插入：%@";
+"voiceCommands.addVoiceCommand" = "添加语音命令";
+"voiceCommands.triggerPhrase" = "触发短语";
+"voiceCommands.action" = "操作";
+"voiceCommands.actionNewLine" = "换行";
+"voiceCommands.actionNewParagraph" = "新段落";
+"voiceCommands.actionCustomText" = "自定义文本";
+"voiceCommands.customTextLabel" = "自定义文本";
+"voiceCommands.cancel" = "取消";
+"voiceCommands.add" = "添加";
+
+/* Advanced Settings */
+"advanced.autoInsert" = "自动插入";
+"advanced.autoInsertToggle" = "转录后自动插入";
+"advanced.autoInsertEnabledDesc" = "Voicey 将尝试直接将文本插入到焦点文本框中。";
+"advanced.autoInsertDisabledDesc" = "Voicey 将转录内容复制到剪贴板。按 ⌘V 粘贴。";
+"advanced.restoreClipboard" = "粘贴后恢复剪贴板";
+"advanced.restoreClipboardDesc" = "启用后，粘贴转录内容后会恢复原始剪贴板。";
+"advanced.accessibilityPermission" = "辅助功能权限";
+"advanced.accessibilityGranted" = "已授权";
+"advanced.openSettings" = "打开设置";
+"advanced.accessibilityRequired" = "自动插入功能需要辅助功能权限。";
+"advanced.debugging" = "调试";
+"advanced.enableDetailedLogging" = "启用详细日志";
+"advanced.loggingDescription" = "记录用于故障排除的额外信息。可能会影响性能。";
+"advanced.data" = "数据";
+"advanced.clearAllData" = "清除所有数据";
+"advanced.clearDataDescription" = "删除所有已下载的模型并将设置重置为默认值。";
+"advanced.failedToClear" = "清除数据失败";
+"advanced.about" = "关于";
+"advanced.version" = "版本";
+"advanced.build" = "构建";
+"advanced.distribution" = "分发";
+"advanced.directInstall" = "直接安装";
+"advanced.appStore" = "App Store";
+"advanced.checkForUpdates" = "检查更新";
+"advanced.updatesDeliveredFrom" = "更新直接从 voicy.work 提供";
+
+/* Model Download Window */
+"download.whisperModels" = "Whisper 模型";
+"download.description" = "下载语音识别模型以启用转录。\n较大的模型更准确，但需要更多内存。";
+"download.done" = "完成";
+
+/* Overlay */
+"overlay.cancelHelp" = "取消 (ESC)";
+
+/* Common */
+"common.ok" = "确定";
+"common.cancel" = "取消";
+"common.error" = "错误";

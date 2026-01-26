@@ -17,13 +17,11 @@ struct ModelDownloadView: View {
           .font(.system(size: 40))
           .foregroundStyle(.blue)
 
-        Text("Whisper Models")
+        Text(L10n.Download.whisperModels)
           .font(.title2)
           .fontWeight(.semibold)
 
-        Text(
-          "Download a speech recognition model to enable transcription.\nLarger models are more accurate but require more memory."
-        )
+        Text(L10n.Download.description)
         .font(.subheadline)
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
@@ -59,7 +57,7 @@ struct ModelDownloadView: View {
 
         Spacer()
 
-        Button("Done") {
+        Button(L10n.Download.done) {
           onDone?()
         }
         .keyboardShortcut(.defaultAction)
@@ -101,7 +99,7 @@ struct ModelDownloadRow: View {
             .font(.headline)
 
           if model.isRecommended {
-            Text("Recommended")
+            Text(L10n.Model.recommended)
               .font(.caption2)
               .fontWeight(.medium)
               .padding(.horizontal, 6)
@@ -147,7 +145,7 @@ struct ModelDownloadRow: View {
       .buttonStyle(.plain)
     } else if modelManager.isDownloaded(model) {
       Menu {
-        Button("Delete", role: .destructive) {
+        Button(L10n.Model.delete, role: .destructive) {
           do {
             try modelManager.deleteModel(model)
           } catch {
@@ -162,10 +160,10 @@ struct ModelDownloadRow: View {
       }
       .menuStyle(.borderlessButton)
       .frame(width: 30)
-      .alert("Failed to Delete Model", isPresented: $showDeleteError) {
-        Button("OK", role: .cancel) {}
+      .alert(L10n.Model.failedToDelete, isPresented: $showDeleteError) {
+        Button(L10n.Model.ok, role: .cancel) {}
       } message: {
-        Text(deleteError ?? "Unknown error")
+        Text(deleteError ?? L10n.Model.unknownError)
       }
     } else {
       Button {

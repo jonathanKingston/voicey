@@ -1,0 +1,166 @@
+/* Japanese localization */
+
+/* App General */
+"app.name" = "Voicey";
+"app.tagline" = "macOS用の音声テキスト変換";
+
+/* Transcription States */
+"state.ready" = "準備完了";
+"state.loadingModel" = "モデル読み込み中...";
+"state.listening" = "聞いています...";
+"state.transcribing" = "文字起こし中...";
+"state.done" = "完了";
+"state.error" = "エラー: %@";
+
+/* Model Status */
+"modelStatus.noModel" = "モデルなし";
+"modelStatus.loading" = "読み込み中...";
+"modelStatus.ready" = "準備完了";
+"modelStatus.error" = "エラー: %@";
+
+/* Menu Items */
+"menu.startTranscription" = "文字起こしを開始";
+"menu.stopTranscription" = "文字起こしを停止";
+"menu.settings" = "設定...";
+"menu.checkForUpdates" = "アップデートを確認...";
+"menu.about" = "Voiceyについて";
+"menu.quit" = "終了";
+
+/* Tooltips */
+"tooltip.noModelDownloaded" = "Voicey - モデルがダウンロードされていません\nクリックしてモデルをダウンロード";
+"tooltip.loadingModel" = "Voicey - モデル読み込み中...\n録音前にお待ちください";
+"tooltip.ready" = "Voicey - 準備完了\nCtrl+Vで録音を開始";
+"tooltip.error" = "Voicey - エラー: %@";
+
+/* Settings Tabs */
+"settings.setup" = "セットアップ";
+"settings.general" = "一般";
+"settings.hotkey" = "ホットキー";
+"settings.audio" = "オーディオ";
+"settings.model" = "モデル";
+"settings.voiceCommands" = "音声コマンド";
+"settings.advanced" = "詳細";
+
+/* Setup View */
+"setup.downloadModel" = "モデルをダウンロード";
+"setup.downloadModelDesc" = "どのモデルでも動作します。デフォルト: %@ (~80MB)";
+"setup.downloadQualityModel" = "高品質モデルをダウンロード";
+"setup.downloadQualityModelDesc" = "%@ (~1.5GB) - より高い精度";
+"setup.microphoneAccess" = "マイクへのアクセス";
+"setup.microphoneAccessDesc" = "音声を聞くために必要です";
+"setup.launchAtLogin" = "ログイン時に起動";
+"setup.launchAtLoginDesc" = "自動的に起動（オプション）";
+"setup.ready" = "準備完了";
+"setup.download" = "ダウンロード";
+"setup.downloading" = "ダウンロード中...";
+"setup.afterFastModel" = "高速モデルの後";
+"setup.granted" = "許可済み";
+"setup.allow" = "許可";
+"setup.enabled" = "有効";
+"setup.enable" = "有効にする";
+"setup.optional" = "オプション";
+"setup.allSetQualityModel" = "準備完了！高品質モデルを使用中。";
+"setup.qualityModelDownloading" = "準備完了！高品質モデルをダウンロード中...";
+"setup.readyToUse" = "使用準備完了！";
+"setup.downloadingProgress" = "モデルをダウンロード中... %d%%";
+"setup.modelDownloadRequired" = "モデルのダウンロードが必要です";
+"setup.microphoneRequired" = "マイクへのアクセスが必要です";
+
+/* General Settings */
+"general.output" = "出力";
+"general.outputDescription" = "Voiceyは文字起こしをクリップボードにコピーします。⌘Vで貼り付けてください。";
+"general.outputTip" = "💡 詳細設定で自動挿入を有効にすると、テキストフィールドに直接貼り付けられます。";
+"general.launchAtLogin" = "ログイン時に起動";
+"general.showDockIcon" = "Dockアイコンを表示";
+
+/* Hotkey Settings */
+"hotkey.transcriptionHotkey" = "文字起こしホットキー";
+"hotkey.toggleRecording" = "録音切り替え:";
+"hotkey.hotkeyDescription" = "このホットキーを押して録音を開始します。もう一度押すと停止して文字起こしします。";
+"hotkey.resetToDefault" = "デフォルトにリセット (⌃V)";
+"hotkey.escapeKey" = "Escキー";
+"hotkey.escapeDescription" = "録音中にESCを押すと、文字起こしせずにキャンセルします。";
+
+/* Audio Settings */
+"audio.inputDevice" = "入力デバイス";
+"audio.microphone" = "マイク";
+"audio.systemDefault" = "システムデフォルト";
+"audio.inputDeviceDescription" = "Voiceyはシステムのデフォルトオーディオ入力デバイスを使用します。";
+"audio.testMicrophone" = "マイクをテスト";
+"audio.testInput" = "入力をテスト";
+"audio.testing" = "テスト中...";
+"audio.testDescription" = "マイクに向かって話して、動作を確認してください。";
+
+/* Model Settings */
+"model.selectedModel" = "選択されたモデル";
+"model.modelLabel" = "モデル";
+"model.availableModels" = "利用可能なモデル";
+"model.performance" = "パフォーマンス";
+"model.performanceDescription" = "Apple SiliconではMetalを介してGPUアクセラレーションが自動的に有効になります。";
+"model.recommended" = "推奨";
+"model.download" = "ダウンロード";
+"model.delete" = "削除";
+"model.failedToDelete" = "モデルの削除に失敗しました";
+"model.ok" = "OK";
+"model.unknownError" = "不明なエラー";
+
+/* Voice Commands */
+"voiceCommands.enable" = "音声コマンドを有効にする";
+"voiceCommands.description" = "有効にすると、特定のフレーズがテキストとして文字起こしされる代わりにアクションをトリガーします。";
+"voiceCommands.commands" = "コマンド";
+"voiceCommands.addCustomCommand" = "カスタムコマンドを追加";
+"voiceCommands.resetToDefaults" = "デフォルトにリセット";
+"voiceCommands.phrase" = "フレーズ";
+"voiceCommands.newLine" = "改行を挿入";
+"voiceCommands.newParagraph" = "新しい段落を挿入";
+"voiceCommands.scratchThat" = "最後の発言を削除";
+"voiceCommands.customText" = "挿入: %@";
+"voiceCommands.addVoiceCommand" = "音声コマンドを追加";
+"voiceCommands.triggerPhrase" = "トリガーフレーズ";
+"voiceCommands.action" = "アクション";
+"voiceCommands.actionNewLine" = "改行";
+"voiceCommands.actionNewParagraph" = "新しい段落";
+"voiceCommands.actionCustomText" = "カスタムテキスト";
+"voiceCommands.customTextLabel" = "カスタムテキスト";
+"voiceCommands.cancel" = "キャンセル";
+"voiceCommands.add" = "追加";
+
+/* Advanced Settings */
+"advanced.autoInsert" = "自動挿入";
+"advanced.autoInsertToggle" = "文字起こし後に自動挿入";
+"advanced.autoInsertEnabledDesc" = "Voiceyはフォーカスされたテキストフィールドに直接テキストを挿入しようとします。";
+"advanced.autoInsertDisabledDesc" = "Voiceyは文字起こしをクリップボードにコピーします。⌘Vで貼り付けてください。";
+"advanced.restoreClipboard" = "貼り付け後にクリップボードを復元";
+"advanced.restoreClipboardDesc" = "有効にすると、文字起こしを貼り付けた後に元のクリップボードを復元します。";
+"advanced.accessibilityPermission" = "アクセシビリティ権限";
+"advanced.accessibilityGranted" = "許可済み";
+"advanced.openSettings" = "設定を開く";
+"advanced.accessibilityRequired" = "自動挿入を機能させるにはアクセシビリティ権限が必要です。";
+"advanced.debugging" = "デバッグ";
+"advanced.enableDetailedLogging" = "詳細ログを有効にする";
+"advanced.loggingDescription" = "トラブルシューティング用の追加情報をログに記録します。パフォーマンスに影響する可能性があります。";
+"advanced.data" = "データ";
+"advanced.clearAllData" = "すべてのデータを消去";
+"advanced.clearDataDescription" = "ダウンロードしたすべてのモデルを削除し、設定をデフォルトにリセットします。";
+"advanced.failedToClear" = "データの消去に失敗しました";
+"advanced.about" = "情報";
+"advanced.version" = "バージョン";
+"advanced.build" = "ビルド";
+"advanced.distribution" = "配布";
+"advanced.directInstall" = "直接インストール";
+"advanced.appStore" = "App Store";
+"advanced.checkForUpdates" = "アップデートを確認";
+"advanced.updatesDeliveredFrom" = "アップデートはvoicy.workから直接配信されます";
+
+/* Model Download Window */
+"download.whisperModels" = "Whisperモデル";
+"download.description" = "文字起こしを有効にするには、音声認識モデルをダウンロードしてください。\n大きなモデルはより正確ですが、より多くのメモリが必要です。";
+"download.done" = "完了";
+
+/* Overlay */
+"overlay.cancelHelp" = "キャンセル (ESC)";
+
+/* Common */
+"common.ok" = "OK";
+"common.cancel" = "キャンセル";
+"common.error" = "エラー";
