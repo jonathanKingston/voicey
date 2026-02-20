@@ -84,48 +84,83 @@ echo "$SPARKLE_SIGN"
 SIGNATURE=$(echo "$SPARKLE_SIGN" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
 LENGTH=$(stat -f%z "Voicey-$VERSION.zip")
 
-# Create GitHub release
-echo "🐙 Creating GitHub release..."
-gh release create "v$VERSION" \
-  --title "Voicey $VERSION" \
-  --generate-notes \
-  "Voicey-$VERSION.dmg" \
-  "Voicey-$VERSION.zip"
+# Create GitHub release if it doesn't already exist
+if gh release view "v$VERSION" >/dev/null 2>&1; then
+  echo "🐙 GitHub release v$VERSION already exists; skipping publish."
+else
+  echo "🐙 Creating GitHub release..."
+  gh release create "v$VERSION" \
+    --title "Voicey $VERSION" \
+    --generate-notes \
+    "Voicey-$VERSION.dmg" \
+    "Voicey-$VERSION.zip"
+fi
 
 # Update appcast
 echo "📝 Updating appcast..."
 PUB_DATE=$(date -R)
 DOWNLOAD_URL="https://github.com/jonathanKingston/voicey/releases/download/v$VERSION/Voicey-$VERSION.zip"
 
-NEW_ITEM="    <item>
-      <title>Version $VERSION</title>
-      <pubDate>$PUB_DATE</pubDate>
-      <sparkle:version>$VERSION</sparkle:version>
-      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-      <enclosure
-        url=\"$DOWNLOAD_URL\"
-        length=\"$LENGTH\"
-        type=\"application/octet-stream\"
-        sparkle:edSignature=\"$SIGNATURE\"
-      />
-    </item>"
-
 APPCAST="../Voicey.work/public/appcast.xml"
 if [ -f "$APPCAST" ]; then
-  # Insert after <language>en</language>
-  sed -i '' "/<language>en<\/language>/a\\
-\\
-$NEW_ITEM
-" "$APPCAST"
+  # Insert new release item after the language tag.
+  python3 - "$APPCAST" "$VERSION" "$PUB_DATE" "$DOWNLOAD_URL" "$LENGTH" "$SIGNATURE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+appcast_path = Path(sys.argv[1])
+version = sys.argv[2]
+pub_date = sys.argv[3]
+download_url = sys.argv[4]
+length = sys.argv[5]
+signature = sys.argv[6]
+
+marker = "    <language>en</language>"
+new_item = f"""
+    <item>
+      <title>Version {version}</title>
+      <pubDate>{pub_date}</pubDate>
+      <sparkle:version>{version}</sparkle:version>
+      <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="{download_url}"
+        length="{length}"
+        type="application/octet-stream"
+        sparkle:edSignature="{signature}"
+      />
+    </item>
+"""
+
+content = appcast_path.read_text(encoding="utf-8")
+if marker not in content:
+    raise SystemExit(f"Error: Could not find marker '{marker}' in {appcast_path}")
+
+version_tag = f"<sparkle:version>{version}</sparkle:version>"
+if version_tag in content:
+    item_pattern = re.compile(
+        r"<item>\s*.*?<sparkle:version>" + re.escape(version) + r"</sparkle:version>.*?</item>",
+        re.DOTALL,
+    )
+    matches = item_pattern.findall(content)
+    if len(matches) != 1:
+        raise SystemExit(
+            f"Error: Expected exactly one appcast item for version {version}, found {len(matches)}"
+        )
+    updated = item_pattern.sub(new_item.strip(), content, count=1)
+else:
+    updated = content.replace(marker, f"{marker}\n{new_item}", 1)
+
+appcast_path.write_text(updated, encoding="utf-8")
+PY
   echo "✅ Updated $APPCAST"
   echo ""
   echo "Don't forget to commit and push Voicey.work:"
   echo "  cd ../Voicey.work && git add -A && git commit -m 'Release v$VERSION' && git push"
 else
   echo "⚠️  Appcast not found at $APPCAST"
-  echo "Add this item manually:"
-  echo "$NEW_ITEM"
+  echo "Update the appcast manually with version $VERSION, length $LENGTH, and generated signature."
 fi
 
 echo ""
