@@ -58,7 +58,13 @@ xcrun stapler staple Voicey.app
 # Create artifacts
 echo "📁 Creating release artifacts..."
 ditto -c -k --keepParent Voicey.app "Voicey-$VERSION.zip"
-hdiutil create -volname "Voicey" -srcfolder Voicey.app -ov -format UDZO "Voicey-$VERSION.dmg"
+DMG_STAGING_DIR="$(mktemp -d -t voicey-dmg-staging)"
+trap 'rm -rf "$DMG_STAGING_DIR"' EXIT
+cp -R "Voicey.app" "$DMG_STAGING_DIR/"
+ln -s "/Applications" "$DMG_STAGING_DIR/Applications"
+hdiutil create -volname "Voicey" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO "Voicey-$VERSION.dmg"
+rm -rf "$DMG_STAGING_DIR"
+trap - EXIT
 
 # Notarize DMG
 echo "📤 Notarizing DMG..."

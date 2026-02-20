@@ -164,7 +164,11 @@ notarize: sign-direct
 # Create DMG for direct distribution
 dmg: notarize
 	@echo "Creating DMG..."
-	@hdiutil create -volname "Voicey" -srcfolder $(APP_BUNDLE) -ov -format UDZO Voicey.dmg
+	@DMG_STAGING_DIR=$$(mktemp -d -t voicey-dmg-staging) && \
+		cp -R "$(APP_BUNDLE)" "$$DMG_STAGING_DIR/" && \
+		ln -s /Applications "$$DMG_STAGING_DIR/Applications" && \
+		hdiutil create -volname "Voicey" -srcfolder "$$DMG_STAGING_DIR" -ov -format UDZO Voicey.dmg && \
+		rm -rf "$$DMG_STAGING_DIR"
 	@xcrun notarytool submit Voicey.dmg \
 		--apple-id "$(APPLE_ID)" \
 		--team-id "$(TEAM_ID)" \
