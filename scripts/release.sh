@@ -75,14 +75,7 @@ xcrun notarytool submit "Voicey-$VERSION.dmg" \
   --wait
 xcrun stapler staple "Voicey-$VERSION.dmg"
 
-# Sign with Sparkle EdDSA
-echo "🔑 Signing with Sparkle EdDSA..."
 VOICEY_DIRECT=1 swift package resolve
-SPARKLE_SIGN=$(.build/artifacts/sparkle/Sparkle/bin/sign_update "Voicey-$VERSION.zip")
-echo "$SPARKLE_SIGN"
-
-SIGNATURE=$(echo "$SPARKLE_SIGN" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
-LENGTH=$(stat -f%z "Voicey-$VERSION.zip")
 
 # Create GitHub release if it doesn't already exist
 if gh release view "v$VERSION" >/dev/null 2>&1; then
@@ -96,10 +89,25 @@ else
     "Voicey-$VERSION.zip"
 fi
 
+# Resolve signature from the published ZIP so appcast always matches GitHub asset bytes.
+DOWNLOAD_URL="https://github.com/jonathanKingston/voicey/releases/download/v$VERSION/Voicey-$VERSION.zip"
+PUBLISHED_ZIP="$(mktemp -t voicey-published-zip)"
+trap 'rm -f "$PUBLISHED_ZIP"' EXIT
+
+echo "🔑 Signing published ZIP for appcast..."
+curl -fsSL "$DOWNLOAD_URL" -o "$PUBLISHED_ZIP"
+SPARKLE_SIGN=$(.build/artifacts/sparkle/Sparkle/bin/sign_update "$PUBLISHED_ZIP")
+echo "$SPARKLE_SIGN"
+
+SIGNATURE=$(echo "$SPARKLE_SIGN" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+LENGTH=$(stat -f%z "$PUBLISHED_ZIP")
+
+rm -f "$PUBLISHED_ZIP"
+trap - EXIT
+
 # Update appcast
 echo "📝 Updating appcast..."
 PUB_DATE=$(date -R)
-DOWNLOAD_URL="https://github.com/jonathanKingston/voicey/releases/download/v$VERSION/Voicey-$VERSION.zip"
 
 APPCAST="../Voicey.work/public/appcast.xml"
 if [ -f "$APPCAST" ]; then
