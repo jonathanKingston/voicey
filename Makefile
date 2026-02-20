@@ -20,8 +20,8 @@ build:
 build-direct:
 	VOICEY_DIRECT=1 swift build -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
 
-# Release build
-release:
+# Release build (compile only)
+build-release:
 	swift build -c release
 
 # Release build (direct distribution features enabled, includes Sparkle)
@@ -68,7 +68,6 @@ bundle-direct: release-direct
 	@mkdir -p $(FRAMEWORKS_DIR)
 	@cp $(RELEASE_DIR)/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
-	@if [ -f VoiceyDirect.entitlements ]; then cp VoiceyDirect.entitlements $(CONTENTS_DIR)/Voicey.entitlements; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
@@ -125,13 +124,22 @@ package-appstore: sign-appstore
 # Sign for direct distribution (notarization)
 # Usage: make sign-direct DEVELOPER_ID="Developer ID Application: Your Name (TEAM_ID)"
 DEVELOPER_ID ?= -
+CODESIGN_OPTS = --force --sign "$(DEVELOPER_ID)" --options runtime --timestamp
+SPARKLE_FW = $(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework
+
 sign-direct: bundle-direct
 	@echo "Signing app for direct distribution..."
-	@codesign --force --deep \
-		--sign "$(DEVELOPER_ID)" \
-		--entitlements VoiceyDirect.entitlements \
-		--options runtime \
-		$(APP_BUNDLE)
+	@echo "Signing Sparkle.framework components (inside-out)..."
+	@# Sign XPC services first
+	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)/Versions/B/XPCServices/Downloader.xpc"
+	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)/Versions/B/XPCServices/Installer.xpc"
+	@# Sign helper apps and tools
+	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)/Versions/B/Autoupdate"
+	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)/Versions/B/Updater.app"
+	@# Sign the framework itself
+	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)"
+	@echo "Signing main app..."
+	@codesign $(CODESIGN_OPTS) --entitlements VoiceyDirect.entitlements $(APP_BUNDLE)
 	@echo "App signed for direct distribution"
 
 # Notarize for direct distribution
@@ -471,5 +479,13 @@ help:
 	@echo "  show-state        - Show current app settings and models"
 	@echo "  help              - Show this help"
 	@echo ""
+	@echo "Release:"
+	@echo "  release VERSION=X.Y.Z - Full release (build, sign, notarize, publish)"
+	@echo ""
 	@echo "Testing:"
 	@echo "  test-sparkle-linking - Verify Sparkle is only linked in direct builds"
+
+# Full release process
+# Usage: make release VERSION=1.2.0
+release:
+	@DEVELOPER_ID="$(DEVELOPER_ID)" APPLE_ID="$(APPLE_ID)" TEAM_ID="$(TEAM_ID)" APP_PASSWORD="$(APP_PASSWORD)" ./scripts/release.sh $(VERSION)

@@ -47,7 +47,7 @@
 
     <!-- Sparkle auto-update configuration -->
     <key>SUFeedURL</key>
-    <string>https://voicy.work/appcast.xml</string>
+    <string>https://voicey.work/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>y6NFJFzTGp6DYgAYXYZVxZUDDYqdaAJLQhy5ZVRWWFU=</string>
     <key>SUEnableAutomaticChecks</key>
