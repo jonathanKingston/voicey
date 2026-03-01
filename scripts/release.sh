@@ -21,6 +21,11 @@ if [ -z "$APP_PASSWORD" ]; then echo "Error: Set APP_PASSWORD to your app-specif
 echo "🚀 Releasing Voicey v$VERSION"
 echo ""
 
+# Bump version in all plists
+echo "🔢 Bumping version..."
+"$(dirname "$0")/bump-version.sh" "$VERSION"
+echo ""
+
 # Clean and build
 echo "📦 Building..."
 make clean
