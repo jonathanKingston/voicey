@@ -76,6 +76,14 @@ enum NoiseFilter {
     "music", "noise", "silence", "inaudible", "typing", "applause"
   ]
 
+  /// Repeated trailing phrases often hallucinated by speech models near silence.
+  /// Keep this intentionally conservative to avoid removing legitimate dictated text.
+  static let trailingRepeatedArtifactPatterns: [String] = [
+    "(?:\\bthank you\\b[\\s,.!?]*){2,}$",
+    "(?:\\bthanks\\b[\\s,.!?]*){2,}$",
+    "(?:\\bthanks you\\b[\\s,.!?]*){2,}$"
+  ]
+
   /// Check if a bracketed text looks like a noise annotation
   static func isNoiseAnnotation(_ text: String) -> Bool {
     let lowercased = text.lowercased()
@@ -96,5 +104,24 @@ enum NoiseFilter {
       }
     }
     return false
+  }
+
+  /// Remove repeated hallucinated phrase endings (for example: "thank you thank you").
+  static func removeTrailingRepeatedArtifacts(_ text: String) -> String {
+    var result = text
+
+    for pattern in trailingRepeatedArtifactPatterns {
+      guard let regex = try? NSRegularExpression(
+        pattern: pattern,
+        options: .caseInsensitive
+      ) else { continue }
+      result = regex.stringByReplacingMatches(
+        in: result,
+        range: NSRange(result.startIndex..., in: result),
+        withTemplate: ""
+      )
+    }
+
+    return result.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

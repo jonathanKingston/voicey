@@ -67,6 +67,7 @@ final class PostProcessor {
     result = removeNoiseWords(from: result)
     result = removeBracketedAnnotations(from: result)
     result = removeAsteriskWrappedWords(from: result)
+    result = NoiseFilter.removeTrailingRepeatedArtifacts(result)
     return result
   }
 
