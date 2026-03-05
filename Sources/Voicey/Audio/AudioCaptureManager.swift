@@ -17,6 +17,14 @@ final class AudioCaptureManager {
   private let targetSampleRate: Double = 16000.0  // Whisper requirement
   private var converter: AVAudioConverter?
 
+  // Trailing trim constants to reduce end-of-recording keyboard artifacts.
+  private let maxTrailingTrimSeconds: Double = 0.5
+  private let trailingRMSWindowSeconds: Double = 0.02
+  private let trailingRMSHopSeconds: Double = 0.01
+  private let trailingSilenceRMSThreshold: Float = 0.01
+  private let minimumRemainingAudioSeconds: Double = 0.3
+  private let minimumTrimSeconds: Double = 0.08
+
   init() {
     setupAudioSession()
   }
@@ -85,6 +93,10 @@ final class AudioCaptureManager {
     bufferQueue.sync {
       result = audioBuffer
       audioBuffer = []  // Clear for next capture
+    }
+
+    if let capturedAudio = result {
+      result = trimTrailingLowEnergyAudio(capturedAudio)
     }
 
     // Clean up references
@@ -199,6 +211,57 @@ final class AudioCaptureManager {
     let decibels = 20 * log10(max(rms, 0.00001))
     let normalizedLevel = (decibels + 60) / 60  // Assuming -60dB to 0dB range
     return max(0, min(1, normalizedLevel))
+  }
+
+  /// Trim low-energy audio from the end (up to a bounded amount) to reduce
+  /// stop-key noise/silence hallucinations without clipping real speech endings.
+  private func trimTrailingLowEnergyAudio(_ samples: [Float]) -> [Float] {
+    guard !samples.isEmpty else { return samples }
+
+    let maxTrimSamples = Int(maxTrailingTrimSeconds * targetSampleRate)
+    let windowSamples = max(1, Int(trailingRMSWindowSeconds * targetSampleRate))
+    let hopSamples = max(1, Int(trailingRMSHopSeconds * targetSampleRate))
+    let minRemainingSamples = Int(minimumRemainingAudioSeconds * targetSampleRate)
+    let minTrimSamples = Int(minimumTrimSeconds * targetSampleRate)
+
+    guard samples.count > windowSamples else { return samples }
+    let boundedMaxTrim = min(maxTrimSamples, samples.count - windowSamples)
+    guard boundedMaxTrim >= minTrimSamples else { return samples }
+
+    let scanStart = samples.count - boundedMaxTrim
+    var scanIndex = samples.count - windowSamples
+    var keepEndIndex = samples.count
+
+    while scanIndex >= scanStart {
+      let rms = rms(in: samples, start: scanIndex, count: windowSamples)
+      if rms > trailingSilenceRMSThreshold {
+        keepEndIndex = scanIndex + windowSamples
+        break
+      }
+      scanIndex -= hopSamples
+    }
+
+    keepEndIndex = max(keepEndIndex, minRemainingSamples)
+    let trimmedSampleCount = samples.count - keepEndIndex
+    guard trimmedSampleCount >= minTrimSamples else { return samples }
+
+    let trimmedSeconds = Double(trimmedSampleCount) / targetSampleRate
+    AppLogger.audio.info(
+      "AudioCapture: Trimmed \(trimmedSampleCount) trailing low-energy samples (~\(String(format: "%.2f", trimmedSeconds))s)"
+    )
+
+    return Array(samples.prefix(keepEndIndex))
+  }
+
+  private func rms(in samples: [Float], start: Int, count: Int) -> Float {
+    guard start >= 0, count > 0, start + count <= samples.count else { return 0 }
+
+    return samples.withUnsafeBufferPointer { buffer in
+      guard let base = buffer.baseAddress else { return 0 }
+      var rms: Float = 0
+      vDSP_rmsqv(base.advanced(by: start), 1, &rms, vDSP_Length(count))
+      return rms
+    }
   }
 
   // MARK: - Device Selection
