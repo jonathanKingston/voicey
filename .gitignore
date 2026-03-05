@@ -59,6 +59,9 @@ Voicey.app/
 *.dmg
 *.zip
 
+# Local tooling binaries
+EventMonitor/monitor
+
 # Icon generation temporaries (source SVG and Resources/AppIcon.icns should be tracked)
 AppIcon.iconset/
 icon_1024.png
