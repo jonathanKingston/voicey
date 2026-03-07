@@ -63,22 +63,37 @@ xcrun stapler staple Voicey.app
 # Create artifacts
 echo "📁 Creating release artifacts..."
 ditto -c -k --keepParent Voicey.app "Voicey-$VERSION.zip"
-DMG_STAGING_DIR="$(mktemp -d -t voicey-dmg-staging)"
-trap 'rm -rf "$DMG_STAGING_DIR"' EXIT
-cp -R "Voicey.app" "$DMG_STAGING_DIR/"
-ln -s "/Applications" "$DMG_STAGING_DIR/Applications"
-hdiutil create -volname "Voicey" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO "Voicey-$VERSION.dmg"
-rm -rf "$DMG_STAGING_DIR"
-trap - EXIT
 
-# Notarize DMG
-echo "📤 Notarizing DMG..."
-xcrun notarytool submit "Voicey-$VERSION.dmg" \
-  --apple-id "$APPLE_ID" \
-  --team-id "$TEAM_ID" \
-  --password "$APP_PASSWORD" \
-  --wait
-xcrun stapler staple "Voicey-$VERSION.dmg"
+DMG_PATH="Voicey-$VERSION.dmg"
+if [ "${SKIP_DMG:-}" = "1" ]; then
+  echo "⏭️  SKIP_DMG=1 set; skipping DMG creation/notarization."
+else
+  DMG_STAGING_DIR="$(mktemp -d -t voicey-dmg-staging)"
+  trap 'rm -rf "$DMG_STAGING_DIR"' EXIT
+  cp -R "Voicey.app" "$DMG_STAGING_DIR/"
+  ln -s "/Applications" "$DMG_STAGING_DIR/Applications"
+
+  # Use APFS for the DMG filesystem (minimum supported macOS is 13.0).
+  if ! hdiutil create -volname "Voicey" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO -fs APFS "$DMG_PATH"; then
+    echo ""
+    echo "❌ DMG creation failed."
+    echo "   You can retry with DMG disabled:"
+    echo "     SKIP_DMG=1 $0 $VERSION"
+    exit 1
+  fi
+
+  rm -rf "$DMG_STAGING_DIR"
+  trap - EXIT
+
+  # Notarize DMG
+  echo "📤 Notarizing DMG..."
+  xcrun notarytool submit "$DMG_PATH" \
+    --apple-id "$APPLE_ID" \
+    --team-id "$TEAM_ID" \
+    --password "$APP_PASSWORD" \
+    --wait
+  xcrun stapler staple "$DMG_PATH"
+fi
 
 VOICEY_DIRECT=1 swift package resolve
 
@@ -87,11 +102,14 @@ if gh release view "v$VERSION" >/dev/null 2>&1; then
   echo "🐙 GitHub release v$VERSION already exists; skipping publish."
 else
   echo "🐙 Creating GitHub release..."
+  ASSETS=("Voicey-$VERSION.zip")
+  if [ "${SKIP_DMG:-}" != "1" ] && [ -f "$DMG_PATH" ]; then
+    ASSETS+=("$DMG_PATH")
+  fi
   gh release create "v$VERSION" \
     --title "Voicey $VERSION" \
     --generate-notes \
-    "Voicey-$VERSION.dmg" \
-    "Voicey-$VERSION.zip"
+    "${ASSETS[@]}"
 fi
 
 # Resolve signature from the published ZIP so appcast always matches GitHub asset bytes.
