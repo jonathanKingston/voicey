@@ -12,7 +12,7 @@ final class AudioCaptureManager {
   private var audioEngine: AVAudioEngine?
   private var inputNode: AVAudioInputNode?
   private var audioBuffer: [Float] = []
-  private let bufferQueue = DispatchQueue(label: "com.voicetype.audiobuffer", qos: .userInteractive)
+  private let bufferQueue = DispatchQueue(label: "work.voicey.audiobuffer", qos: .userInteractive)
 
   private let targetSampleRate: Double = 16000.0  // Whisper requirement
   private var converter: AVAudioConverter?

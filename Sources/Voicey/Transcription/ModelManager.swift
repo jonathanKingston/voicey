@@ -455,13 +455,21 @@ final class ModelManager: ObservableObject {
     // Only cleanup if the model exists but is incomplete
     if fileManager.fileExists(atPath: whisperKitPath.path) && !isModelComplete(at: whisperKitPath) {
       AppLogger.model.info("Cleaning up incomplete model at \(whisperKitPath.path)")
-      try? fileManager.removeItem(at: whisperKitPath)
+      do {
+        try fileManager.removeItem(at: whisperKitPath)
+      } catch {
+        AppLogger.model.error("Failed to clean up incomplete model: \(error)")
+      }
     }
 
     // Also cleanup the download cache for this model
     if fileManager.fileExists(atPath: cachePath.path) {
       AppLogger.model.info("Cleaning up download cache at \(cachePath.path)")
-      try? fileManager.removeItem(at: cachePath)
+      do {
+        try fileManager.removeItem(at: cachePath)
+      } catch {
+        AppLogger.model.error("Failed to clean up download cache: \(error)")
+      }
     }
   }
 

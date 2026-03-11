@@ -20,7 +20,12 @@ func log(_ message: String) {
 /// Debug print that outputs directly to terminal (visible when running from command line)
 /// Use this for important debug info that should always be visible
 func debugPrint(_ message: String, category: String = "DEBUG") {
-  let timestamp = ISO8601DateFormatter().string(from: Date())
+  let timestamp = debugTimestampFormatter.string(from: Date())
   print("[\(timestamp)] [\(category)] \(message)")
   fflush(stdout)  // Ensure immediate output
 }
+
+private let debugTimestampFormatter: ISO8601DateFormatter = {
+  let formatter = ISO8601DateFormatter()
+  return formatter
+}()

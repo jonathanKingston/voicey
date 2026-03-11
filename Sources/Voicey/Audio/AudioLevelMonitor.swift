@@ -36,8 +36,6 @@ final class AudioLevelMonitor: ObservableObject {
 
 // MARK: - Test Audio Level
 
-// MARK: - Test Audio Level
-
 /// Thread-safe container for tracking max audio level during mic test
 private final class MaxLevelTracker: @unchecked Sendable {
   private var _maxLevel: Float = 0
