@@ -38,7 +38,7 @@ targets:
         buildPhase: resources
       - path: Resources/AppIcon.icns
         buildPhase: resources
-      - path: Resources/Localizations
+      - path: Sources/Voicey/Resources
         buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
@@ -80,7 +80,7 @@ targets:
         buildPhase: resources
       - path: Resources/AppIcon.icns
         buildPhase: resources
-      - path: Resources/Localizations
+      - path: Sources/Voicey/Resources
         buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
