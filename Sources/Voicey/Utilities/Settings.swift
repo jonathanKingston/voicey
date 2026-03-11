@@ -8,11 +8,12 @@ final class SettingsManager: SettingsProviding {
 
   /// Use a specific suite to ensure consistent storage regardless of how app is launched
   private let defaults: UserDefaults
+  private static let suiteName = "work.voicey.Voicey"
 
   private init() {
     // Use explicit suite name so settings work consistently when running from
     // command line (.build/debug/Voicey) or as app bundle (Voicey.app)
-    if let suite = UserDefaults(suiteName: "work.voicey.Voicey") {
+    if let suite = UserDefaults(suiteName: Self.suiteName) {
       defaults = suite
     } else {
       defaults = UserDefaults.standard
@@ -141,8 +142,7 @@ final class SettingsManager: SettingsProviding {
   // MARK: - Reset
 
   func resetToDefaults() {
-    let domain = Bundle.main.bundleIdentifier ?? "com.voicey"
-    defaults.removePersistentDomain(forName: domain)
+    defaults.removePersistentDomain(forName: Self.suiteName)
     defaults.synchronize()
     registerDefaults()
   }

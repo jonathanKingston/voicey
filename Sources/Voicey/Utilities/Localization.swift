@@ -1,5 +1,11 @@
 import Foundation
 
+#if SWIFT_PACKAGE
+private let localizationBundle = Bundle.module
+#else
+private let localizationBundle = Bundle.main
+#endif
+
 /// Localization utility for accessing translated strings
 /// Falls back to English if the user's language is not supported
 ///
@@ -9,14 +15,14 @@ enum L10n {
     static let supportedLanguages = ["en", "es", "de", "fr", "ja", "zh-Hans"]
 
     /// Get a localized string with optional arguments
-    /// Uses Bundle.main which automatically selects the appropriate .lproj based on system language
-    /// Falls back to English (development language) if the user's language is not supported
+    /// Selects the appropriate .lproj based on system language.
+    /// Falls back to English (development language) if the user's language is not supported.
     /// - Parameters:
     ///   - key: The localization key
     ///   - args: Optional format arguments
     /// - Returns: The localized string, or the key if not found
     static func string(_ key: String, _ args: CVarArg...) -> String {
-        let format = NSLocalizedString(key, tableName: "Localizable", bundle: Bundle.main, comment: "")
+        let format = NSLocalizedString(key, tableName: "Localizable", bundle: localizationBundle, comment: "")
         if args.isEmpty {
             return format
         }

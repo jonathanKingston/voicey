@@ -10,7 +10,7 @@ options:
 settings:
   base:
     PRODUCT_NAME: Voicey
-    MARKETING_VERSION: "1.1.0"
+    MARKETING_VERSION: "1.1.2"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.9"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
@@ -38,7 +38,7 @@ targets:
         buildPhase: resources
       - path: Resources/AppIcon.icns
         buildPhase: resources
-      - path: Resources/Localizations
+      - path: Sources/Voicey/Resources
         buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
@@ -80,7 +80,7 @@ targets:
         buildPhase: resources
       - path: Resources/AppIcon.icns
         buildPhase: resources
-      - path: Resources/Localizations
+      - path: Sources/Voicey/Resources
         buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts

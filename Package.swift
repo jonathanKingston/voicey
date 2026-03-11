@@ -29,6 +29,7 @@ if isDirectDistribution {
 
 let package = Package(
     name: "Voicey",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v13)
     ],
@@ -41,6 +42,9 @@ let package = Package(
             name: "Voicey",
             dependencies: targetDependencies,
             path: "Sources/Voicey",
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("CoreAudio"),

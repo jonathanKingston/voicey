@@ -32,3 +32,10 @@ for PLIST in "${PLISTS[@]}"; do
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$PLIST"
   echo "Updated $(basename "$PLIST") → $VERSION"
 done
+
+# Keep project.yml MARKETING_VERSION in sync (used by XcodeGen)
+PROJECT_YML="$ROOT_DIR/project.yml"
+if [ -f "$PROJECT_YML" ]; then
+  sed -i '' "s/MARKETING_VERSION: \"[0-9]*\.[0-9]*\.[0-9]*\"/MARKETING_VERSION: \"$VERSION\"/" "$PROJECT_YML"
+  echo "Updated project.yml → $VERSION"
+fi

@@ -101,41 +101,6 @@ enum AccessibilityPaster {
     return false
   }
 
-  #if VOICEY_DIRECT_DISTRIBUTION
-  /// Post Cmd+V directly to the frontmost process via CGEventPostToPid
-  /// This targets a specific process rather than posting system-wide
-  /// Only available in direct distribution builds (blocked in sandbox)
-  private static func pasteViaCGEventToPid(to pid: pid_t, appName: String?) -> Bool {
-    debugPrint("🔧 AccessibilityPaster: Trying CGEventPostToPid", category: "AX")
-    debugPrint("🎹 AccessibilityPaster: Posting Cmd+V to pid \(pid) (\(appName ?? "unknown"))", category: "AX")
-
-    guard let source = CGEventSource(stateID: .combinedSessionState) else {
-      debugPrint("❌ AccessibilityPaster: Failed to create CGEventSource", category: "AX")
-      return false
-    }
-
-    let vKeyCode = CGKeyCode(kVK_ANSI_V)
-
-    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
-          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
-      debugPrint("❌ AccessibilityPaster: Failed to create CGEvents", category: "AX")
-      return false
-    }
-
-    // Set command flag
-    keyDown.flags = .maskCommand
-    keyUp.flags = .maskCommand
-
-    // Post to specific process instead of system-wide
-    keyDown.postToPid(pid)
-    keyUp.postToPid(pid)
-
-    debugPrint("✅ AccessibilityPaster: Posted Cmd+V via CGEventPostToPid", category: "AX")
-    AppLogger.output.info("AccessibilityPaster: Posted Cmd+V via CGEventPostToPid to pid \(pid)")
-    return true
-  }
-  #endif
-
   /// Performs the AXPaste action on an element (like pressing ⌘V)
   /// This is the most reliable method for sandboxed apps
   private static func performPasteAction(on element: AXUIElement) -> Bool {
