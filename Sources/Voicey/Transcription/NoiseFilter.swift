@@ -29,7 +29,13 @@ enum NoiseFilter {
   static let trailingRepeatedArtifactPatterns: [String] = [
     "(?:\\bthank you\\b[\\s,.!?]*){2,}$",
     "(?:\\bthanks\\b[\\s,.!?]*){2,}$",
-    "(?:\\bthanks you\\b[\\s,.!?]*){2,}$"
+    "(?:\\bthanks you\\b[\\s,.!?]*){2,}$",
+    "(?:\\bbye\\b[\\s,.!?]*){2,}$",
+    "(?:\\bgoodbye\\b[\\s,.!?]*){2,}$",
+    "(?:\\byou\\b[\\s,.!?]*){3,}$",
+    "(?:\\boh\\b[\\s,.!?]*){3,}$",
+    "(?:\\bso\\b[\\s,.!?]*){3,}$",
+    "(?:\\bthe\\b[\\s,.!?]*){3,}$"
   ]
 
   /// Check if a bracketed text looks like a noise annotation

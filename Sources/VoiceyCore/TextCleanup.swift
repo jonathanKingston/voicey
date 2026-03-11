@@ -4,6 +4,28 @@ import Foundation
 public enum TextCleanup {
   /// Default text normalizations for low-risk transcription artifacts.
   public static let defaultTextExpansions: [String: String] = [
+    "etcetera": "etc.",
+    "et cetera": "etc.",
+    "for example": "e.g.",
+    "that is": "i.e.",
+    "versus": "vs.",
+    "mister": "Mr.",
+    "missus": "Mrs.",
+    "doctor": "Dr.",
+    "okay": "OK",
+    "o k": "OK",
+    "professor": "Prof.",
+    "saint": "St.",
+    "junior": "Jr.",
+    "senior": "Sr.",
+    "number": "No.",
+    "apartment": "Apt.",
+    "department": "Dept.",
+    "approximate": "approx.",
+    "approximately": "approx.",
+    "et al": "et al.",
+    "in other words": "i.e.",
+    "as soon as possible": "ASAP",
     "o k": "OK"
   ]
 
@@ -69,10 +91,17 @@ public enum TextCleanup {
     result = result.replacingOccurrences(of: " ?", with: "?")
     result = result.replacingOccurrences(of: " !", with: "!")
 
-    // Fix multiple punctuation
-    result = result.replacingOccurrences(of: "..", with: ".")
-    result = result.replacingOccurrences(of: ",,", with: ",")
+    // Fix multiple punctuation (order matters: normalize 4+ dots first, then stray doubles)
     result = result.replacingOccurrences(of: "....", with: "...")
+    result = result.replacingOccurrences(of: ",,", with: ",")
+    // Replace double dots but not triple (ellipsis) — use regex to avoid breaking "..."
+    if let doubleDotRegex = try? NSRegularExpression(pattern: "(?<!\\.)\\.{2}(?!\\.)") {
+      result = doubleDotRegex.stringByReplacingMatches(
+        in: result,
+        range: NSRange(result.startIndex..., in: result),
+        withTemplate: "."
+      )
+    }
 
     // Ensure space after punctuation
     let punctuationPattern = "([.!?,])([A-Za-z])"
