@@ -158,6 +158,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return whisperEngine?.isModelLoaded == true
   }
 
+  /// Best available Whisper fallback when Granite cannot load.
+  private func bestAvailableWhisperFallback() -> SpeechModel? {
+    let downloaded = ModelManager.shared.downloadedModels
+    let preferredOrder: [SpeechModel] = [
+      .tinyEn, .baseEn, .smallEn, .tiny, .base, .small, .distilLarge, .largeTurbo, .large
+    ]
+    for model in preferredOrder {
+      if model.isWhisperModel && downloaded.contains(model) {
+        return model
+      }
+    }
+    return downloaded.first(where: { $0.isWhisperModel })
+  }
+
+  /// Preload selected model. If Granite fails (e.g. missing mlx-audio), fall back to Whisper automatically.
+  @MainActor
+  private func preloadSelectedModelWithFallback() async -> Bool {
+    let selectedModel = SettingsManager.shared.selectedModel
+
+    if selectedModel.isGraniteModel {
+      await graniteEngine?.preloadModel()
+      if graniteEngine?.isModelLoaded == true {
+        return true
+      }
+
+      if let fallback = bestAvailableWhisperFallback() {
+        debugPrint(
+          "⚠️ Granite unavailable, falling back to \(fallback.displayName). Install mlx-audio to use Granite.",
+          category: "MODEL")
+        SettingsManager.shared.selectedModel = fallback
+        appState.currentModel = fallback
+        await whisperEngine?.preloadModel()
+        return whisperEngine?.isModelLoaded == true
+      }
+
+      return false
+    }
+
+    await whisperEngine?.preloadModel()
+    return whisperEngine?.isModelLoaded == true
+  }
+
   private func setupComponents() {
     audioCaptureManager = AudioCaptureManager()
     audioCaptureManager?.delegate = self
@@ -207,7 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Model Upgrade Handling
 
   private func handleModelUpgradeReady(_ model: SpeechModel) {
-    debugPrint("🎉 Quality model ready for upgrade: \(model.displayName)", category: "MODEL")
+    debugPrint("🎉 Model ready for upgrade: \(model.displayName)", category: "MODEL")
     tryPerformPendingUpgrade()
   }
 
@@ -217,9 +259,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    // Only upgrade if we're NOT already using the quality model
+    // Only upgrade if we're NOT already using the target model.
     let currentModel = SettingsManager.shared.selectedModel
-    guard currentModel != ModelManager.qualityModel else {
+    guard currentModel != pendingModel else {
       debugPrint("Not upgrading - already using \(currentModel.displayName)", category: "MODEL")
       ModelManager.shared.pendingUpgradeModel = nil
       return
@@ -236,50 +278,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Perform the upgrade
     performModelUpgrade(to: pendingModel)
-  }
-
-  private func performModelUpgrade(to model: SpeechModel) {
-    let previousModel = SettingsManager.shared.selectedModel
-    debugPrint("🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
-
-    // DON'T set appState.modelStatus = .loading here - keep showing as ready so user knows they can still record
-    // The isUpgradingModel flag will be released immediately so recording continues to work with the old model
-
-    Task {
-      // Release upgrade lock immediately - user can keep recording with old model during background load
-      await MainActor.run {
-        self.isUpgradingModel = false
-      }
-
-      // Load the new model in background (old model stays loaded and usable)
-      do {
-        debugPrint("📦 Background loading \(model.displayName) (you can keep recording with \(previousModel.displayName))...", category: "MODEL")
-        let startTime = CFAbsoluteTimeGetCurrent()
-
-        // Note: WhisperEngine.loadModel will unload the old model internally when loading a new one
-        // We accept a brief interruption during the actual swap
-        try await whisperEngine?.loadModel(variant: model.rawValue)
-        let loadTime = CFAbsoluteTimeGetCurrent() - startTime
-
-        // Update settings after successful load
-        await MainActor.run {
-          SettingsManager.shared.selectedModel = model
-          appState.currentModel = model
-          ModelManager.shared.pendingUpgradeModel = nil
-          appState.modelStatus = .ready
-          whisperEngine?.resetPerformanceTracking()
-          debugPrint("✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!", category: "MODEL")
-          dependencies.notifications.showModelUpgradeComplete(model: model)
-        }
-      } catch {
-        await MainActor.run {
-          // Upgrade failed - keep using old model
-          ModelManager.shared.pendingUpgradeModel = nil
-          appState.modelStatus = .ready  // Old model is still ready
-          debugPrint("❌ Upgrade to \(model.displayName) failed: \(error). Continuing with \(previousModel.displayName)", category: "MODEL")
-        }
-      }
-    }
   }
 
   private func setupHotkey() {
@@ -340,6 +338,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ModelManager.shared.loadDownloadedModels()
 
     if ModelManager.shared.hasDownloadedModel {
+      let selectedModel = SettingsManager.shared.selectedModel
+
+      // Start Granite migration in parallel with current-model preload for existing users.
+      // This avoids waiting for a potentially slow first-time Whisper compile before download starts.
+      if !selectedModel.isGraniteModel {
+        startBackgroundUpgradeIfNeeded()
+      }
+
       // Model is downloaded - load it into memory
       appState.modelStatus = .loading
       debugPrint("📦 Model downloaded, starting preload...", category: "MODEL")
@@ -352,12 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // Preload the model
       Task {
         let startTime = CFAbsoluteTimeGetCurrent()
-        let selectedModel = SettingsManager.shared.selectedModel
-        if selectedModel.isGraniteModel {
-          await graniteEngine?.preloadModel()
-        } else {
-          await whisperEngine?.preloadModel()
-        }
+        let preloadSucceeded = await self.preloadSelectedModelWithFallback()
         let loadTime = CFAbsoluteTimeGetCurrent() - startTime
 
         await MainActor.run {
@@ -366,14 +367,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.hideLoadingWindow()
           }
 
-          if self.isActiveEngineLoaded {
+          if preloadSucceeded && self.isActiveEngineLoaded {
             appState.modelStatus = .ready
             debugPrint("✅ Model ready in \(String(format: "%.1f", loadTime))s", category: "MODEL")
-
-            // Start background upgrade if we're using a fast Whisper model
-            if !selectedModel.isGraniteModel {
-              self.startBackgroundUpgradeIfNeeded()
-            }
           } else {
             appState.modelStatus = .failed("Failed to load model")
             debugPrint("❌ Model preload failed", category: "MODEL")
@@ -402,38 +398,117 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// Start background download and prewarming of quality model if we're not already using it
+  /// Start background download and upgrade to the recommended Granite model if needed.
   private func startBackgroundUpgradeIfNeeded() {
     let currentModel = SettingsManager.shared.selectedModel
+    let targetModel = ModelManager.defaultModel
 
-    // Only auto-upgrade when using a fast model (base, tiny, small - English or multilingual).
-    // If user manually selected a larger model, don't force-download the quality model.
-    guard currentModel.isFastModel else {
+    // Already on the recommended model.
+    guard currentModel != targetModel else {
       return
     }
 
-    // Only start upgrade if NOT already using quality model
-    guard currentModel != ModelManager.qualityModel else {
-      debugPrint(
-        "📦 Already using \(currentModel.displayName), no upgrade needed", category: "MODEL")
+    // If already downloading the target model, just wait and upgrade when complete.
+    if ModelManager.shared.isDownloading[targetModel] == true {
+      Task {
+        await waitForRecommendedModelAndUpgrade(targetModel)
+      }
       return
     }
 
-    // Check if quality model is already downloaded
-    if ModelManager.shared.isDownloaded(ModelManager.qualityModel) {
-      debugPrint("🔄 Quality model (\(ModelManager.qualityModel.displayName)) downloaded, starting background prewarm...", category: "MODEL")
-    } else {
-      debugPrint("📥 Starting background download of quality model...", category: "MODEL")
+    // If Granite is already downloaded, upgrade as soon as we're idle.
+    if ModelManager.shared.isDownloaded(targetModel) {
+      debugPrint("🔄 Recommended model (\(targetModel.displayName)) is downloaded, preparing upgrade...", category: "MODEL")
+      ModelManager.shared.pendingUpgradeModel = targetModel
+      tryPerformPendingUpgrade()
+      return
     }
 
-    // Start the background upgrade process
-    if let engine = whisperEngine {
-      ModelManager.shared.startBackgroundUpgrade(engine: engine)
+    debugPrint("📥 Starting background download of recommended model: \(targetModel.displayName)", category: "MODEL")
+    ModelManager.shared.downloadModel(targetModel)
+
+    Task {
+      await waitForRecommendedModelAndUpgrade(targetModel)
+    }
+  }
+
+  /// Wait for the recommended model download, then queue an automatic upgrade.
+  private func waitForRecommendedModelAndUpgrade(_ model: SpeechModel) async {
+    while ModelManager.shared.isDownloading[model] == true {
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+
+    guard ModelManager.shared.isDownloaded(model) else {
+      AppLogger.model.warning("Recommended model download failed: \(model.displayName)")
+      return
+    }
+
+    await MainActor.run {
+      ModelManager.shared.pendingUpgradeModel = model
+      tryPerformPendingUpgrade()
+    }
+  }
+
+  /// Upgrade to a target model once it is ready.
+  private func performModelUpgrade(to model: SpeechModel) {
+    let previousModel = SettingsManager.shared.selectedModel
+    debugPrint("🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
+
+    Task {
+      // Release upgrade lock immediately so normal recording can continue while loading in background.
+      await MainActor.run {
+        self.isUpgradingModel = false
+      }
+
+      do {
+        debugPrint(
+          "📦 Background loading \(model.displayName) (you can keep recording with \(previousModel.displayName))...",
+          category: "MODEL")
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        if model.isGraniteModel {
+          // Granite preload checks runtime dependencies and marks model readiness.
+          await MainActor.run {
+            SettingsManager.shared.selectedModel = model
+            appState.currentModel = model
+          }
+          await graniteEngine?.preloadModel()
+          guard graniteEngine?.isModelLoaded == true else {
+            throw GraniteError.modelNotReady
+          }
+        } else {
+          // WhisperEngine.loadModel unloads/reloads internally.
+          try await whisperEngine?.loadModel(variant: model.rawValue)
+        }
+
+        let loadTime = CFAbsoluteTimeGetCurrent() - startTime
+
+        await MainActor.run {
+          SettingsManager.shared.selectedModel = model
+          appState.currentModel = model
+          ModelManager.shared.pendingUpgradeModel = nil
+          appState.modelStatus = .ready
+          whisperEngine?.resetPerformanceTracking()
+          graniteEngine?.resetPerformanceTracking()
+          debugPrint("✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!", category: "MODEL")
+          dependencies.notifications.showModelUpgradeComplete(model: model)
+        }
+      } catch {
+        await MainActor.run {
+          // Upgrade failed - continue using previous model.
+          SettingsManager.shared.selectedModel = previousModel
+          appState.currentModel = previousModel
+          ModelManager.shared.pendingUpgradeModel = nil
+          appState.modelStatus = .ready
+          debugPrint(
+            "❌ Upgrade to \(model.displayName) failed: \(error). Continuing with \(previousModel.displayName)",
+            category: "MODEL")
+        }
+      }
     }
   }
 
   // MARK: - Loading Window
-
   private func showLoadingWindow() {
     let loadingView = VStack(spacing: 16) {
       ProgressView()
@@ -489,19 +564,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
       }
 
-      let selectedModel = SettingsManager.shared.selectedModel
-      if selectedModel.isGraniteModel {
-        await graniteEngine?.preloadModel()
-      } else {
-        await whisperEngine?.preloadModel()
-      }
+      let success = await preloadSelectedModelWithFallback()
 
       await MainActor.run {
         if showUI {
           hideLoadingWindow()
         }
 
-        if self.isActiveEngineLoaded {
+        if success && self.isActiveEngineLoaded {
           appState.modelStatus = .ready
           debugPrint("✅ Model ready!", category: "MODEL")
         } else {

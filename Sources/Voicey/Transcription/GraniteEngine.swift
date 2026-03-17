@@ -17,6 +17,8 @@ final class GraniteEngine {
   /// Rolling average of real-time factors for recent transcriptions
   private var recentRTFs: [Double] = []
   private let maxRTFHistory = 5
+  private var dependenciesReady = false
+  private let worker = GranitePythonWorker()
 
   /// Average RTF over recent transcriptions
   var averageRTF: Double {
@@ -31,6 +33,13 @@ final class GraniteEngine {
   }
 
   init() {}
+
+  deinit {
+    let workerRef = worker
+    Task {
+      await workerRef.stop()
+    }
+  }
 
   /// Check if the model is ready for transcription
   var isModelLoaded: Bool {
@@ -64,24 +73,15 @@ final class GraniteEngine {
 
     modelPath = path
 
-    // Verify Python and mlx-audio are available
-    let checkScript = """
-      import mlx_audio
-      print("OK")
-      """
-
     do {
-      let output = try await runPython(script: checkScript, timeout: 30)
-      if output.contains("OK") {
-        modelReady = true
-        debugPrint("✅ GraniteEngine: Python environment verified, model ready", category: "MODEL")
-        AppLogger.model.info("GraniteEngine: Model ready at \(path)")
-      } else {
-        AppLogger.model.error("GraniteEngine: Python environment check failed")
-      }
+      try await ensurePythonDependencies()
+      try await worker.start(modelPath: path, environment: pythonEnvironment())
+      modelReady = true
+      debugPrint("✅ GraniteEngine: Granite worker ready", category: "MODEL")
+      AppLogger.model.info("GraniteEngine: Model ready at \(path)")
     } catch {
       AppLogger.model.error("GraniteEngine: Failed to verify Python environment: \(error)")
-      debugPrint("❌ GraniteEngine: Python/mlx-audio not available. Install with: pip3 install mlx-audio", category: "MODEL")
+      debugPrint("❌ GraniteEngine: Python deps setup failed. Install with: python3 -m pip install --user mlx-audio huggingface_hub", category: "MODEL")
     }
   }
 
@@ -89,6 +89,10 @@ final class GraniteEngine {
   func unloadModel() {
     modelReady = false
     modelPath = nil
+    dependenciesReady = false
+    Task {
+      await worker.stop()
+    }
   }
 
   /// Load a specific model variant
@@ -101,6 +105,8 @@ final class GraniteEngine {
       throw GraniteError.modelNotDownloaded
     }
 
+    try await ensurePythonDependencies()
+    try await worker.start(modelPath: path, environment: pythonEnvironment())
     modelPath = path
     modelReady = true
   }
@@ -120,6 +126,9 @@ final class GraniteEngine {
     guard let localModelPath = modelPath ?? ModelManager.shared.modelPath(for: selectedModel) else {
       throw GraniteError.modelNotDownloaded
     }
+
+    // Ensure worker is available (it may have been terminated externally).
+    try await worker.start(modelPath: localModelPath, environment: pythonEnvironment())
 
     // Calculate audio duration (16kHz sample rate)
     let audioDuration = Double(audioBuffer.count) / 16000.0
@@ -141,34 +150,12 @@ final class GraniteEngine {
     try audioData.write(to: audioFile)
     defer { try? FileManager.default.removeItem(at: audioFile) }
 
-    // Python script that reads raw audio and transcribes using mlx-audio
-    let transcribeScript = """
-      import sys
-      import numpy as np
-      import mlx_audio
-
-      # Read raw float32 audio
-      audio_data = np.fromfile("\(audioFile.path)", dtype=np.float32)
-
-      # Transcribe using mlx-audio STT
-      result = mlx_audio.stt.generate(
-          model=r"\(localModelPath)",
-          audio=audio_data,
-          sample_rate=16000
-      )
-
-      # Output the transcription text
-      if isinstance(result, dict):
-          text = result.get("text", "")
-      elif isinstance(result, str):
-          text = result
-      else:
-          text = str(result)
-
-      print(text.strip())
-      """
-
-    let output = try await runPython(script: transcribeScript, timeout: 120)
+    let output = try await worker.transcribe(
+      audioPath: audioFile.path,
+      sampleRate: 16000,
+      maxTokens: 1024,
+      timeout: 120
+    )
     let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
     let transcribedText = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -216,15 +203,8 @@ final class GraniteEngine {
 
   // MARK: - Python Execution
 
-  /// Run a Python script and return its stdout output
-  private func runPython(script: String, timeout: TimeInterval) async throws -> String {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["python3", "-c", script]
-
-    // Inherit PATH so user's Python environment is found
+  private func pythonEnvironment() -> [String: String] {
     var env = ProcessInfo.processInfo.environment
-    // Add common Python install paths
     let extraPaths = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
@@ -234,13 +214,84 @@ final class GraniteEngine {
     ]
     if let existingPath = env["PATH"] {
       env["PATH"] = extraPaths.joined(separator: ":") + ":" + existingPath
+    } else {
+      env["PATH"] = extraPaths.joined(separator: ":")
     }
-    process.environment = env
+    return env
+  }
+
+  /// Ensure required Python packages are installed and importable.
+  private func ensurePythonDependencies() async throws {
+    if dependenciesReady { return }
+
+    let bootstrapScript = """
+      import importlib.util
+      import subprocess
+      import sys
+
+      required = [
+          ("mlx_audio", "mlx-audio"),
+          ("huggingface_hub", "huggingface_hub"),
+          ("numpy", "numpy"),
+      ]
+
+      missing = [pip_name for module_name, pip_name in required if importlib.util.find_spec(module_name) is None]
+
+      if missing:
+          print("Installing Python dependencies: " + ", ".join(missing))
+          cmd = [
+              sys.executable,
+              "-m",
+              "pip",
+              "install",
+              "--user",
+              "--disable-pip-version-check",
+          ] + missing
+          subprocess.check_call(cmd)
+
+      for module_name, _ in required:
+          if importlib.util.find_spec(module_name) is None:
+              raise RuntimeError(f"Missing required Python module after install: {module_name}")
+
+      print("OK")
+      """
+
+    let output = try await runPython(script: bootstrapScript, timeout: 300)
+    guard output.contains("OK") else {
+      throw GraniteError.pythonError("Dependency setup did not complete successfully")
+    }
+
+    dependenciesReady = true
+  }
+
+  /// Run a Python script and return its stdout output
+  private func runPython(script: String, timeout: TimeInterval) async throws -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["python3", "-c", script]
+
+    process.environment = pythonEnvironment()
 
     let outputPipe = Pipe()
     let errorPipe = Pipe()
     process.standardOutput = outputPipe
     process.standardError = errorPipe
+
+    let outputBuffer = PythonOutputBuffer()
+    outputPipe.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+      Task {
+        await outputBuffer.appendStdout(chunk)
+      }
+    }
+    errorPipe.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+      Task {
+        await outputBuffer.appendStderr(chunk)
+      }
+    }
 
     try process.run()
     let timeoutNanoseconds = UInt64(timeout * 1_000_000_000)
@@ -249,10 +300,17 @@ final class GraniteEngine {
       group.addTask {
         process.waitUntilExit()
 
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+        outputPipe.fileHandleForReading.readabilityHandler = nil
+        errorPipe.fileHandleForReading.readabilityHandler = nil
+
+        if let finalStdout = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
+          await outputBuffer.appendStdout(finalStdout)
+        }
+        if let finalStderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
+          await outputBuffer.appendStderr(finalStderr)
+        }
+
+        let (output, errorOutput) = await outputBuffer.snapshot()
 
         if process.terminationStatus == 0 {
           return output
@@ -280,6 +338,258 @@ final class GraniteEngine {
       group.cancelAll()
       return firstResult
     }
+  }
+}
+
+private actor GranitePythonWorker {
+  private struct WorkerResponse {
+    let ok: Bool
+    let text: String?
+    let error: String?
+  }
+
+  private var process: Process?
+  private var stdinHandle: FileHandle?
+  private var stdoutBuffer = ""
+  private var stderrBuffer = ""
+  private var isReady = false
+  private var modelPath: String?
+  private var responses: [String: WorkerResponse] = [:]
+
+  func start(modelPath: String, environment: [String: String]) async throws {
+    if let process, process.isRunning, self.modelPath == modelPath, isReady {
+      return
+    }
+
+    stop()
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["python3", "-u", "-c", Self.workerScript]
+
+    var env = environment
+    env["VOICEY_GRANITE_MODEL_PATH"] = modelPath
+    process.environment = env
+
+    let inputPipe = Pipe()
+    let outputPipe = Pipe()
+    let errorPipe = Pipe()
+    process.standardInput = inputPipe
+    process.standardOutput = outputPipe
+    process.standardError = errorPipe
+
+    outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+      let data = handle.availableData
+      guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+      Task {
+        await self?.consumeStdout(chunk)
+      }
+    }
+
+    errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+      let data = handle.availableData
+      guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+      Task {
+        await self?.consumeStderr(chunk)
+      }
+    }
+
+    try process.run()
+
+    self.process = process
+    self.stdinHandle = inputPipe.fileHandleForWriting
+    self.modelPath = modelPath
+    self.stdoutBuffer = ""
+    self.stderrBuffer = ""
+    self.responses.removeAll()
+    self.isReady = false
+
+    let deadline = Date().addingTimeInterval(120)
+    while Date() < deadline {
+      if isReady {
+        return
+      }
+      if !(self.process?.isRunning ?? false) {
+        let reason = stderrBuffer.isEmpty ? "Granite worker exited during startup" : stderrBuffer
+        throw GraniteError.pythonError(reason)
+      }
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+
+    throw GraniteError.pythonTimedOut(120)
+  }
+
+  func transcribe(audioPath: String, sampleRate: Int, maxTokens: Int, timeout: TimeInterval) async throws
+    -> String
+  {
+    guard let process, process.isRunning, let stdinHandle else {
+      throw GraniteError.pythonError("Granite worker not running")
+    }
+
+    let requestID = UUID().uuidString
+    let request: [String: Any] = [
+      "type": "transcribe",
+      "id": requestID,
+      "audio_path": audioPath,
+      "sample_rate": sampleRate,
+      "max_tokens": maxTokens,
+      "language": "en",
+    ]
+
+    let requestData = try JSONSerialization.data(withJSONObject: request)
+    guard var requestLine = String(data: requestData, encoding: .utf8) else {
+      throw GraniteError.pythonError("Failed to serialize worker request")
+    }
+    requestLine += "\n"
+    guard let lineData = requestLine.data(using: .utf8) else {
+      throw GraniteError.pythonError("Failed to encode worker request")
+    }
+    stdinHandle.write(lineData)
+
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if let response = responses.removeValue(forKey: requestID) {
+        if response.ok {
+          return response.text ?? ""
+        }
+        throw GraniteError.pythonError(response.error ?? "Unknown Granite worker error")
+      }
+      if !(self.process?.isRunning ?? false) {
+        let reason = stderrBuffer.isEmpty ? "Granite worker exited during transcription" : stderrBuffer
+        throw GraniteError.pythonError(reason)
+      }
+      try? await Task.sleep(nanoseconds: 20_000_000)
+    }
+
+    throw GraniteError.pythonTimedOut(timeout)
+  }
+
+  func stop() {
+    process?.terminate()
+    process = nil
+    stdinHandle = nil
+    isReady = false
+    modelPath = nil
+    responses.removeAll()
+  }
+
+  private func consumeStdout(_ chunk: String) {
+    stdoutBuffer += chunk
+    while let newlineIndex = stdoutBuffer.firstIndex(of: "\n") {
+      let line = String(stdoutBuffer[..<newlineIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+      stdoutBuffer = String(stdoutBuffer[stdoutBuffer.index(after: newlineIndex)...])
+      guard !line.isEmpty else { continue }
+      parseWorkerLine(line)
+    }
+  }
+
+  private func consumeStderr(_ chunk: String) {
+    stderrBuffer += chunk
+    if stderrBuffer.count > 8_000 {
+      stderrBuffer = String(stderrBuffer.suffix(8_000))
+    }
+  }
+
+  private func parseWorkerLine(_ line: String) {
+    guard let data = line.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      return
+    }
+
+    if let event = json["event"] as? String, event == "ready" {
+      isReady = true
+      return
+    }
+
+    guard let id = json["id"] as? String else { return }
+    let ok = (json["ok"] as? Bool) ?? false
+    let text = json["text"] as? String
+    let error = json["error"] as? String
+    responses[id] = WorkerResponse(ok: ok, text: text, error: error)
+  }
+
+  private static let workerScript = #"""
+import json
+import os
+import sys
+import traceback
+import numpy as np
+from mlx_audio import stt
+
+MODEL_PATH = os.environ.get("VOICEY_GRANITE_MODEL_PATH")
+if not MODEL_PATH:
+    print(json.dumps({"event":"fatal","error":"VOICEY_GRANITE_MODEL_PATH not set"}), flush=True)
+    sys.exit(1)
+
+model = stt.load_model(MODEL_PATH)
+print(json.dumps({"event":"ready"}), flush=True)
+
+for raw_line in sys.stdin:
+    line = raw_line.strip()
+    if not line:
+        continue
+    try:
+        req = json.loads(line)
+        req_id = req.get("id", "")
+        req_type = req.get("type")
+        if req_type != "transcribe":
+            print(json.dumps({"id": req_id, "ok": False, "error": f"unknown request type: {req_type}"}), flush=True)
+            continue
+
+        audio_path = req["audio_path"]
+        sample_rate = int(req.get("sample_rate", 16000))
+        max_tokens = int(req.get("max_tokens", 1024))
+        language = req.get("language", "en")
+        audio = np.fromfile(audio_path, dtype=np.float32)
+
+        result = model.generate(
+            audio,
+            language=language,
+            max_tokens=max_tokens,
+            verbose=False,
+            sample_rate=sample_rate,
+        )
+
+        if isinstance(result, dict):
+            text = result.get("text", "")
+        elif isinstance(result, str):
+            text = result
+        elif hasattr(result, "text"):
+            text = result.text
+        else:
+            text = str(result)
+
+        print(json.dumps({"id": req_id, "ok": True, "text": text.strip()}), flush=True)
+    except Exception:
+        err = traceback.format_exc()
+        safe_id = ""
+        try:
+            if "req_id" in locals():
+                safe_id = req_id
+        except Exception:
+            safe_id = ""
+        print(json.dumps({"id": safe_id, "ok": False, "error": err}), flush=True)
+"""#
+}
+
+private actor PythonOutputBuffer {
+  private var stdout = ""
+  private var stderr = ""
+
+  func appendStdout(_ chunk: String) {
+    stdout += chunk
+  }
+
+  func appendStderr(_ chunk: String) {
+    stderr += chunk
+  }
+
+  func snapshot() -> (String, String) {
+    (
+      stdout.trimmingCharacters(in: .whitespacesAndNewlines),
+      stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+    )
   }
 }
 

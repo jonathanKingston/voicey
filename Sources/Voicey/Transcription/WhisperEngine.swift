@@ -181,8 +181,10 @@ final class WhisperEngine {
     guard !models.isEmpty else { return nil }
 
     // First, check if any model is already compiled (will load fast)
-    // Prefer quality model if it's already compiled
-    let qualityFirst: [SpeechModel] = [.largeTurbo, .large, .distilLarge, .small, .base, .tiny]
+    // Prefer higher quality if already compiled.
+    let qualityFirst: [SpeechModel] = [
+      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn
+    ]
     for model in qualityFirst {
       if models.contains(model) && ModelManager.shared.isLikelyCompiled(model) {
         debugPrint("🚀 Found already-compiled model: \(model.rawValue)", category: "MODEL")
@@ -191,8 +193,11 @@ final class WhisperEngine {
     }
 
     // No compiled models found - prefer smaller/faster models for quick first-time compilation
-    // Quality model (largeTurbo) will be loaded in background and swapped in later
-    let smallFirst: [SpeechModel] = [.tiny, .base, .small, .distilLarge, .large, .largeTurbo]
+    // Quality model (Granite) will be downloaded/upgraded in background.
+    // Prefer English fast variants first for English-heavy installs.
+    let smallFirst: [SpeechModel] = [
+      .tinyEn, .baseEn, .smallEn, .tiny, .base, .small, .distilLarge, .large, .largeTurbo
+    ]
     for model in smallFirst {
       if models.contains(model) {
         debugPrint("📦 No compiled models found, using fastest to compile: \(model.rawValue)", category: "MODEL")
