@@ -1,5 +1,6 @@
 import Foundation
 import os
+import Darwin
 
 /// Engine for IBM Granite Speech models using Python mlx-audio for inference on Apple Silicon
 final class GraniteEngine {
@@ -111,8 +112,13 @@ final class GraniteEngine {
     }
 
     let selectedModel = SettingsManager.shared.selectedModel
-    guard let hfId = selectedModel.huggingFaceModelId else {
+    guard selectedModel.isGraniteModel else {
       throw GraniteError.invalidModel
+    }
+
+    // Always use the locally downloaded model path.
+    guard let localModelPath = modelPath ?? ModelManager.shared.modelPath(for: selectedModel) else {
+      throw GraniteError.modelNotDownloaded
     }
 
     // Calculate audio duration (16kHz sample rate)
@@ -146,7 +152,7 @@ final class GraniteEngine {
 
       # Transcribe using mlx-audio STT
       result = mlx_audio.stt.generate(
-          model="\(hfId)",
+          model=r"\(localModelPath)",
           audio=audio_data,
           sample_rate=16000
       )
@@ -237,9 +243,10 @@ final class GraniteEngine {
     process.standardError = errorPipe
 
     try process.run()
+    let timeoutNanoseconds = UInt64(timeout * 1_000_000_000)
 
-    return try await withCheckedThrowingContinuation { continuation in
-      Task.detached {
+    return try await withThrowingTaskGroup(of: String.self) { group in
+      group.addTask {
         process.waitUntilExit()
 
         let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
@@ -248,12 +255,30 @@ final class GraniteEngine {
         let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
 
         if process.terminationStatus == 0 {
-          continuation.resume(returning: output)
-        } else {
-          AppLogger.transcription.error("GraniteEngine Python error: \(errorOutput)")
-          continuation.resume(throwing: GraniteError.pythonError(errorOutput))
+          return output
         }
+
+        AppLogger.transcription.error("GraniteEngine Python error: \(errorOutput)")
+        throw GraniteError.pythonError(errorOutput)
       }
+
+      group.addTask {
+        try await Task.sleep(nanoseconds: timeoutNanoseconds)
+
+        if process.isRunning {
+          process.terminate()
+          try? await Task.sleep(nanoseconds: 200_000_000)
+          if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+          }
+        }
+
+        throw GraniteError.pythonTimedOut(timeout)
+      }
+
+      let firstResult = try await group.next() ?? ""
+      group.cancelAll()
+      return firstResult
     }
   }
 }
@@ -266,6 +291,7 @@ enum GraniteError: LocalizedError {
   case invalidModel
   case pythonError(String)
   case pythonNotFound
+  case pythonTimedOut(TimeInterval)
 
   var errorDescription: String? {
     switch self {
@@ -279,6 +305,8 @@ enum GraniteError: LocalizedError {
       return "Python error: \(message)"
     case .pythonNotFound:
       return "Python 3 not found. Install Python 3 and mlx-audio (pip3 install mlx-audio)"
+    case .pythonTimedOut(let seconds):
+      return "Python transcription timed out after \(Int(seconds))s"
     }
   }
 }

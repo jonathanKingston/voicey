@@ -161,6 +161,8 @@ final class ModelManager: ObservableObject {
 
   private let fileManager = FileManager.default
   private var downloadTasks: [SpeechModel: Task<Void, Never>] = [:]
+  private var graniteDownloadProcesses: [SpeechModel: Process] = [:]
+  private var cancelledDownloads: Set<SpeechModel> = []
 
   private init() {
     loadDownloadedModels()
@@ -372,6 +374,7 @@ final class ModelManager: ObservableObject {
 
   func downloadModel(_ model: SpeechModel) {
     guard !isDownloading[model, default: false] else { return }
+    cancelledDownloads.remove(model)
 
     if model.isGraniteModel {
       downloadGraniteModel(model)
@@ -461,15 +464,15 @@ final class ModelManager: ObservableObject {
           import sys
           try:
               from huggingface_hub import snapshot_download
-              path = snapshot_download(
+              snapshot_download(
                   repo_id="\(hfId)",
                   local_dir="\(modelDir.path)",
                   local_dir_use_symlinks=False
               )
               # Write marker file
-              with open(path + "/.download_complete", "w") as f:
+              with open("\(modelDir.path)/.download_complete", "w") as f:
                   f.write("ok")
-              print("SUCCESS:" + path)
+              print("SUCCESS:\(modelDir.path)")
           except Exception as e:
               print("ERROR:" + str(e), file=sys.stderr)
               sys.exit(1)
@@ -484,7 +487,31 @@ final class ModelManager: ObservableObject {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
+        let outputBuffer = GraniteDownloadOutputBuffer()
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+          let data = handle.availableData
+          guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+          Task {
+            await outputBuffer.appendStdout(chunk)
+          }
+        }
+        errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+          let data = handle.availableData
+          guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+          Task {
+            await outputBuffer.appendStderr(chunk)
+          }
+
+          if let progress = Self.extractDownloadProgress(from: chunk) {
+            Task { @MainActor [weak self] in
+              guard self?.isDownloading[model] == true else { return }
+              self?.downloadProgress[model] = progress
+            }
+          }
+        }
+
         try process.run()
+        graniteDownloadProcesses[model] = process
 
         // Monitor in background
         let modelRef = model
@@ -493,11 +520,34 @@ final class ModelManager: ObservableObject {
         Task.detached {
           process.waitUntilExit()
 
+          outputPipe.fileHandleForReading.readabilityHandler = nil
+          errorPipe.fileHandleForReading.readabilityHandler = nil
+
+          if let finalStdout = String(
+            data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+          {
+            await outputBuffer.appendStdout(finalStdout)
+          }
+          if let finalStderr = String(
+            data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+          {
+            await outputBuffer.appendStderr(finalStderr)
+          }
+
           let exitCode = process.terminationStatus
-          let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-          let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+          let (outputLog, errorOutput) = await outputBuffer.snapshot()
 
           await MainActor.run {
+            managerRef.graniteDownloadProcesses[modelRef] = nil
+
+            if managerRef.cancelledDownloads.contains(modelRef) {
+              managerRef.cancelledDownloads.remove(modelRef)
+              managerRef.isDownloading[modelRef] = false
+              managerRef.downloadProgress[modelRef] = 0
+              managerRef.downloadTasks[modelRef] = nil
+              return
+            }
+
             if exitCode == 0 && managerRef.modelPath(for: modelRef) != nil {
               AppLogger.model.info("Granite model \(modelRef.displayName) downloaded successfully")
               managerRef.loadDownloadedModels()
@@ -510,6 +560,9 @@ final class ModelManager: ObservableObject {
                 ? "Failed to download Granite model. Ensure Python 3 and huggingface_hub are installed (pip3 install huggingface_hub)."
                 : errorOutput
               AppLogger.model.error("Granite model download failed: \(errorMessage)")
+              if !outputLog.isEmpty {
+                AppLogger.model.error("Granite model download output: \(outputLog)")
+              }
               managerRef.downloadError = errorMessage
               managerRef.isDownloading[modelRef] = false
               managerRef.downloadProgress[modelRef] = 0
@@ -532,6 +585,23 @@ final class ModelManager: ObservableObject {
     }
 
     downloadTasks[model] = task
+  }
+
+  private static func extractDownloadProgress(from text: String) -> Double? {
+    // Parse percentages from huggingface_hub/tqdm output (e.g. " 42%|")
+    let pattern = #"\b(\d{1,3})%\|"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+    let range = NSRange(text.startIndex..<text.endIndex, in: text)
+    let matches = regex.matches(in: text, range: range)
+    guard let last = matches.last, last.numberOfRanges > 1,
+      let percentRange = Range(last.range(at: 1), in: text),
+      let percentValue = Int(text[percentRange])
+    else {
+      return nil
+    }
+
+    let bounded = min(max(percentValue, 0), 100)
+    return Double(bounded) / 100.0
   }
 
   /// Classify download errors into user-friendly messages
@@ -596,6 +666,15 @@ final class ModelManager: ObservableObject {
   }
 
   func cancelDownload(_ model: WhisperModel) {
+    if let process = graniteDownloadProcesses[model], process.isRunning {
+      cancelledDownloads.insert(model)
+      process.terminate()
+      if process.isRunning {
+        process.interrupt()
+      }
+      graniteDownloadProcesses[model] = nil
+    }
+
     downloadTasks[model]?.cancel()
     downloadTasks[model] = nil
     isDownloading[model] = false
@@ -791,5 +870,25 @@ final class ModelManager: ObservableObject {
     let formatter = ByteCountFormatter()
     formatter.countStyle = .file
     return formatter.string(fromByteCount: bytes)
+  }
+}
+
+private actor GraniteDownloadOutputBuffer {
+  private var stdout = ""
+  private var stderr = ""
+
+  func appendStdout(_ chunk: String) {
+    stdout += chunk
+  }
+
+  func appendStderr(_ chunk: String) {
+    stderr += chunk
+  }
+
+  func snapshot() -> (String, String) {
+    (
+      stdout.trimmingCharacters(in: .whitespacesAndNewlines),
+      stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+    )
   }
 }
