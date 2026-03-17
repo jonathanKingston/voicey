@@ -462,7 +462,13 @@ final class ModelManager: ObservableObject {
         // Use Python to download the model via huggingface_hub
         let downloadScript = """
           import sys
+          import subprocess
+          import importlib.util
           try:
+              if importlib.util.find_spec("huggingface_hub") is None:
+                  print("Installing huggingface_hub...", file=sys.stderr)
+                  subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "huggingface_hub"])
+
               from huggingface_hub import snapshot_download
               snapshot_download(
                   repo_id="\(hfId)",
@@ -493,6 +499,13 @@ final class ModelManager: ObservableObject {
           guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
           Task {
             await outputBuffer.appendStdout(chunk)
+          }
+
+          if let progress = Self.extractDownloadProgress(from: chunk) {
+            Task { @MainActor [weak self] in
+              guard self?.isDownloading[model] == true else { return }
+              self?.downloadProgress[model] = progress
+            }
           }
         }
         errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in

@@ -259,6 +259,14 @@ struct SetupSettingsView: View {
           .font(.caption)
           .foregroundStyle(.secondary)
 
+          if let downloadError = modelManager.downloadError, !downloadError.isEmpty {
+            Label(downloadError, systemImage: "exclamationmark.triangle.fill")
+              .font(.caption2)
+              .foregroundStyle(.red)
+              .multilineTextAlignment(.center)
+              .padding(.horizontal, 20)
+          }
+
           if isDefaultModelDownloading {
             ProgressView(value: defaultDownloadProgress)
               .progressViewStyle(.linear)
