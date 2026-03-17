@@ -4,7 +4,7 @@ import Foundation
 
 /// Protocol for settings management
 protocol SettingsProviding {
-  var selectedModel: WhisperModel { get set }
+  var selectedModel: SpeechModel { get set }
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
   var autoPasteEnabled: Bool { get set }
@@ -19,17 +19,17 @@ protocol SettingsProviding {
 
 /// Protocol for model management
 protocol ModelProviding: ObservableObject {
-  var downloadedModels: Set<WhisperModel> { get }
-  var isDownloading: [WhisperModel: Bool] { get }
+  var downloadedModels: Set<SpeechModel> { get }
+  var isDownloading: [SpeechModel: Bool] { get }
   var downloadError: String? { get }
   var hasDownloadedModel: Bool { get }
   var modelsDirectory: URL { get }
 
   func loadDownloadedModels()
-  func isDownloaded(_ model: WhisperModel) -> Bool
-  func downloadModel(_ model: WhisperModel)
-  func cancelDownload(_ model: WhisperModel)
-  func deleteModel(_ model: WhisperModel) throws
+  func isDownloaded(_ model: SpeechModel) -> Bool
+  func downloadModel(_ model: SpeechModel)
+  func cancelDownload(_ model: SpeechModel)
+  func deleteModel(_ model: SpeechModel) throws
 }
 
 /// Protocol for permissions management
@@ -46,9 +46,9 @@ protocol PermissionsProviding {
 protocol NotificationProviding {
   func showMicrophoneRequiredNotification()
   func showNoModelNotification()
-  func showModelDownloadComplete(model: WhisperModel)
+  func showModelDownloadComplete(model: SpeechModel)
   func showModelDownloadFailed(reason: String)
-  func showModelUpgradeComplete(model: WhisperModel)
+  func showModelUpgradeComplete(model: SpeechModel)
   func showModelLoading()
   func showTranscriptionCopied()
   func showTranscriptionError(_ message: String)

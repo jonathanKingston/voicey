@@ -49,7 +49,7 @@ final class NotificationManager: NotificationProviding {
     )
   }
 
-  func showModelDownloadComplete(model: WhisperModel) {
+  func showModelDownloadComplete(model: SpeechModel) {
     showNotification(
       title: "Model Downloaded",
       body: "\(model.displayName) is ready to use. Press Ctrl+V to start transcribing."
@@ -63,7 +63,7 @@ final class NotificationManager: NotificationProviding {
     )
   }
 
-  func showModelUpgradeComplete(model: WhisperModel) {
+  func showModelUpgradeComplete(model: SpeechModel) {
     showNotification(
       title: "Model Upgraded",
       body: "Now using \(model.displayName) for better accuracy."

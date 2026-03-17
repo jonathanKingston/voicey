@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private var audioCaptureManager: AudioCaptureManager?
   private var whisperEngine: WhisperEngine?
+  private var graniteEngine: GraniteEngine?
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
 
@@ -148,6 +149,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     checkModelStatusAndPreload(showUI: false)
   }
 
+  /// Whether the active engine (Whisper or Granite) has a model loaded
+  private var isActiveEngineLoaded: Bool {
+    let selectedModel = SettingsManager.shared.selectedModel
+    if selectedModel.isGraniteModel {
+      return graniteEngine?.isModelLoaded == true
+    }
+    return whisperEngine?.isModelLoaded == true
+  }
+
   private func setupComponents() {
     audioCaptureManager = AudioCaptureManager()
     audioCaptureManager?.delegate = self
@@ -161,6 +171,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Handle performance issues
     whisperEngine?.onPerformanceIssue = { [weak self] metrics in
+      self?.handlePerformanceIssue(metrics)
+    }
+
+    graniteEngine = GraniteEngine()
+    graniteEngine?.onLoadingStateChanged = { [weak self] isLoading in
+      if isLoading {
+        self?.appState.transcriptionState = .loadingModel
+      }
+    }
+    graniteEngine?.onPerformanceIssue = { [weak self] metrics in
       self?.handlePerformanceIssue(metrics)
     }
 
@@ -186,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // MARK: - Model Upgrade Handling
 
-  private func handleModelUpgradeReady(_ model: WhisperModel) {
+  private func handleModelUpgradeReady(_ model: SpeechModel) {
     debugPrint("🎉 Quality model ready for upgrade: \(model.displayName)", category: "MODEL")
     tryPerformPendingUpgrade()
   }
@@ -218,7 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     performModelUpgrade(to: pendingModel)
   }
 
-  private func performModelUpgrade(to model: WhisperModel) {
+  private func performModelUpgrade(to model: SpeechModel) {
     let previousModel = SettingsManager.shared.selectedModel
     debugPrint("🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
 
@@ -332,7 +352,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // Preload the model
       Task {
         let startTime = CFAbsoluteTimeGetCurrent()
-        await whisperEngine?.preloadModel()
+        let selectedModel = SettingsManager.shared.selectedModel
+        if selectedModel.isGraniteModel {
+          await graniteEngine?.preloadModel()
+        } else {
+          await whisperEngine?.preloadModel()
+        }
         let loadTime = CFAbsoluteTimeGetCurrent() - startTime
 
         await MainActor.run {
@@ -341,12 +366,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.hideLoadingWindow()
           }
 
-          if whisperEngine?.isModelLoaded == true {
+          if self.isActiveEngineLoaded {
             appState.modelStatus = .ready
             debugPrint("✅ Model ready in \(String(format: "%.1f", loadTime))s", category: "MODEL")
 
-            // Start background upgrade if we're using the fast model
-            self.startBackgroundUpgradeIfNeeded()
+            // Start background upgrade if we're using a fast Whisper model
+            if !selectedModel.isGraniteModel {
+              self.startBackgroundUpgradeIfNeeded()
+            }
           } else {
             appState.modelStatus = .failed("Failed to load model")
             debugPrint("❌ Model preload failed", category: "MODEL")
@@ -462,14 +489,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
       }
 
-      await whisperEngine?.preloadModel()
+      let selectedModel = SettingsManager.shared.selectedModel
+      if selectedModel.isGraniteModel {
+        await graniteEngine?.preloadModel()
+      } else {
+        await whisperEngine?.preloadModel()
+      }
 
       await MainActor.run {
         if showUI {
           hideLoadingWindow()
         }
 
-        if whisperEngine?.isModelLoaded == true {
+        if self.isActiveEngineLoaded {
           appState.modelStatus = .ready
           debugPrint("✅ Model ready!", category: "MODEL")
         } else {
@@ -491,7 +523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func startRecording() {
     // Check if model is loaded FIRST - this is critical
-    guard whisperEngine?.isModelLoaded == true else {
+    guard isActiveEngineLoaded else {
       debugPrint("⚠️ Model not loaded yet - cannot record", category: "RECORD")
 
       // Show user feedback
@@ -704,9 +736,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.transcription.info(
         "processTranscription: Starting with \(audioBuffer.count) samples")
 
-      // Transcribe audio
-      guard let result = try await whisperEngine?.transcribe(audioBuffer: audioBuffer) else {
-        throw TranscriptionError.transcriptionFailed("No result from Whisper engine")
+      // Transcribe audio using the appropriate engine
+      let selectedModel = SettingsManager.shared.selectedModel
+      let result: TranscriptionResult
+      if selectedModel.isGraniteModel {
+        guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer) else {
+          throw TranscriptionError.transcriptionFailed("No result from Granite engine")
+        }
+        result = graniteResult
+      } else {
+        guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer) else {
+          throw TranscriptionError.transcriptionFailed("No result from Whisper engine")
+        }
+        result = whisperResult
       }
 
       debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
@@ -818,9 +860,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // Preload the model after download
       self?.appState.modelStatus = .loading
       Task { [weak self] in
-        await self?.whisperEngine?.preloadModel()
+        let selectedModel = SettingsManager.shared.selectedModel
+        if selectedModel.isGraniteModel {
+          await self?.graniteEngine?.preloadModel()
+        } else {
+          await self?.whisperEngine?.preloadModel()
+        }
         await MainActor.run { [weak self] in
-          if self?.whisperEngine?.isModelLoaded == true {
+          if self?.isActiveEngineLoaded == true {
             self?.appState.modelStatus = .ready
           } else {
             self?.appState.modelStatus = .failed("Failed to load model")

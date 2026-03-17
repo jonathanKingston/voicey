@@ -3,9 +3,12 @@ import Foundation
 import WhisperKit
 import os
 
-/// Available Whisper model variants
-enum WhisperModel: String, CaseIterable, Identifiable {
-  // Note: WhisperKit uses underscores for turbo variants (large-v3_turbo, not large-v3-turbo)
+/// Available speech model variants
+enum SpeechModel: String, CaseIterable, Identifiable {
+  // Granite Speech models (IBM)
+  case graniteSpeech = "granite-4.0-1b-speech"
+
+  // Whisper models - WhisperKit uses underscores for turbo variants (large-v3_turbo, not large-v3-turbo)
   // Multilingual models (support 99+ languages)
   case largeTurbo = "large-v3_turbo"
   case large = "large-v3"
@@ -20,8 +23,22 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
   var id: String { rawValue }
 
+  /// Whether this model uses the Granite Speech engine (vs WhisperKit)
+  var isGraniteModel: Bool {
+    switch self {
+    case .graniteSpeech: return true
+    default: return false
+    }
+  }
+
+  /// Whether this model uses WhisperKit for inference
+  var isWhisperModel: Bool {
+    !isGraniteModel
+  }
+
   var displayName: String {
     switch self {
+    case .graniteSpeech: return "Granite 4.0 1B Speech"
     case .largeTurbo: return "Large v3 Turbo"
     case .large: return "Large v3"
     case .distilLarge: return "Distil Large v3"
@@ -36,6 +53,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
   var description: String {
     switch self {
+    case .graniteSpeech: return "#1 on OpenASR leaderboard, multilingual, ~1GB (requires Python + mlx-audio)"
     case .largeTurbo: return "Fast & accurate, 8x faster than Large (~1.5GB)"
     case .large: return "Maximum accuracy, slower (~3GB)"
     case .distilLarge: return "Distilled model, fast & accurate (~800MB)"
@@ -49,7 +67,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
   }
 
   var isRecommended: Bool {
-    self == .largeTurbo
+    self == .graniteSpeech
   }
 
   /// Whether this model only supports English
@@ -70,6 +88,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
   var diskSize: Int64 {
     switch self {
+    case .graniteSpeech: return 1_000_000_000
     case .largeTurbo: return 1_500_000_000
     case .large: return 3_000_000_000
     case .distilLarge: return 800_000_000
@@ -81,6 +100,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
   var memoryUsage: Int64 {
     switch self {
+    case .graniteSpeech: return 2_000_000_000
     case .largeTurbo: return 3_000_000_000
     case .large: return 6_000_000_000
     case .distilLarge: return 2_000_000_000
@@ -90,9 +110,18 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     }
   }
 
-  /// WhisperKit model repository identifier (how WhisperKit names folders)
-  var whisperKitModelId: String {
+  /// HuggingFace model identifier for Granite models
+  var huggingFaceModelId: String? {
     switch self {
+    case .graniteSpeech: return "ibm-granite/granite-4.0-1b-speech"
+    default: return nil
+    }
+  }
+
+  /// WhisperKit model repository identifier (how WhisperKit names folders)
+  var whisperKitModelId: String? {
+    switch self {
+    case .graniteSpeech: return nil
     case .largeTurbo: return "openai_whisper-large-v3_turbo"
     case .large: return "openai_whisper-large-v3"
     case .distilLarge: return "distil-whisper_distil-large-v3"
@@ -106,29 +135,32 @@ enum WhisperModel: String, CaseIterable, Identifiable {
   }
 }
 
-/// Callback for when a background model upgrade completes
-typealias ModelUpgradeCallback = (WhisperModel) -> Void
+/// Backward compatibility alias
+typealias WhisperModel = SpeechModel
 
-/// Manages downloading, storing, and selecting Whisper models via WhisperKit
+/// Callback for when a background model upgrade completes
+typealias ModelUpgradeCallback = (SpeechModel) -> Void
+
+/// Manages downloading, storing, and selecting speech models
 final class ModelManager: ObservableObject {
   static let shared = ModelManager()
 
-  @Published var downloadProgress: [WhisperModel: Double] = [:]
-  @Published var downloadedModels: Set<WhisperModel> = []
-  @Published var isDownloading: [WhisperModel: Bool] = [:]
+  @Published var downloadProgress: [SpeechModel: Double] = [:]
+  @Published var downloadedModels: Set<SpeechModel> = []
+  @Published var isDownloading: [SpeechModel: Bool] = [:]
   @Published var downloadError: String?
 
   /// Whether a model is currently being prewarmed (loaded into memory)
-  @Published var isPrewarming: [WhisperModel: Bool] = [:]
+  @Published var isPrewarming: [SpeechModel: Bool] = [:]
 
   /// Model that's ready for background upgrade (downloaded and prewarmed)
-  @Published var pendingUpgradeModel: WhisperModel?
+  @Published var pendingUpgradeModel: SpeechModel?
 
   /// Callback when a background model upgrade is ready
   var onUpgradeReady: ModelUpgradeCallback?
 
   private let fileManager = FileManager.default
-  private var downloadTasks: [WhisperModel: Task<Void, Never>] = [:]
+  private var downloadTasks: [SpeechModel: Task<Void, Never>] = [:]
 
   private init() {
     loadDownloadedModels()
@@ -137,13 +169,16 @@ final class ModelManager: ObservableObject {
   // MARK: - Model Hierarchy
 
   /// The fast model for English users
-  static let fastModelEnglish = WhisperModel.baseEn
+  static let fastModelEnglish = SpeechModel.baseEn
 
   /// The fast model for non-English users (multilingual)
-  static let fastModelMultilingual = WhisperModel.base
+  static let fastModelMultilingual = SpeechModel.base
 
-  /// The quality model used for better accuracy (multilingual)
-  static let qualityModel = WhisperModel.largeTurbo
+  /// The default/recommended model - Granite Speech
+  static let defaultModel = SpeechModel.graniteSpeech
+
+  /// The quality model used for better accuracy (multilingual) - Whisper fallback
+  static let qualityModel = SpeechModel.largeTurbo
 
   /// Returns the appropriate fast model based on the user's system language
   /// - English users get the English-optimized model (slightly better for English)
@@ -172,7 +207,9 @@ final class ModelManager: ObservableObject {
 
   /// Check if a model has likely been compiled by CoreML before (fast to load)
   /// CoreML caches compiled models, so subsequent loads are much faster
-  func isLikelyCompiled(_ model: WhisperModel) -> Bool {
+  /// Granite models are always considered "compiled" since they don't use CoreML
+  func isLikelyCompiled(_ model: SpeechModel) -> Bool {
+    if model.isGraniteModel { return true }
     // Check for CoreML cache - this is where device-specific optimizations are stored
     // The cache location varies but we can check for common indicators
 
@@ -210,19 +247,42 @@ final class ModelManager: ObservableObject {
     return voiceyDir
   }
 
-  /// Returns the path to a model if it exists and is complete, checking WhisperKit's nested directory structure
-  func modelPath(for model: WhisperModel) -> String? {
+  /// Returns the path to a model if it exists and is complete
+  func modelPath(for model: SpeechModel) -> String? {
+    if model.isGraniteModel {
+      return graniteModelPath(for: model)
+    }
+
     // WhisperKit stores models in: models/argmaxinc/whisperkit-coreml/{model_id}/
+    guard let whisperKitId = model.whisperKitModelId else { return nil }
     let whisperKitPath =
       modelsDirectory
       .appendingPathComponent("models/argmaxinc/whisperkit-coreml")
-      .appendingPathComponent(model.whisperKitModelId)
+      .appendingPathComponent(whisperKitId)
 
     if isModelComplete(at: whisperKitPath) {
       return whisperKitPath.path
     }
 
     return nil
+  }
+
+  /// Returns the path for a Granite model if it has been downloaded
+  private func graniteModelPath(for model: SpeechModel) -> String? {
+    guard let hfId = model.huggingFaceModelId else { return nil }
+    let granitePath = modelsDirectory.appendingPathComponent("granite").appendingPathComponent(hfId)
+    // Check for a marker file that indicates successful download
+    let markerPath = granitePath.appendingPathComponent(".download_complete")
+    if fileManager.fileExists(atPath: markerPath.path) {
+      return granitePath.path
+    }
+    return nil
+  }
+
+  /// Directory for Granite model storage
+  func graniteModelDirectory(for model: SpeechModel) -> URL? {
+    guard let hfId = model.huggingFaceModelId else { return nil }
+    return modelsDirectory.appendingPathComponent("granite").appendingPathComponent(hfId)
   }
 
   /// Validates that a model directory has all required files for WhisperKit to load
@@ -280,7 +340,7 @@ final class ModelManager: ObservableObject {
   func loadDownloadedModels() {
     downloadedModels.removeAll()
 
-    for model in WhisperModel.allCases {
+    for model in SpeechModel.allCases {
       if modelPath(for: model) != nil {
         downloadedModels.insert(model)
       }
@@ -310,8 +370,13 @@ final class ModelManager: ObservableObject {
 
   // MARK: - Download
 
-  func downloadModel(_ model: WhisperModel) {
+  func downloadModel(_ model: SpeechModel) {
     guard !isDownloading[model, default: false] else { return }
+
+    if model.isGraniteModel {
+      downloadGraniteModel(model)
+      return
+    }
 
     isDownloading[model] = true
     downloadProgress[model] = 0
@@ -360,6 +425,103 @@ final class ModelManager: ObservableObject {
         if !Task.isCancelled {
           let errorMessage = Self.classifyDownloadError(error)
           AppLogger.model.error("Model download failed: \(errorMessage) (underlying: \(error))")
+          downloadError = errorMessage
+          NotificationManager.shared.showModelDownloadFailed(reason: errorMessage)
+        }
+        isDownloading[model] = false
+        downloadProgress[model] = 0
+        downloadTasks[model] = nil
+      }
+    }
+
+    downloadTasks[model] = task
+  }
+
+  /// Download a Granite model using huggingface-cli or Python
+  private func downloadGraniteModel(_ model: SpeechModel) {
+    guard let hfId = model.huggingFaceModelId else { return }
+
+    isDownloading[model] = true
+    downloadProgress[model] = 0
+    downloadError = nil
+
+    AppLogger.model.info("Starting Granite model download: \(model.displayName)")
+
+    let task = Task { @MainActor in
+      do {
+        guard let modelDir = graniteModelDirectory(for: model) else {
+          throw ModelDownloadError.verificationFailed
+        }
+
+        // Create directory
+        try? fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
+
+        // Use Python to download the model via huggingface_hub
+        let downloadScript = """
+          import sys
+          try:
+              from huggingface_hub import snapshot_download
+              path = snapshot_download(
+                  repo_id="\(hfId)",
+                  local_dir="\(modelDir.path)",
+                  local_dir_use_symlinks=False
+              )
+              # Write marker file
+              with open(path + "/.download_complete", "w") as f:
+                  f.write("ok")
+              print("SUCCESS:" + path)
+          except Exception as e:
+              print("ERROR:" + str(e), file=sys.stderr)
+              sys.exit(1)
+          """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", downloadScript]
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+
+        // Monitor in background
+        let modelRef = model
+        let managerRef = self
+
+        Task.detached {
+          process.waitUntilExit()
+
+          let exitCode = process.terminationStatus
+          let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+          let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+
+          await MainActor.run {
+            if exitCode == 0 && managerRef.modelPath(for: modelRef) != nil {
+              AppLogger.model.info("Granite model \(modelRef.displayName) downloaded successfully")
+              managerRef.loadDownloadedModels()
+              managerRef.downloadProgress[modelRef] = 1.0
+              managerRef.isDownloading[modelRef] = false
+              managerRef.downloadTasks[modelRef] = nil
+              NotificationManager.shared.showModelDownloadComplete(model: modelRef)
+            } else {
+              let errorMessage = errorOutput.isEmpty
+                ? "Failed to download Granite model. Ensure Python 3 and huggingface_hub are installed (pip3 install huggingface_hub)."
+                : errorOutput
+              AppLogger.model.error("Granite model download failed: \(errorMessage)")
+              managerRef.downloadError = errorMessage
+              managerRef.isDownloading[modelRef] = false
+              managerRef.downloadProgress[modelRef] = 0
+              managerRef.downloadTasks[modelRef] = nil
+              NotificationManager.shared.showModelDownloadFailed(reason: errorMessage)
+            }
+          }
+        }
+      } catch {
+        if !Task.isCancelled {
+          let errorMessage = "Failed to start download: \(error.localizedDescription)"
+          AppLogger.model.error("Granite model download failed: \(errorMessage)")
           downloadError = errorMessage
           NotificationManager.shared.showModelDownloadFailed(reason: errorMessage)
         }
@@ -441,16 +603,27 @@ final class ModelManager: ObservableObject {
   }
 
   /// Removes any incomplete/corrupted model files to allow a fresh download
-  func cleanupIncompleteDownload(_ model: WhisperModel) {
+  func cleanupIncompleteDownload(_ model: SpeechModel) {
+    if model.isGraniteModel {
+      // For Granite models, just remove the directory if marker is missing
+      if let dir = graniteModelDirectory(for: model),
+         fileManager.fileExists(atPath: dir.path),
+         !fileManager.fileExists(atPath: dir.appendingPathComponent(".download_complete").path) {
+        try? fileManager.removeItem(at: dir)
+      }
+      return
+    }
+
+    guard let whisperKitId = model.whisperKitModelId else { return }
     let whisperKitPath =
       modelsDirectory
       .appendingPathComponent("models/argmaxinc/whisperkit-coreml")
-      .appendingPathComponent(model.whisperKitModelId)
+      .appendingPathComponent(whisperKitId)
 
     let cachePath =
       modelsDirectory
       .appendingPathComponent("models/argmaxinc/whisperkit-coreml/.cache/huggingface/download")
-      .appendingPathComponent(model.whisperKitModelId)
+      .appendingPathComponent(whisperKitId)
 
     // Only cleanup if the model exists but is incomplete
     if fileManager.fileExists(atPath: whisperKitPath.path) && !isModelComplete(at: whisperKitPath) {
@@ -475,19 +648,30 @@ final class ModelManager: ObservableObject {
 
   // MARK: - Delete
 
-  func deleteModel(_ model: WhisperModel) throws {
+  func deleteModel(_ model: SpeechModel) throws {
+    if model.isGraniteModel {
+      if let dir = graniteModelDirectory(for: model),
+         fileManager.fileExists(atPath: dir.path) {
+        try fileManager.removeItem(at: dir)
+      }
+      downloadedModels.remove(model)
+      downloadProgress[model] = 0
+      return
+    }
+
     // Delete from WhisperKit's nested path
+    guard let whisperKitId = model.whisperKitModelId else { return }
     let whisperKitPath =
       modelsDirectory
       .appendingPathComponent("models/argmaxinc/whisperkit-coreml")
-      .appendingPathComponent(model.whisperKitModelId)
+      .appendingPathComponent(whisperKitId)
 
     if fileManager.fileExists(atPath: whisperKitPath.path) {
       try fileManager.removeItem(at: whisperKitPath)
     }
 
     // Also try direct path
-    let directPath = modelsDirectory.appendingPathComponent(model.whisperKitModelId)
+    let directPath = modelsDirectory.appendingPathComponent(whisperKitId)
     if fileManager.fileExists(atPath: directPath.path) {
       try fileManager.removeItem(at: directPath)
     }

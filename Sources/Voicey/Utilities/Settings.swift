@@ -23,8 +23,8 @@ final class SettingsManager: SettingsProviding {
 
   private func registerDefaults() {
     defaults.register(defaults: [
-      // Default to locale-appropriate fast model - onboarding will upgrade to quality model in background
-      Keys.selectedModel: ModelManager.fastModel.rawValue,
+      // Default to Granite Speech model - the recommended model
+      Keys.selectedModel: ModelManager.defaultModel.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
       Keys.autoPasteEnabled: false,  // Disabled by default - advanced feature requiring Accessibility
@@ -51,10 +51,10 @@ final class SettingsManager: SettingsProviding {
 
   // MARK: - Model
 
-  var selectedModel: WhisperModel {
+  var selectedModel: SpeechModel {
     get {
       let storedValue = defaults.string(forKey: Keys.selectedModel) ?? ""
-      return WhisperModel(rawValue: storedValue) ?? .largeTurbo
+      return SpeechModel(rawValue: storedValue) ?? .graniteSpeech
     }
     set {
       defaults.set(newValue.rawValue, forKey: Keys.selectedModel)

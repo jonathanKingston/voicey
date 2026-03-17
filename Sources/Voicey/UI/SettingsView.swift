@@ -80,15 +80,23 @@ struct SetupSettingsView: View {
 
   @ObservedObject private var modelManager = ModelManager.shared
 
-  /// The fast model to download first for quick startup (language-aware)
-  private var fastModel: WhisperModel { ModelManager.fastModel }
+  /// The recommended model to download first (Granite Speech)
+  private let defaultModel = ModelManager.defaultModel
 
-  /// The high-quality model to download in background
+  /// The fast Whisper model for quick startup (language-aware) - fallback
+  private var fastModel: SpeechModel { ModelManager.fastModel }
+
+  /// The high-quality Whisper model to download in background
   private let qualityModel = ModelManager.qualityModel
 
   /// Whether all required setup is complete
   private var isSetupComplete: Bool {
     microphoneGranted && modelManager.hasDownloadedModel
+  }
+
+  /// Whether default model is currently downloading
+  private var isDefaultModelDownloading: Bool {
+    modelManager.isDownloading[defaultModel] == true
   }
 
   /// Whether fast model is currently downloading
@@ -101,6 +109,11 @@ struct SetupSettingsView: View {
     modelManager.isDownloading[qualityModel] == true
   }
 
+  /// Whether default model is ready
+  private var isDefaultModelReady: Bool {
+    modelManager.isDownloaded(defaultModel)
+  }
+
   /// Whether fast model is ready
   private var isFastModelReady: Bool {
     modelManager.hasDownloadedModel || modelManager.isDownloaded(fastModel)
@@ -109,6 +122,11 @@ struct SetupSettingsView: View {
   /// Whether quality model is ready
   private var isQualityModelReady: Bool {
     modelManager.isDownloaded(qualityModel)
+  }
+
+  /// Download progress for default model (0-1)
+  private var defaultDownloadProgress: Double {
+    modelManager.downloadProgress[defaultModel] ?? 0
   }
 
   /// Download progress for fast model (0-1)
@@ -146,21 +164,21 @@ struct SetupSettingsView: View {
 
       // Setup steps
       VStack(spacing: 10) {
-        // Step 1: Model Download
+        // Step 1: Default Model Download (Granite Speech)
         SetupStepRow(
           stepNumber: 1,
-          icon: "cpu",
+          icon: "waveform",
           title: L10n.Setup.downloadModel,
-          description: L10n.Setup.downloadModelDesc(fastModel.displayName),
-          isComplete: isFastModelReady,
-          isInProgress: isFastModelDownloading,
-          progress: fastDownloadProgress,
-          buttonTitle: isFastModelReady
-            ? L10n.Setup.ready : (isFastModelDownloading ? L10n.Setup.downloading : L10n.Setup.download),
-          action: startFastModelDownload
+          description: L10n.Setup.downloadModelDesc(defaultModel.displayName),
+          isComplete: isDefaultModelReady,
+          isInProgress: isDefaultModelDownloading,
+          progress: defaultDownloadProgress,
+          buttonTitle: isDefaultModelReady
+            ? L10n.Setup.ready : (isDefaultModelDownloading ? L10n.Setup.downloading : L10n.Setup.download),
+          action: startDefaultModelDownload
         )
 
-        // Step 1b: Quality Model Download (optional upgrade)
+        // Step 1b: Quality Whisper Model Download (optional fallback)
         SetupStepRow(
           stepNumber: 0,
           icon: "sparkles",
@@ -173,11 +191,11 @@ struct SetupSettingsView: View {
           buttonTitle: isQualityModelReady
             ? L10n.Setup.ready
             : (isQualityModelDownloading
-              ? L10n.Setup.downloading : (isFastModelReady ? L10n.Setup.download : L10n.Setup.afterFastModel)),
+              ? L10n.Setup.downloading : (isDefaultModelReady ? L10n.Setup.download : L10n.Setup.afterFastModel)),
           action: startQualityModelDownload
         )
-        .disabled(!isFastModelReady && !isQualityModelDownloading)
-        .opacity(isFastModelReady || isQualityModelDownloading || isQualityModelReady ? 1.0 : 0.6)
+        .disabled(!isDefaultModelReady && !isQualityModelDownloading)
+        .opacity(isDefaultModelReady || isQualityModelDownloading || isQualityModelReady ? 1.0 : 0.6)
 
         // Step 2: Microphone
         SetupStepRow(
@@ -224,11 +242,11 @@ struct SetupSettingsView: View {
           .foregroundStyle(.green)
         } else {
           HStack(spacing: 8) {
-            if isFastModelDownloading {
+            if isDefaultModelDownloading {
               ProgressView()
                 .scaleEffect(0.7)
-              Text(L10n.Setup.downloadingProgress(Int(fastDownloadProgress * 100)))
-            } else if !isFastModelReady {
+              Text(L10n.Setup.downloadingProgress(Int(defaultDownloadProgress * 100)))
+            } else if !modelManager.hasDownloadedModel {
               Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
               Text(L10n.Setup.modelDownloadRequired)
@@ -241,8 +259,8 @@ struct SetupSettingsView: View {
           .font(.caption)
           .foregroundStyle(.secondary)
 
-          if isFastModelDownloading {
-            ProgressView(value: fastDownloadProgress)
+          if isDefaultModelDownloading {
+            ProgressView(value: defaultDownloadProgress)
               .progressViewStyle(.linear)
               .padding(.horizontal, 30)
           }
@@ -261,6 +279,16 @@ struct SetupSettingsView: View {
       microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
       launchAtLoginEnabled = SettingsManager.shared.launchAtLogin
     }
+  }
+
+  private func startDefaultModelDownload() {
+    guard !modelManager.isDownloaded(defaultModel),
+      modelManager.isDownloading[defaultModel] != true
+    else {
+      return
+    }
+
+    modelManager.downloadModel(defaultModel)
   }
 
   private func startFastModelDownload() {
@@ -454,13 +482,13 @@ struct AudioSettingsView: View {
 struct ModelSettingsView: View {
   @ObservedObject var modelManager = ModelManager.shared
   private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
-  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = WhisperModel.baseEn.rawValue
+  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = SpeechModel.graniteSpeech.rawValue
 
   var body: some View {
     Form {
       Section(L10n.Model.selectedModel) {
         Picker(L10n.Model.modelLabel, selection: $selectedModel) {
-          ForEach(WhisperModel.allCases) { model in
+          ForEach(SpeechModel.allCases) { model in
             HStack {
               Text(model.displayName)
               if modelManager.isDownloaded(model) {
@@ -473,7 +501,7 @@ struct ModelSettingsView: View {
         }
         .pickerStyle(.menu)
 
-        if let model = WhisperModel(rawValue: selectedModel) {
+        if let model = SpeechModel(rawValue: selectedModel) {
           Text(model.description)
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -481,7 +509,7 @@ struct ModelSettingsView: View {
       }
 
       Section(L10n.Model.availableModels) {
-        ForEach(WhisperModel.allCases) { model in
+        ForEach(SpeechModel.allCases) { model in
           ModelRowView(model: model)
         }
       }
@@ -498,7 +526,7 @@ struct ModelSettingsView: View {
 }
 
 struct ModelRowView: View {
-  let model: WhisperModel
+  let model: SpeechModel
   @ObservedObject var modelManager = ModelManager.shared
   @State private var deleteError: String?
   @State private var showDeleteError = false
@@ -861,7 +889,7 @@ struct AdvancedSettingsView: View {
     var errors: [String] = []
 
     // Delete all models
-    for model in WhisperModel.allCases {
+    for model in SpeechModel.allCases {
       do {
         try ModelManager.shared.deleteModel(model)
       } catch {

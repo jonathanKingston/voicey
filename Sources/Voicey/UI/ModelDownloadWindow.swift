@@ -34,9 +34,9 @@ struct ModelDownloadView: View {
       // Model list
       ScrollView {
         VStack(spacing: 0) {
-          ForEach(WhisperModel.allCases) { model in
+          ForEach(SpeechModel.allCases) { model in
             ModelDownloadRow(model: model)
-            if model != WhisperModel.allCases.last {
+            if model != SpeechModel.allCases.last {
               Divider()
                 .padding(.leading, 60)
             }
@@ -74,7 +74,7 @@ struct ModelDownloadView: View {
 }
 
 struct ModelDownloadRow: View {
-  let model: WhisperModel
+  let model: SpeechModel
   @ObservedObject var modelManager = ModelManager.shared
   @State private var deleteError: String?
   @State private var showDeleteError = false
@@ -188,6 +188,7 @@ struct ModelDownloadRow: View {
 
   private var iconName: String {
     switch model {
+    case .graniteSpeech: return "waveform"
     case .largeTurbo: return "bolt.fill"
     case .large: return "star.fill"
     case .distilLarge: return "brain.head.profile"

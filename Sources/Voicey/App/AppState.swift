@@ -112,7 +112,7 @@ enum ModelStatus: Equatable {
 final class AppState: ObservableObject {
   @Published var transcriptionState: TranscriptionState = .idle
   @Published var audioLevel: Float = 0.0
-  @Published var currentModel: WhisperModel = SettingsManager.shared.selectedModel
+  @Published var currentModel: SpeechModel = SettingsManager.shared.selectedModel
   @Published var lastTranscription: String = ""
 
   /// Model loading status - for startup warmup indication

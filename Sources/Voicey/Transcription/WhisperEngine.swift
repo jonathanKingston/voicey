@@ -132,6 +132,8 @@ final class WhisperEngine {
     guard !isLoading && whisperKit == nil else { return }
 
     var modelToLoad = SettingsManager.shared.selectedModel
+    // Skip if a Granite model is selected - that uses a different engine
+    guard modelToLoad.isWhisperModel else { return }
     debugPrint("🎯 Selected model: \(modelToLoad.rawValue)", category: "MODEL")
     debugPrint(
       "📋 Downloaded models: \(ModelManager.shared.downloadedModels.map { $0.rawValue })",
@@ -175,12 +177,12 @@ final class WhisperEngine {
 
   /// Select the best available model from downloaded models
   /// Prefers already-compiled models, then smaller/faster models for quick startup
-  private static func selectBestAvailableModel(from models: Set<WhisperModel>) -> WhisperModel? {
+  private static func selectBestAvailableModel(from models: Set<SpeechModel>) -> SpeechModel? {
     guard !models.isEmpty else { return nil }
 
     // First, check if any model is already compiled (will load fast)
     // Prefer quality model if it's already compiled
-    let qualityFirst: [WhisperModel] = [.largeTurbo, .large, .distilLarge, .small, .base, .tiny]
+    let qualityFirst: [SpeechModel] = [.largeTurbo, .large, .distilLarge, .small, .base, .tiny]
     for model in qualityFirst {
       if models.contains(model) && ModelManager.shared.isLikelyCompiled(model) {
         debugPrint("🚀 Found already-compiled model: \(model.rawValue)", category: "MODEL")
@@ -190,7 +192,7 @@ final class WhisperEngine {
 
     // No compiled models found - prefer smaller/faster models for quick first-time compilation
     // Quality model (largeTurbo) will be loaded in background and swapped in later
-    let smallFirst: [WhisperModel] = [.tiny, .base, .small, .distilLarge, .large, .largeTurbo]
+    let smallFirst: [SpeechModel] = [.tiny, .base, .small, .distilLarge, .large, .largeTurbo]
     for model in smallFirst {
       if models.contains(model) {
         debugPrint("📦 No compiled models found, using fastest to compile: \(model.rawValue)", category: "MODEL")
@@ -233,7 +235,7 @@ final class WhisperEngine {
     loadedModelVariant = nil
 
     // Find the selected model enum to get its actual path
-    guard let selectedModel = WhisperModel(rawValue: variant) else {
+    guard let selectedModel = SpeechModel(rawValue: variant) else {
       AppLogger.model.error("WhisperEngine: Unknown model variant '\(variant)'")
       throw WhisperError.failedToLoadModel
     }
