@@ -82,7 +82,7 @@ final class AudioCaptureManager {
     }
   }
 
-  func stopCapture() -> [Float]? {
+  func stopCapture(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
     // Stop the tap first to prevent more data from being queued
     inputNode?.removeTap(onBus: 0)
     audioEngine?.stop()
@@ -95,7 +95,7 @@ final class AudioCaptureManager {
       audioBuffer = []  // Clear for next capture
     }
 
-    if let capturedAudio = result {
+    if applyTrailingTrimHeuristic, let capturedAudio = result {
       result = trimTrailingLowEnergyAudio(capturedAudio)
     }
 

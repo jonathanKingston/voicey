@@ -786,7 +786,6 @@ struct AdvancedSettingsView: View {
 
   var body: some View {
     Form {
-      #if VOICEY_DIRECT_DISTRIBUTION
       Section(L10n.Advanced.autoInsert) {
         Toggle(L10n.Advanced.autoInsertToggle, isOn: $autoPasteEnabled)
           .onChange(of: autoPasteEnabled) { enabled in
@@ -834,7 +833,6 @@ struct AdvancedSettingsView: View {
           }
         }
       }
-      #endif
 
       Section(L10n.Advanced.debugging) {
         Toggle(L10n.Advanced.enableDetailedLogging, isOn: $enableDetailedLogging)

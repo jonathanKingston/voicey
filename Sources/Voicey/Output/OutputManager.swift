@@ -46,8 +46,7 @@ final class OutputManager {
       AppLogger.output.error("Deliver: Clipboard is empty after copy!")
     }
 
-    // Optional auto-paste (requires Accessibility - only available in direct distribution)
-    #if VOICEY_DIRECT_DISTRIBUTION
+    // Optional auto-paste (requires Accessibility)
     if settings.autoPasteEnabled {
       guard permissions.checkAccessibilityPermission() else {
         AppLogger.output.error("Auto-paste enabled but Accessibility permission is not granted")
@@ -89,7 +88,6 @@ final class OutputManager {
       }
       return
     }
-    #endif
 
     // Show notification that text is ready to paste
     notifications.showTranscriptionCopied()

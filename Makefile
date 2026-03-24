@@ -265,8 +265,12 @@ test-sparkle-linking:
 	@echo ""
 	@echo "🎉 All Sparkle linking tests passed!"
 
-# Run debug build
-run: build
+# Run debug build with direct-distribution flags (Sparkle-enabled default)
+run: build-direct
+	$(BUILD_DIR)/debug/$(APP_NAME)
+
+# Run debug build without direct-distribution flags
+run-appstore: build
 	$(BUILD_DIR)/debug/$(APP_NAME)
 
 # Run as an app bundle (recommended for testing permissions like Accessibility)

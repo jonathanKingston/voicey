@@ -743,8 +743,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     appState.transcriptionState = .processing
 
+    // Granite does better without additional end-of-audio trimming.
+    let selectedModel = SettingsManager.shared.selectedModel
+    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
+
     // Stop audio capture and get buffer
-    guard let audioBuffer = audioCaptureManager?.stopCapture() else {
+    guard let audioBuffer = audioCaptureManager?.stopCapture(
+      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic) else {
       debugPrint("❌ No audio buffer!", category: "ERROR")
       AppLogger.audio.error("No audio buffer!")
       hideOverlay()

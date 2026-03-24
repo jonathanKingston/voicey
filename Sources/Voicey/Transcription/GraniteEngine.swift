@@ -19,6 +19,11 @@ final class GraniteEngine {
   private let maxRTFHistory = 5
   private var dependenciesReady = false
   private let worker = GranitePythonWorker()
+  // Conservative low-audio conditioning: only act on near-silence/very quiet input.
+  private let lowAudioRMSFloor: Float = 0.0008
+  private let lowAudioBoostThresholdRMS: Float = 0.012
+  private let targetInputRMS: Float = 0.03
+  private let maxInputGain: Float = 4.0
 
   /// Average RTF over recent transcriptions
   var averageRTF: Double {
@@ -122,6 +127,40 @@ final class GraniteEngine {
       throw GraniteError.invalidModel
     }
 
+    // Calculate audio duration (16kHz sample rate)
+    let audioDuration = Double(audioBuffer.count) / 16000.0
+    let thermalStateBefore = ProcessInfo.processInfo.thermalState
+
+    // Granite is more hallucination-prone on very low-level inputs. For quiet
+    // speech we normalize up to a bounded RMS target; near-silence returns empty.
+    let (conditionedAudio, inputRMS, appliedGain) = conditionAudioForInference(audioBuffer)
+    if conditionedAudio.isEmpty {
+      AppLogger.transcription.info(
+        "GraniteEngine: Input RMS \(String(format: "%.5f", inputRMS)) below floor; returning empty transcription to avoid low-audio hallucination"
+      )
+
+      let metrics = PerformanceMetrics(
+        realTimeFactor: 0,
+        audioDuration: audioDuration,
+        processingTime: 0,
+        thermalState: thermalStateBefore
+      )
+
+      return TranscriptionResult(
+        text: "",
+        segments: [],
+        language: "en",
+        processingTime: 0,
+        performanceMetrics: metrics
+      )
+    }
+
+    if appliedGain > 1 {
+      AppLogger.transcription.info(
+        "GraniteEngine: Boosted low-level input by \(String(format: "%.2f", appliedGain))x (RMS \(String(format: "%.5f", inputRMS)) -> \(String(format: "%.5f", inputRMS * appliedGain)))"
+      )
+    }
+
     // Always use the locally downloaded model path.
     guard let localModelPath = modelPath ?? ModelManager.shared.modelPath(for: selectedModel) else {
       throw GraniteError.modelNotDownloaded
@@ -130,12 +169,8 @@ final class GraniteEngine {
     // Ensure worker is available (it may have been terminated externally).
     try await worker.start(modelPath: localModelPath, environment: pythonEnvironment())
 
-    // Calculate audio duration (16kHz sample rate)
-    let audioDuration = Double(audioBuffer.count) / 16000.0
-    let thermalStateBefore = ProcessInfo.processInfo.thermalState
-
     AppLogger.transcription.info(
-      "GraniteEngine: Starting transcription of \(audioBuffer.count) samples (~\(String(format: "%.1f", audioDuration))s)"
+      "GraniteEngine: Starting transcription of \(conditionedAudio.count) samples (~\(String(format: "%.1f", audioDuration))s)"
     )
 
     let startTime = CFAbsoluteTimeGetCurrent()
@@ -144,7 +179,7 @@ final class GraniteEngine {
     let tempDir = FileManager.default.temporaryDirectory
     let audioFile = tempDir.appendingPathComponent("voicey_audio_\(UUID().uuidString).raw")
 
-    let audioData = audioBuffer.withUnsafeBufferPointer { bufferPointer in
+    let audioData = conditionedAudio.withUnsafeBufferPointer { bufferPointer in
       Data(buffer: bufferPointer)
     }
     try audioData.write(to: audioFile)
@@ -194,6 +229,30 @@ final class GraniteEngine {
       processingTime: processingTime,
       performanceMetrics: metrics
     )
+  }
+
+  private func conditionAudioForInference(_ samples: [Float]) -> (samples: [Float], rms: Float, gain: Float) {
+    let rms = calculateRMS(samples)
+    guard rms > lowAudioRMSFloor else {
+      return ([], rms, 1)
+    }
+
+    guard rms < lowAudioBoostThresholdRMS else {
+      return (samples, rms, 1)
+    }
+
+    let gain = min(targetInputRMS / max(rms, Float.leastNonzeroMagnitude), maxInputGain)
+    let boosted = samples.map { min(max($0 * gain, -1), 1) }
+    return (boosted, rms, gain)
+  }
+
+  private func calculateRMS(_ samples: [Float]) -> Float {
+    guard !samples.isEmpty else { return 0 }
+    var sumSquares: Float = 0
+    for sample in samples {
+      sumSquares += sample * sample
+    }
+    return sqrt(sumSquares / Float(samples.count))
   }
 
   /// Reset performance tracking
