@@ -209,7 +209,7 @@ The `appcast.xml` file on `voicy.work` should follow this format:
       <pubDate>Mon, 20 Jan 2026 12:00:00 +0000</pubDate>
       <sparkle:version>1.2.3</sparkle:version>
       <sparkle:shortVersionString>1.2.3</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure 
         url="https://voicy.work/releases/Voicey-1.2.3.zip"
         length="12345678"
@@ -257,7 +257,7 @@ cat > /tmp/new-item.xml << EOF
       <pubDate>$PUB_DATE</pubDate>
       <sparkle:version>$VERSION</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure 
         url="$DOWNLOAD_URL"
         length="$SIZE"

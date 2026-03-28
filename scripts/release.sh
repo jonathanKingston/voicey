@@ -102,7 +102,7 @@ else
   cp -R "Voicey.app" "$DMG_STAGING_DIR/"
   ln -s "/Applications" "$DMG_STAGING_DIR/Applications"
 
-  # Use APFS for the DMG filesystem (minimum supported macOS is 13.0).
+  # Use APFS for the DMG filesystem (minimum supported macOS is 14.0).
   if ! hdiutil create -volname "Voicey" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO -fs APFS "$DMG_PATH"; then
     echo ""
     echo "❌ DMG creation failed."
@@ -208,7 +208,7 @@ new_item = f"""
       <pubDate>{pub_date}</pubDate>
       <sparkle:version>{version}</sparkle:version>
       <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
         url="{download_url}"
         length="{length}"

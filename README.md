@@ -17,7 +17,7 @@ A macOS menubar application that provides system-wide voice-to-text transcriptio
 
 ## Requirements
 
-- macOS 13.0 (Ventura) or later
+- macOS 14.0 (Sonoma) or later
 - Apple Silicon (M1+) required for WhisperKit CoreML acceleration
 - Microphone access permission
 - Network access (for downloading AI models on first launch)
