@@ -101,7 +101,9 @@ if [ "${SKIP_DMG:-}" = "1" ]; then
 else
   DMG_STAGING_DIR="$(mktemp -d -t voicey-dmg-staging)"
   trap 'rm -rf "$DMG_STAGING_DIR"' EXIT
-  cp -R "Voicey.app" "$DMG_STAGING_DIR/"
+  # Strip extended attributes when staging the app; notarized bundles can carry
+  # provenance/xattr metadata that causes hdiutil to fail while populating the image.
+  cp -R -X "Voicey.app" "$DMG_STAGING_DIR/"
   ln -s "/Applications" "$DMG_STAGING_DIR/Applications"
 
   # Use APFS for the DMG filesystem (minimum supported macOS is 14.0).
