@@ -5,45 +5,6 @@ enum NoiseFilter {
   /// Words/phrases that Whisper often outputs for non-speech sounds
   /// These should be filtered out as they're typically noise artifacts
   static let noiseWords: Set<String> = [
-    // Onomatopoeia for sounds
-    "bang", "click", "clicks", "clicking", "clack", "clunk",
-    "beep", "beeps", "beeping", "boop",
-    "thud", "thump", "thumping",
-    "tap", "taps", "tapping",
-    "knock", "knocks", "knocking",
-    "buzz", "buzzing", "hum", "humming",
-    "ring", "rings", "ringing", "ding", "dong",
-    "pop", "pops", "popping",
-    "crack", "crackle", "crackling",
-    "snap", "snaps", "snapping",
-    "whoosh", "swoosh", "swish",
-    "rustle", "rustling",
-    "scratch", "scratching",
-    "squeak", "squeaking", "creak", "creaking",
-    "slam", "slamming",
-    "crash", "crashing",
-    "bang", "banging",
-    "clatter", "clattering",
-    "rattle", "rattling",
-    "shuffle", "shuffling",
-    "footsteps", "footstep",
-
-    // Breathing/vocal sounds
-    "sigh", "sighs", "sighing",
-    "cough", "coughs", "coughing",
-    "sneeze", "sneezes", "sneezing",
-    "sniff", "sniffs", "sniffling",
-    "gasp", "gasps", "gasping",
-    "yawn", "yawns", "yawning",
-    "grunt", "grunts", "grunting",
-    "groan", "groans", "groaning",
-    "moan", "moans", "moaning",
-    "huff", "huffs", "huffing",
-    "puff", "puffs", "puffing",
-    "wheeze", "wheezes", "wheezing",
-    "inhale", "inhales", "exhale", "exhales",
-    "breath", "breathing",
-
     // Whisper artifacts for silence
     "...", "…"
   ]
