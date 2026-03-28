@@ -12,6 +12,19 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+
+RELEASE_ENV_FILE="$ROOT_DIR/.env.release"
+if [ -f "$RELEASE_ENV_FILE" ]; then
+  echo "🔐 Loading release environment from $RELEASE_ENV_FILE"
+  set -a
+  . "$RELEASE_ENV_FILE"
+  set +a
+fi
+
+PUSH_REMOTE="${PUSH_REMOTE_URL:-origin}"
+
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$CURRENT_BRANCH" != "main" ]; then
   echo "Error: Releases must be run from main (current: $CURRENT_BRANCH)"
@@ -135,8 +148,8 @@ else
 fi
 
 echo "⬆️ Pushing release commit and tag..."
-git push origin HEAD
-git push origin "$TAG"
+git push "$PUSH_REMOTE" HEAD
+git push "$PUSH_REMOTE" "$TAG"
 
 # Create GitHub release if it doesn't already exist
 if gh release view "$TAG" >/dev/null 2>&1; then

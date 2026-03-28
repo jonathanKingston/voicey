@@ -65,3 +65,9 @@ EventMonitor/monitor
 # Icon generation temporaries (source SVG and Resources/AppIcon.icns should be tracked)
 AppIcon.iconset/
 icon_1024.png
+
+# Local release credentials
+.env.release
+
+# Local tooling logs
+fast_mcp_server.log
