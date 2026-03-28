@@ -107,7 +107,7 @@ else
   ln -s "/Applications" "$DMG_STAGING_DIR/Applications"
 
   # Use APFS for the DMG filesystem (minimum supported macOS is 14.0).
-  if ! hdiutil create -volname "Voicey" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO -fs APFS "$DMG_PATH"; then
+  if ! hdiutil create -volname "Voicey Release" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO -fs APFS "$DMG_PATH"; then
     echo ""
     echo "❌ DMG creation failed."
     echo "   You can retry with DMG disabled:"
