@@ -44,22 +44,8 @@ enum NoiseFilter {
     "inhale", "inhales", "exhale", "exhales",
     "breath", "breathing",
 
-    // Music/ambient descriptions
-    "music", "music playing", "playing music",
-    "silence", "static", "noise",
-    "applause", "clapping", "cheering",
-    "laughter", "laughing", "chuckling",
-
     // Whisper artifacts for silence
-    "...", "…",
-    "[silence]", "[music]", "[noise]", "[applause]",
-    "(silence)", "(music)", "(noise)", "(applause)",
-    "*silence*", "*music*", "*noise*",
-    "[inaudible]", "(inaudible)", "*inaudible*",
-    "[unintelligible]", "(unintelligible)",
-    "[background noise]", "(background noise)",
-    "[typing]", "(typing)", "typing",
-    "[keyboard]", "(keyboard)", "keyboard sounds"
+    "...", "…"
   ]
 
   /// Patterns that indicate noise (regex patterns)
@@ -73,7 +59,8 @@ enum NoiseFilter {
 
   /// Keywords that indicate a bracketed annotation is noise
   static let noiseAnnotationKeywords = [
-    "music", "noise", "silence", "inaudible", "typing", "applause"
+    "music", "noise", "silence", "inaudible", "unintelligible", "typing",
+    "keyboard", "applause"
   ]
 
   /// Repeated trailing phrases often hallucinated by speech models near silence.
@@ -87,8 +74,7 @@ enum NoiseFilter {
   /// Check if a bracketed text looks like a noise annotation
   static func isNoiseAnnotation(_ text: String) -> Bool {
     let lowercased = text.lowercased()
-    return noiseWords.contains { lowercased.contains($0) }
-      || noiseAnnotationKeywords.contains { lowercased.contains($0) }
+    return noiseAnnotationKeywords.contains { lowercased.contains($0) }
   }
 
   /// Check if entire text matches a noise pattern
