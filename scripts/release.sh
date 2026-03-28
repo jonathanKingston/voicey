@@ -64,6 +64,7 @@ make bundle-direct
 # Sign (inside-out for Sparkle)
 echo "🔏 Signing..."
 SPARKLE_FW="Voicey.app/Contents/Frameworks/Sparkle.framework/Versions/B"
+CODESIGN_TARGET_METALLIB="Voicey.app/Contents/MacOS/mlx.metallib"
 CODESIGN="codesign --force --sign \"$DEVELOPER_ID\" --options runtime --timestamp"
 
 eval $CODESIGN "$SPARKLE_FW/XPCServices/Downloader.xpc"
@@ -71,6 +72,7 @@ eval $CODESIGN "$SPARKLE_FW/XPCServices/Installer.xpc"
 eval $CODESIGN "$SPARKLE_FW/Autoupdate"
 eval $CODESIGN "$SPARKLE_FW/Updater.app"
 eval $CODESIGN "Voicey.app/Contents/Frameworks/Sparkle.framework"
+eval $CODESIGN "$CODESIGN_TARGET_METALLIB"
 eval $CODESIGN --entitlements VoiceyDirect.entitlements Voicey.app
 
 echo "✅ Verifying signature..."

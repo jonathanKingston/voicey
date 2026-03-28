@@ -143,6 +143,7 @@ sign-appstore: bundle
 		exit 1; \
 	fi
 	@echo "Signing app for App Store..."
+	@codesign --force --sign "$(IDENTITY)" "$(APP_BUNDLE)/Contents/MacOS/mlx.metallib"
 	@codesign --force --deep \
 		--sign "$(IDENTITY)" \
 		--entitlements Voicey.entitlements \
@@ -182,6 +183,8 @@ sign-direct: bundle-direct
 	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)/Versions/B/Updater.app"
 	@# Sign the framework itself
 	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)"
+	@# Sign bundled Metal library
+	@codesign $(CODESIGN_OPTS) "$(APP_BUNDLE)/Contents/MacOS/mlx.metallib"
 	@echo "Signing main app..."
 	@codesign $(CODESIGN_OPTS) --entitlements VoiceyDirect.entitlements $(APP_BUNDLE)
 	@echo "App signed for direct distribution"
