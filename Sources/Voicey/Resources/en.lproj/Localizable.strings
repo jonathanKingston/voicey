@@ -153,7 +153,7 @@
 "advanced.updatesDeliveredFrom" = "Updates are delivered directly from voicy.work";
 
 /* Model Download Window */
-"download.whisperModels" = "Whisper Models";
+"download.whisperModels" = "Speech Models";
 "download.description" = "Download a speech recognition model to enable transcription.\nLarger models are more accurate but require more memory.";
 "download.done" = "Done";
 

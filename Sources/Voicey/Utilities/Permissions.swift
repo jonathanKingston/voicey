@@ -4,12 +4,8 @@ import Foundation
 import os
 
 /// Manages system permissions required by the app
-final class PermissionsManager: PermissionsProviding {
+final class PermissionsManager: PermissionsProviding, @unchecked Sendable {
   static let shared = PermissionsManager()
-
-  // Cache the key string to avoid multiple takeRetainedValue calls
-  private static let accessibilityPromptKey: String =
-    kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
 
   private init() {}
 
@@ -64,7 +60,7 @@ final class PermissionsManager: PermissionsProviding {
     }
 
     let options: [String: Any] = [
-      Self.accessibilityPromptKey: true
+      "AXTrustedCheckOptionPrompt": true
     ]
 
     _ = AXIsProcessTrustedWithOptions(options as CFDictionary)

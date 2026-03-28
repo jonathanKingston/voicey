@@ -3,8 +3,9 @@ import Foundation
 // MARK: - Service Protocols
 
 /// Protocol for settings management
-protocol SettingsProviding {
+protocol SettingsProviding: AnyObject {
   var selectedModel: SpeechModel { get set }
+  var lastSeenDefaultModel: String? { get set }
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
   var autoPasteEnabled: Bool { get set }
@@ -60,7 +61,7 @@ protocol NotificationProviding {
 
 /// Container for all injectable dependencies
 /// Use `Dependencies.shared` for production, or create custom instances for testing
-final class Dependencies {
+final class Dependencies: @unchecked Sendable {
   static let shared = Dependencies()
 
   let settings: SettingsProviding

@@ -153,7 +153,7 @@
 "advanced.updatesDeliveredFrom" = "アップデートはvoicy.workから直接配信されます";
 
 /* Model Download Window */
-"download.whisperModels" = "Whisperモデル";
+"download.whisperModels" = "音声モデル";
 "download.description" = "文字起こしを有効にするには、音声認識モデルをダウンロードしてください。\n大きなモデルはより正確ですが、より多くのメモリが必要です。";
 "download.done" = "完了";
 

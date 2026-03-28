@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import SwiftUI
 
 /// Custom panel that can receive key events even when not key window
+@MainActor
 final class KeyablePanel: NSPanel {
   var onEscapePressed: (() -> Void)?
 
@@ -22,6 +23,7 @@ final class KeyablePanel: NSPanel {
 }
 
 /// Controller for the transcription overlay window
+@MainActor
 final class TranscriptionOverlayController {
   private var window: KeyablePanel?
   private weak var appState: AppState?
@@ -31,9 +33,7 @@ final class TranscriptionOverlayController {
     self.appState = appState
   }
 
-  deinit {
-    hide()
-  }
+  deinit {}
 
   /// Show the overlay on the specified screen (or screen of the last interacted window)
   /// - Parameter targetScreen: The screen to show the overlay on. If nil, uses the screen

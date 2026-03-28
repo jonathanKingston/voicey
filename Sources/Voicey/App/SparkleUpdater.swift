@@ -4,7 +4,7 @@ import Foundation
 import Sparkle
 
 /// Manages automatic updates via Sparkle for direct distribution builds
-final class SparkleUpdater: NSObject, ObservableObject {
+final class SparkleUpdater: NSObject, ObservableObject, @unchecked Sendable {
   static let shared = SparkleUpdater()
 
   /// The Sparkle updater controller
@@ -59,7 +59,7 @@ final class SparkleUpdater: NSObject, ObservableObject {
 #else
 
 /// Stub implementation for App Store builds (no Sparkle)
-final class SparkleUpdater: ObservableObject {
+final class SparkleUpdater: ObservableObject, @unchecked Sendable {
   static let shared = SparkleUpdater()
 
   @Published var canCheckForUpdates = false

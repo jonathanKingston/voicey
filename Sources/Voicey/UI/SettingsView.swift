@@ -80,8 +80,31 @@ struct SetupSettingsView: View {
 
   @ObservedObject private var modelManager = ModelManager.shared
 
-  /// The recommended model to download first (Granite Speech)
+  /// The recommended model to download first
   private let defaultModel = ModelManager.defaultModel
+
+  private var defaultModelIcon: String {
+    switch defaultModel {
+    case .graniteSpeech:
+      return "waveform"
+    case .qwen3Small:
+      return "globe"
+    case .qwen3Large:
+      return "sparkles.rectangle.stack"
+    case .largeTurbo:
+      return "bolt.fill"
+    case .large:
+      return "star.fill"
+    case .distilLarge:
+      return "brain.head.profile"
+    case .small, .smallEn:
+      return "scalemass"
+    case .base, .baseEn:
+      return "gauge.medium"
+    case .tiny, .tinyEn:
+      return "hare"
+    }
+  }
 
   /// The fast Whisper model for quick startup (language-aware) - fallback
   private var fastModel: SpeechModel { ModelManager.fastModel }
@@ -164,10 +187,10 @@ struct SetupSettingsView: View {
 
       // Setup steps
       VStack(spacing: 10) {
-        // Step 1: Default Model Download (Granite Speech)
+        // Step 1: Default model download
         SetupStepRow(
           stepNumber: 1,
-          icon: "waveform",
+          icon: defaultModelIcon,
           title: L10n.Setup.downloadModel,
           description: L10n.Setup.downloadModelDesc(defaultModel.displayName),
           isComplete: isDefaultModelReady,
@@ -178,9 +201,9 @@ struct SetupSettingsView: View {
           action: startDefaultModelDownload
         )
 
-        // Step 1b: Quality Whisper Model Download (optional fallback)
+        // Optional quality-model download for users who want an additional local fallback.
         SetupStepRow(
-          stepNumber: 0,
+          stepNumber: 4,
           icon: "sparkles",
           title: L10n.Setup.downloadQualityModel,
           description: L10n.Setup.downloadQualityModelDesc(qualityModel.displayName),
@@ -351,7 +374,7 @@ struct SetupSettingsView: View {
   }
 
   private func enableLaunchAtLogin() {
-    SettingsManager.shared.configureLaunchAtLogin(enabled: true)
+    SettingsManager.shared.launchAtLogin = true
     launchAtLoginEnabled = true
   }
 }
@@ -359,7 +382,7 @@ struct SetupSettingsView: View {
 // MARK: - General Settings
 
 struct GeneralSettingsView: View {
-  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
+  private static let defaults = SettingsManager.defaultsStore
 
   @AppStorage("launchAtLogin", store: defaults) private var launchAtLogin: Bool = false
   @AppStorage("showDockIcon", store: defaults) private var showDockIcon: Bool = false
@@ -378,13 +401,13 @@ struct GeneralSettingsView: View {
 
       Section {
         Toggle(L10n.General.launchAtLogin, isOn: $launchAtLogin)
-          .onChange(of: launchAtLogin) { newValue in
-            SettingsManager.shared.configureLaunchAtLogin(enabled: newValue)
+          .onChange(of: launchAtLogin) {
+            SettingsManager.shared.configureLaunchAtLogin(enabled: launchAtLogin)
           }
 
         Toggle(L10n.General.showDockIcon, isOn: $showDockIcon)
-          .onChange(of: showDockIcon) { newValue in
-            NSApp.setActivationPolicy(newValue ? .regular : .accessory)
+          .onChange(of: showDockIcon) {
+            NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
           }
       }
     }
@@ -488,9 +511,10 @@ struct AudioSettingsView: View {
 // MARK: - Model Settings
 
 struct ModelSettingsView: View {
+  @EnvironmentObject private var appState: AppState
   @ObservedObject var modelManager = ModelManager.shared
-  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
-  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = SpeechModel.graniteSpeech.rawValue
+  private static let defaults = SettingsManager.defaultsStore
+  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = ModelManager.defaultModel.rawValue
 
   var body: some View {
     Form {
@@ -530,6 +554,16 @@ struct ModelSettingsView: View {
     }
     .formStyle(.grouped)
     .padding()
+    .onAppear {
+      if let model = SpeechModel(rawValue: selectedModel) {
+        appState.currentModel = model
+      }
+    }
+    .onChange(of: selectedModel) {
+      guard let model = SpeechModel(rawValue: selectedModel) else { return }
+      appState.currentModel = model
+      NotificationCenter.default.post(name: .voiceySelectedModelDidChange, object: model)
+    }
   }
 }
 
@@ -611,7 +645,7 @@ struct ModelRowView: View {
 // MARK: - Voice Commands Settings
 
 struct VoiceCommandsSettingsView: View {
-  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
+  private static let defaults = SettingsManager.defaultsStore
   @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool = false
   @State private var commands: [VoiceCommand] = SettingsManager.shared.voiceCommands
   @State private var showAddCommand: Bool = false
@@ -773,7 +807,7 @@ struct AddVoiceCommandView: View {
 // MARK: - Advanced Settings
 
 struct AdvancedSettingsView: View {
-  private static let defaults = UserDefaults(suiteName: "work.voicey.Voicey") ?? .standard
+  private static let defaults = SettingsManager.defaultsStore
   @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
   @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
   @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste: Bool = true
@@ -788,8 +822,8 @@ struct AdvancedSettingsView: View {
     Form {
       Section(L10n.Advanced.autoInsert) {
         Toggle(L10n.Advanced.autoInsertToggle, isOn: $autoPasteEnabled)
-          .onChange(of: autoPasteEnabled) { enabled in
-            guard enabled else { return }
+          .onChange(of: autoPasteEnabled) {
+            guard autoPasteEnabled else { return }
             if !PermissionsManager.shared.checkAccessibilityPermission() {
               PermissionsManager.shared.promptForAccessibilityPermission()
             }

@@ -1,10 +1,15 @@
 import Combine
+import AudioCommon
 import Foundation
 import WhisperKit
 import os
 
 /// Available speech model variants
 enum SpeechModel: String, CaseIterable, Identifiable {
+  // Qwen3 ASR models (native MLX Swift)
+  case qwen3Large = "qwen3-asr-1.7b-bf16"
+  case qwen3Small = "qwen3-asr-0.6b-6bit"
+
   // Granite Speech models (IBM)
   case graniteSpeech = "granite-4.0-1b-speech"
 
@@ -23,22 +28,37 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 
   var id: String { rawValue }
 
+  var backendKind: SpeechBackendKind {
+    switch self {
+    case .graniteSpeech:
+      return .granitePython
+    case .qwen3Small, .qwen3Large:
+      return .qwenMLX
+    default:
+      return .whisperKit
+    }
+  }
+
   /// Whether this model uses the Granite Speech engine (vs WhisperKit)
   var isGraniteModel: Bool {
-    switch self {
-    case .graniteSpeech: return true
-    default: return false
-    }
+    backendKind == .granitePython
   }
 
   /// Whether this model uses WhisperKit for inference
   var isWhisperModel: Bool {
-    !isGraniteModel
+    backendKind == .whisperKit
+  }
+
+  /// Whether this model uses native Swift MLX inference
+  var isQwenModel: Bool {
+    backendKind == .qwenMLX
   }
 
   var displayName: String {
     switch self {
     case .graniteSpeech: return "Granite 4.0 1B Speech"
+    case .qwen3Small: return "Qwen3 ASR 0.6B (MLX)"
+    case .qwen3Large: return "Qwen3 ASR 1.7B (MLX)"
     case .largeTurbo: return "Large v3 Turbo"
     case .large: return "Large v3"
     case .distilLarge: return "Distil Large v3"
@@ -54,6 +74,10 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   var description: String {
     switch self {
     case .graniteSpeech: return "#1 on OpenASR leaderboard, multilingual, ~1GB (requires Python + mlx-audio)"
+    case .qwen3Small:
+      return "Native Swift MLX, multilingual auto-detect, fast startup (~400MB)"
+    case .qwen3Large:
+      return "Native Swift MLX, multilingual auto-detect, highest Qwen quality (~1.7GB)"
     case .largeTurbo: return "Fast & accurate, 8x faster than Large (~1.5GB)"
     case .large: return "Maximum accuracy, slower (~3GB)"
     case .distilLarge: return "Distilled model, fast & accurate (~800MB)"
@@ -67,7 +91,7 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   }
 
   var isRecommended: Bool {
-    self == .graniteSpeech
+    self == .qwen3Large
   }
 
   /// Whether this model only supports English
@@ -81,6 +105,8 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   /// Whether this is a "fast" model suitable for quick startup
   var isFastModel: Bool {
     switch self {
+    case .qwen3Small:
+      return true
     case .base, .baseEn, .tiny, .tinyEn, .small, .smallEn: return true
     default: return false
     }
@@ -89,6 +115,8 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   var diskSize: Int64 {
     switch self {
     case .graniteSpeech: return 1_000_000_000
+    case .qwen3Small: return 450_000_000
+    case .qwen3Large: return 1_800_000_000
     case .largeTurbo: return 1_500_000_000
     case .large: return 3_000_000_000
     case .distilLarge: return 800_000_000
@@ -101,6 +129,8 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   var memoryUsage: Int64 {
     switch self {
     case .graniteSpeech: return 2_000_000_000
+    case .qwen3Small: return 1_300_000_000
+    case .qwen3Large: return 3_500_000_000
     case .largeTurbo: return 3_000_000_000
     case .large: return 6_000_000_000
     case .distilLarge: return 2_000_000_000
@@ -114,6 +144,8 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   var huggingFaceModelId: String? {
     switch self {
     case .graniteSpeech: return "ibm-granite/granite-4.0-1b-speech"
+    case .qwen3Small: return "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
+    case .qwen3Large: return "aufklarer/Qwen3-ASR-1.7B-MLX-8bit"
     default: return nil
     }
   }
@@ -121,7 +153,7 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   /// WhisperKit model repository identifier (how WhisperKit names folders)
   var whisperKitModelId: String? {
     switch self {
-    case .graniteSpeech: return nil
+    case .graniteSpeech, .qwen3Small, .qwen3Large: return nil
     case .largeTurbo: return "openai_whisper-large-v3_turbo"
     case .large: return "openai_whisper-large-v3"
     case .distilLarge: return "distil-whisper_distil-large-v3"
@@ -142,7 +174,7 @@ typealias WhisperModel = SpeechModel
 typealias ModelUpgradeCallback = (SpeechModel) -> Void
 
 /// Manages downloading, storing, and selecting speech models
-final class ModelManager: ObservableObject {
+final class ModelManager: ObservableObject, @unchecked Sendable {
   static let shared = ModelManager()
 
   @Published var downloadProgress: [SpeechModel: Double] = [:]
@@ -176,8 +208,14 @@ final class ModelManager: ObservableObject {
   /// The fast model for non-English users (multilingual)
   static let fastModelMultilingual = SpeechModel.base
 
-  /// The default/recommended model - Granite Speech
-  static let defaultModel = SpeechModel.graniteSpeech
+  /// Use the smaller Qwen model on machines with less than 16 GB RAM.
+  private static let largeQwenMemoryThresholdBytes: UInt64 = 16 * 1024 * 1024 * 1024
+
+  /// The default/recommended model - native Qwen3 MLX, chosen by available RAM.
+  static var defaultModel: SpeechModel {
+    let physicalMemory = ProcessInfo.processInfo.physicalMemory
+    return physicalMemory < largeQwenMemoryThresholdBytes ? .qwen3Small : .qwen3Large
+  }
 
   /// The quality model used for better accuracy (multilingual) - Whisper fallback
   static let qualityModel = SpeechModel.largeTurbo
@@ -211,7 +249,7 @@ final class ModelManager: ObservableObject {
   /// CoreML caches compiled models, so subsequent loads are much faster
   /// Granite models are always considered "compiled" since they don't use CoreML
   func isLikelyCompiled(_ model: SpeechModel) -> Bool {
-    if model.isGraniteModel { return true }
+    if model.isGraniteModel || model.isQwenModel { return true }
     // Check for CoreML cache - this is where device-specific optimizations are stored
     // The cache location varies but we can check for common indicators
 
@@ -254,6 +292,9 @@ final class ModelManager: ObservableObject {
     if model.isGraniteModel {
       return graniteModelPath(for: model)
     }
+    if model.isQwenModel {
+      return qwenModelPath(for: model)
+    }
 
     // WhisperKit stores models in: models/argmaxinc/whisperkit-coreml/{model_id}/
     guard let whisperKitId = model.whisperKitModelId else { return nil }
@@ -267,6 +308,14 @@ final class ModelManager: ObservableObject {
     }
 
     return nil
+  }
+
+  /// Returns the path for a Qwen model if it has been downloaded
+  private func qwenModelPath(for model: SpeechModel) -> String? {
+    guard let qwenDir = qwenModelDirectory(for: model), isQwenModelComplete(at: qwenDir) else {
+      return nil
+    }
+    return qwenDir.path
   }
 
   /// Returns the path for a Granite model if it has been downloaded
@@ -285,6 +334,20 @@ final class ModelManager: ObservableObject {
   func graniteModelDirectory(for model: SpeechModel) -> URL? {
     guard let hfId = model.huggingFaceModelId else { return nil }
     return modelsDirectory.appendingPathComponent("granite").appendingPathComponent(hfId)
+  }
+
+  /// Directory for Qwen model storage
+  func qwenModelDirectory(for model: SpeechModel) -> URL? {
+    guard let hfId = model.huggingFaceModelId, model.isQwenModel else { return nil }
+    return try? HuggingFaceDownloader.getCacheDirectory(for: hfId)
+  }
+
+  private func isQwenModelComplete(at modelDir: URL) -> Bool {
+    let requiredFiles = ["config.json", "merges.txt", "tokenizer_config.json", "vocab.json"]
+    let hasRequiredFiles = requiredFiles.allSatisfy { file in
+      fileManager.fileExists(atPath: modelDir.appendingPathComponent(file).path)
+    }
+    return hasRequiredFiles && HuggingFaceDownloader.weightsExist(in: modelDir)
   }
 
   /// Validates that a model directory has all required files for WhisperKit to load
@@ -380,6 +443,10 @@ final class ModelManager: ObservableObject {
       downloadGraniteModel(model)
       return
     }
+    if model.isQwenModel {
+      downloadQwenModel(model)
+      return
+    }
 
     isDownloading[model] = true
     downloadProgress[model] = 0
@@ -390,8 +457,15 @@ final class ModelManager: ObservableObject {
     // Clean up any previous incomplete download before starting
     cleanupIncompleteDownload(model)
 
-    let task = Task { @MainActor in
+    let task = Task {
       do {
+        let whisperProgressHandler: @Sendable (Progress) -> Void = { progress in
+          Task { @MainActor in
+            ModelManager.shared.downloadProgress[model] = progress.fractionCompleted
+            AppLogger.model.debug("Download progress: \(Int(progress.fractionCompleted * 100))%")
+          }
+        }
+
         AppLogger.model.info("Starting WhisperKit download with progress tracking...")
 
         // Use the proper WhisperKit.download static function with progress callback
@@ -399,25 +473,21 @@ final class ModelManager: ObservableObject {
           variant: model.rawValue,
           downloadBase: modelsDirectory,
           useBackgroundSession: false,
-          progressCallback: { [weak self] progress in
-            Task { @MainActor in
-              let fraction = progress.fractionCompleted
-              self?.downloadProgress[model] = fraction
-              AppLogger.model.debug("Download progress: \(Int(fraction * 100))%")
-            }
-          }
+          progressCallback: whisperProgressHandler
         )
 
         AppLogger.model.info("Download completed to: \(modelFolder.path)")
 
         // Verify the download actually succeeded by checking for config.json
         if modelPath(for: model) != nil {
-          AppLogger.model.info("Model \(model.displayName) downloaded and verified successfully")
-          loadDownloadedModels()
-          downloadProgress[model] = 1.0
-          isDownloading[model] = false
-          downloadTasks[model] = nil
-          NotificationManager.shared.showModelDownloadComplete(model: model)
+          await MainActor.run {
+            AppLogger.model.info("Model \(model.displayName) downloaded and verified successfully")
+            loadDownloadedModels()
+            downloadProgress[model] = 1.0
+            isDownloading[model] = false
+            downloadTasks[model] = nil
+            NotificationManager.shared.showModelDownloadComplete(model: model)
+          }
         } else {
           // Download seemed to complete but files are missing
           AppLogger.model.error(
@@ -425,15 +495,81 @@ final class ModelManager: ObservableObject {
           throw ModelDownloadError.verificationFailed
         }
       } catch {
-        if !Task.isCancelled {
+        await MainActor.run {
+          if !Task.isCancelled {
+            let errorMessage = Self.classifyDownloadError(error)
+            AppLogger.model.error("Model download failed: \(errorMessage) (underlying: \(error))")
+            downloadError = errorMessage
+            NotificationManager.shared.showModelDownloadFailed(reason: errorMessage)
+          }
+          isDownloading[model] = false
+          downloadProgress[model] = 0
+          downloadTasks[model] = nil
+        }
+      }
+    }
+
+    downloadTasks[model] = task
+  }
+
+  /// Download a Qwen model directly from Hugging Face without Python runtime dependencies.
+  private func downloadQwenModel(_ model: SpeechModel) {
+    guard let hfId = model.huggingFaceModelId else { return }
+
+    isDownloading[model] = true
+    downloadProgress[model] = 0
+    downloadError = nil
+
+    cleanupIncompleteDownload(model)
+
+    let task = Task {
+      do {
+        guard let modelDir = qwenModelDirectory(for: model) else {
+          throw ModelDownloadError.verificationFailed
+        }
+
+        try fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        let qwenProgressHandler: @Sendable (Double) -> Void = { progress in
+          Task { @MainActor in
+            ModelManager.shared.downloadProgress[model] = progress
+          }
+        }
+        try await HuggingFaceDownloader.downloadWeights(
+          modelId: hfId,
+          to: modelDir,
+          additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+          progressHandler: qwenProgressHandler
+        )
+
+        guard modelPath(for: model) != nil else {
+          throw ModelDownloadError.verificationFailed
+        }
+
+        await MainActor.run {
+          loadDownloadedModels()
+          downloadProgress[model] = 1.0
+          isDownloading[model] = false
+          downloadTasks[model] = nil
+          NotificationManager.shared.showModelDownloadComplete(model: model)
+        }
+      } catch is CancellationError {
+        await MainActor.run {
+          cleanupIncompleteDownload(model)
+          isDownloading[model] = false
+          downloadProgress[model] = 0
+          downloadTasks[model] = nil
+        }
+      } catch {
+        await MainActor.run {
+          cleanupIncompleteDownload(model)
           let errorMessage = Self.classifyDownloadError(error)
-          AppLogger.model.error("Model download failed: \(errorMessage) (underlying: \(error))")
+          AppLogger.model.error("Qwen model download failed: \(errorMessage) (underlying: \(error))")
           downloadError = errorMessage
+          isDownloading[model] = false
+          downloadProgress[model] = 0
+          downloadTasks[model] = nil
           NotificationManager.shared.showModelDownloadFailed(reason: errorMessage)
         }
-        isDownloading[model] = false
-        downloadProgress[model] = 0
-        downloadTasks[model] = nil
       }
     }
 
@@ -705,6 +841,14 @@ final class ModelManager: ObservableObject {
       }
       return
     }
+    if model.isQwenModel {
+      if let dir = qwenModelDirectory(for: model),
+         fileManager.fileExists(atPath: dir.path),
+         !isQwenModelComplete(at: dir) {
+        try? fileManager.removeItem(at: dir)
+      }
+      return
+    }
 
     guard let whisperKitId = model.whisperKitModelId else { return }
     let whisperKitPath =
@@ -743,6 +887,15 @@ final class ModelManager: ObservableObject {
   func deleteModel(_ model: SpeechModel) throws {
     if model.isGraniteModel {
       if let dir = graniteModelDirectory(for: model),
+         fileManager.fileExists(atPath: dir.path) {
+        try fileManager.removeItem(at: dir)
+      }
+      downloadedModels.remove(model)
+      downloadProgress[model] = 0
+      return
+    }
+    if model.isQwenModel {
+      if let dir = qwenModelDirectory(for: model),
          fileManager.fileExists(atPath: dir.path) {
         try fileManager.removeItem(at: dir)
       }

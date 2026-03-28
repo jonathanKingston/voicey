@@ -153,7 +153,7 @@
 "advanced.updatesDeliveredFrom" = "更新直接从 voicy.work 提供";
 
 /* Model Download Window */
-"download.whisperModels" = "Whisper 模型";
+"download.whisperModels" = "语音模型";
 "download.description" = "下载语音识别模型以启用转录。\n较大的模型更准确，但需要更多内存。";
 "download.done" = "完成";
 

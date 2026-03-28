@@ -3,13 +3,15 @@ import os
 
 /// App-wide loggers using os.Logger for proper system integration
 enum AppLogger {
-  static let audio = Logger(subsystem: "work.voicey.Voicey", category: "audio")
-  static let transcription = Logger(subsystem: "work.voicey.Voicey", category: "transcription")
-  static let output = Logger(subsystem: "work.voicey.Voicey", category: "output")
+  private static let subsystem = Bundle.main.bundleIdentifier ?? "work.voicey.Voicey"
+
+  static let audio = Logger(subsystem: subsystem, category: "audio")
+  static let transcription = Logger(subsystem: subsystem, category: "transcription")
+  static let output = Logger(subsystem: subsystem, category: "output")
   // swiftlint:disable:next identifier_name
-  static let ui = Logger(subsystem: "work.voicey.Voicey", category: "ui")
-  static let general = Logger(subsystem: "work.voicey.Voicey", category: "general")
-  static let model = Logger(subsystem: "work.voicey.Voicey", category: "model")
+  static let ui = Logger(subsystem: subsystem, category: "ui")
+  static let general = Logger(subsystem: subsystem, category: "general")
+  static let model = Logger(subsystem: subsystem, category: "model")
 }
 
 // Global function for convenience - logs to general category
@@ -20,12 +22,9 @@ func log(_ message: String) {
 /// Debug print that outputs directly to terminal (visible when running from command line)
 /// Use this for important debug info that should always be visible
 func debugPrint(_ message: String, category: String = "DEBUG") {
-  let timestamp = debugTimestampFormatter.string(from: Date())
+  let formatter = ISO8601DateFormatter()
+  let timestamp = formatter.string(from: Date())
+  AppLogger.general.debug("[\(category, privacy: .public)] \(message, privacy: .public)")
   print("[\(timestamp)] [\(category)] \(message)")
   fflush(stdout)  // Ensure immediate output
 }
-
-private let debugTimestampFormatter: ISO8601DateFormatter = {
-  let formatter = ISO8601DateFormatter()
-  return formatter
-}()

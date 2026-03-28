@@ -87,7 +87,7 @@ struct TranscriptionToken {
 /// Wrapper around WhisperKit for on-device speech-to-text
 /// Note: This class should be accessed from the main thread for UI callbacks.
 /// WhisperKit operations are async and run on background threads automatically.
-final class WhisperEngine {
+final class WhisperEngine: @unchecked Sendable {
   private var whisperKit: WhisperKit?
   private var isLoading = false
   private var loadedModelVariant: String?
@@ -131,7 +131,7 @@ final class WhisperEngine {
   func preloadModel() async {
     guard !isLoading && whisperKit == nil else { return }
 
-    var modelToLoad = SettingsManager.shared.selectedModel
+    let modelToLoad = SettingsManager.shared.selectedModel
     // Skip if a Granite model is selected - that uses a different engine
     guard modelToLoad.isWhisperModel else { return }
     debugPrint("🎯 Selected model: \(modelToLoad.rawValue)", category: "MODEL")
@@ -139,30 +139,9 @@ final class WhisperEngine {
       "📋 Downloaded models: \(ModelManager.shared.downloadedModels.map { $0.rawValue })",
       category: "MODEL")
 
-    // If selected model isn't downloaded, fall back to best available model
-    if !ModelManager.shared.isDownloaded(modelToLoad) {
-      if let bestAvailable = Self.selectBestAvailableModel(from: ModelManager.shared.downloadedModels) {
-        debugPrint("⚠️ Selected model not downloaded, falling back to \(bestAvailable.rawValue)", category: "MODEL")
-        modelToLoad = bestAvailable
-        // Update settings to reflect actual model being used
-        SettingsManager.shared.selectedModel = bestAvailable
-      } else {
-        debugPrint("⚠️ No models downloaded, skipping preload", category: "MODEL")
-        return
-      }
-    } else {
-      // Selected model is downloaded, but may be very slow to compile/load on first run.
-      // If it doesn't look compiled yet, prefer the best startup model for quick availability.
-      if !ModelManager.shared.isLikelyCompiled(modelToLoad),
-        let bestStartup = Self.selectBestAvailableModel(from: ModelManager.shared.downloadedModels),
-        bestStartup != modelToLoad {
-        debugPrint(
-          "⚠️ Selected model '\(modelToLoad.rawValue)' not compiled yet; preloading '\(bestStartup.rawValue)' first for faster startup",
-          category: "MODEL"
-        )
-        modelToLoad = bestStartup
-        SettingsManager.shared.selectedModel = bestStartup
-      }
+    guard ModelManager.shared.isDownloaded(modelToLoad) else {
+      debugPrint("⚠️ Selected Whisper model not downloaded, skipping preload", category: "MODEL")
+      return
     }
 
     do {
@@ -218,8 +197,14 @@ final class WhisperEngine {
     }
 
     guard !isLoading else {
-      AppLogger.model.info("WhisperEngine: Already loading a model, skipping")
-      return
+      AppLogger.model.info("WhisperEngine: Waiting for in-flight load to finish")
+      while isLoading {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      if whisperKit != nil && loadedModelVariant == variant {
+        return
+      }
+      throw WhisperError.failedToLoadModel
     }
     isLoading = true
 
@@ -355,10 +340,11 @@ final class WhisperEngine {
     let startTime = CFAbsoluteTimeGetCurrent()
 
     // Configure transcription options - simplified for speed
+    let selectedModel = SettingsManager.shared.selectedModel
     let options = DecodingOptions(
       verbose: SettingsManager.shared.enableDetailedLogging,
       task: .transcribe,
-      language: "en",
+      language: selectedModel.isEnglishOnly ? "en" : nil,
       temperatureFallbackCount: 1,  // Reduced for speed
       sampleLength: 224,
       usePrefillPrompt: true,

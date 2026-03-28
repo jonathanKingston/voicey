@@ -5,6 +5,8 @@ import SwiftUI
 import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+  private static let automaticTerminationReason = "Voicey menubar app"
+
   var statusBarController: StatusBarController?
   let appState = AppState()
   var transcriptionOverlay: TranscriptionOverlayController?
@@ -25,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var audioCaptureManager: AudioCaptureManager?
   private var whisperEngine: WhisperEngine?
   private var graniteEngine: GraniteEngine?
+  private var qwenEngine: QwenEngine?
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
 
@@ -36,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // ESC key monitors
   private var localEscKeyMonitor: Any?
+  private var selectedModelObserver: Any?
 
   // Model upgrade lock - prevents recording during model swap
   private var isUpgradingModel = false
@@ -54,6 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Keep the menubar app alive even when it has no open windows.
+    ProcessInfo.processInfo.disableAutomaticTermination(Self.automaticTerminationReason)
+
     // Hide dock icon by default
     if !dependencies.settings.showDockIcon {
       NSApp.setActivationPolicy(.accessory)
@@ -67,6 +74,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Setup global hotkey
     setupHotkey()
+
+    // Keep runtime state in sync when the user changes models from settings.
+    setupSelectedModelObserver()
 
     // Setup ESC key monitor
     setupEscapeKeyMonitor()
@@ -85,8 +95,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await self.checkPermissionsSilently()
           }
 
-          // Preload in parallel, but avoid showing extra loading UI over onboarding.
-          self.checkModelStatusAndPreload(showUI: false)
         } else {
           debugPrint("✅ Setup complete - starting normally", category: "STARTUP")
           // Log permission status on normal startup (no prompts)
@@ -126,6 +134,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    ProcessInfo.processInfo.enableAutomaticTermination(Self.automaticTerminationReason)
+
+    if let observer = selectedModelObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
+
     // Remove monitors
     if let monitor = localEscKeyMonitor {
       NSEvent.removeMonitor(monitor)
@@ -141,10 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func showOnboarding() {
     // Open settings window - the Setup tab provides onboarding experience
     openSettings()
-    
-    // Mark onboarding as shown
-    SettingsManager.shared.hasCompletedOnboarding = true
-    
+
     // Start model loading in background
     checkModelStatusAndPreload(showUI: false)
   }
@@ -152,52 +163,139 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Whether the active engine (Whisper or Granite) has a model loaded
   private var isActiveEngineLoaded: Bool {
     let selectedModel = SettingsManager.shared.selectedModel
-    if selectedModel.isGraniteModel {
+    switch selectedModel.backendKind {
+    case .granitePython:
       return graniteEngine?.isModelLoaded == true
+    case .qwenMLX:
+      return qwenEngine?.isModelLoaded == true
+    case .whisperKit:
+      return whisperEngine?.isModelLoaded == true
     }
-    return whisperEngine?.isModelLoaded == true
   }
 
-  /// Best available Whisper fallback when Granite cannot load.
-  private func bestAvailableWhisperFallback() -> SpeechModel? {
-    let downloaded = ModelManager.shared.downloadedModels
-    let preferredOrder: [SpeechModel] = [
-      .tinyEn, .baseEn, .smallEn, .tiny, .base, .small, .distilLarge, .largeTurbo, .large
+  private func fallbackOrder(preferredBackend: SpeechBackendKind? = nil) -> [SpeechModel] {
+    let baseOrder: [SpeechModel] = [
+      ModelManager.defaultModel,
+      .qwen3Large, .qwen3Small, .graniteSpeech,
+      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn
     ]
-    for model in preferredOrder {
-      if model.isWhisperModel && downloaded.contains(model) {
+
+    var ordered: [SpeechModel] = []
+    let prioritized = preferredBackend == nil ? baseOrder : baseOrder.filter { $0.backendKind == preferredBackend }
+    let remainder = preferredBackend == nil ? [] : baseOrder.filter { $0.backendKind != preferredBackend }
+
+    for model in prioritized + remainder {
+      if !ordered.contains(model) {
+        ordered.append(model)
+      }
+    }
+    return ordered
+  }
+
+  /// Best available fallback model when the selected backend cannot load.
+  private func bestAvailableFallback(excluding failedBackend: SpeechBackendKind) -> SpeechModel? {
+    let downloaded = ModelManager.shared.downloadedModels
+    for model in fallbackOrder() {
+      if model.backendKind != failedBackend && downloaded.contains(model) {
         return model
       }
     }
-    return downloaded.first(where: { $0.isWhisperModel })
+    return downloaded.first(where: { $0.backendKind != failedBackend })
   }
 
-  /// Preload selected model. If Granite fails (e.g. missing mlx-audio), fall back to Whisper automatically.
+  @MainActor
+  private func preloadSelectedModel() async -> Bool {
+    let selectedModel = SettingsManager.shared.selectedModel
+
+    switch selectedModel.backendKind {
+    case .granitePython:
+      await graniteEngine?.preloadModel()
+      return graniteEngine?.isModelLoaded == true
+    case .qwenMLX:
+      await qwenEngine?.preloadModel()
+      return qwenEngine?.isModelLoaded == true
+    case .whisperKit:
+      await whisperEngine?.preloadModel()
+      return whisperEngine?.isModelLoaded == true
+    }
+  }
+
+  /// Preload selected model. If a backend fails to load, fall back to another downloaded backend automatically.
   @MainActor
   private func preloadSelectedModelWithFallback() async -> Bool {
     let selectedModel = SettingsManager.shared.selectedModel
 
-    if selectedModel.isGraniteModel {
-      await graniteEngine?.preloadModel()
-      if graniteEngine?.isModelLoaded == true {
-        return true
-      }
+    if await preloadSelectedModel() {
+      return true
+    }
 
-      if let fallback = bestAvailableWhisperFallback() {
-        debugPrint(
-          "⚠️ Granite unavailable, falling back to \(fallback.displayName). Install mlx-audio to use Granite.",
-          category: "MODEL")
-        SettingsManager.shared.selectedModel = fallback
-        appState.currentModel = fallback
+    if let fallback = bestAvailableFallback(excluding: selectedModel.backendKind) {
+      debugPrint(
+        "⚠️ \(selectedModel.displayName) unavailable, falling back to \(fallback.displayName)",
+        category: "MODEL"
+      )
+      SettingsManager.shared.selectedModel = fallback
+      appState.currentModel = fallback
+
+      switch fallback.backendKind {
+      case .granitePython:
+        await graniteEngine?.preloadModel()
+        return graniteEngine?.isModelLoaded == true
+      case .qwenMLX:
+        await qwenEngine?.preloadModel()
+        return qwenEngine?.isModelLoaded == true
+      case .whisperKit:
         await whisperEngine?.preloadModel()
         return whisperEngine?.isModelLoaded == true
       }
-
-      return false
     }
 
-    await whisperEngine?.preloadModel()
-    return whisperEngine?.isModelLoaded == true
+    return false
+  }
+
+  private func setupSelectedModelObserver() {
+    selectedModelObserver = NotificationCenter.default.addObserver(
+      forName: .voiceySelectedModelDidChange,
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let self, let model = notification.object as? SpeechModel else { return }
+      Task { @MainActor in
+        await self.handleSelectedModelChange(model)
+      }
+    }
+  }
+
+  @MainActor
+  private func handleSelectedModelChange(_ model: SpeechModel) async {
+    appState.currentModel = model
+    unloadInactiveEngines(keeping: model.backendKind)
+    ModelManager.shared.loadDownloadedModels()
+
+    guard ModelManager.shared.isDownloaded(model) else {
+      appState.modelStatus = .notDownloaded
+      return
+    }
+
+    appState.modelStatus = .loading
+    let preloadSucceeded = await preloadSelectedModel()
+    if preloadSucceeded && isActiveEngineLoaded {
+      appState.modelStatus = .ready
+    } else {
+      appState.modelStatus = .failed("Failed to load model")
+    }
+  }
+
+  private func unloadInactiveEngines(keeping backend: SpeechBackendKind) {
+    if backend != .whisperKit {
+      whisperEngine?.unloadModel()
+    }
+    if backend != .granitePython {
+      graniteEngine?.unloadModel()
+    }
+    if backend != .qwenMLX {
+      qwenEngine?.unloadModel()
+    }
   }
 
   private func setupComponents() {
@@ -223,6 +321,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     graniteEngine?.onPerformanceIssue = { [weak self] metrics in
+      self?.handlePerformanceIssue(metrics)
+    }
+
+    qwenEngine = QwenEngine()
+    qwenEngine?.onLoadingStateChanged = { [weak self] isLoading in
+      if isLoading {
+        self?.appState.transcriptionState = .loadingModel
+      }
+    }
+    qwenEngine?.onPerformanceIssue = { [weak self] metrics in
       self?.handlePerformanceIssue(metrics)
     }
 
@@ -338,13 +446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ModelManager.shared.loadDownloadedModels()
 
     if ModelManager.shared.hasDownloadedModel {
-      let selectedModel = SettingsManager.shared.selectedModel
-
-      // Start Granite migration in parallel with current-model preload for existing users.
-      // This avoids waiting for a potentially slow first-time Whisper compile before download starts.
-      if !selectedModel.isGraniteModel {
-        startBackgroundUpgradeIfNeeded()
-      }
+      checkForDefaultModelUpdate()
 
       // Model is downloaded - load it into memory
       appState.modelStatus = .loading
@@ -398,55 +500,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// Start background download and upgrade to the recommended Granite model if needed.
-  private func startBackgroundUpgradeIfNeeded() {
-    let currentModel = SettingsManager.shared.selectedModel
+  /// If the app's recommended default model changed, download it in the background once.
+  private func checkForDefaultModelUpdate() {
     let targetModel = ModelManager.defaultModel
+    let lastSeenDefault = dependencies.settings.lastSeenDefaultModel
 
-    // Already on the recommended model.
-    guard currentModel != targetModel else {
+    guard lastSeenDefault != targetModel.rawValue else {
       return
     }
 
-    // If already downloading the target model, just wait and upgrade when complete.
-    if ModelManager.shared.isDownloading[targetModel] == true {
-      Task {
-        await waitForRecommendedModelAndUpgrade(targetModel)
-      }
+    dependencies.settings.lastSeenDefaultModel = targetModel.rawValue
+
+    guard !ModelManager.shared.isDownloaded(targetModel),
+          ModelManager.shared.isDownloading[targetModel] != true
+    else {
       return
     }
 
-    // If Granite is already downloaded, upgrade as soon as we're idle.
-    if ModelManager.shared.isDownloaded(targetModel) {
-      debugPrint("🔄 Recommended model (\(targetModel.displayName)) is downloaded, preparing upgrade...", category: "MODEL")
-      ModelManager.shared.pendingUpgradeModel = targetModel
-      tryPerformPendingUpgrade()
-      return
-    }
-
-    debugPrint("📥 Starting background download of recommended model: \(targetModel.displayName)", category: "MODEL")
+    debugPrint(
+      "📥 Default model changed to \(targetModel.displayName); starting background download",
+      category: "MODEL"
+    )
     ModelManager.shared.downloadModel(targetModel)
-
-    Task {
-      await waitForRecommendedModelAndUpgrade(targetModel)
-    }
-  }
-
-  /// Wait for the recommended model download, then queue an automatic upgrade.
-  private func waitForRecommendedModelAndUpgrade(_ model: SpeechModel) async {
-    while ModelManager.shared.isDownloading[model] == true {
-      try? await Task.sleep(nanoseconds: 1_000_000_000)
-    }
-
-    guard ModelManager.shared.isDownloaded(model) else {
-      AppLogger.model.warning("Recommended model download failed: \(model.displayName)")
-      return
-    }
-
-    await MainActor.run {
-      ModelManager.shared.pendingUpgradeModel = model
-      tryPerformPendingUpgrade()
-    }
   }
 
   /// Upgrade to a target model once it is ready.
@@ -466,7 +541,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           category: "MODEL")
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        if model.isGraniteModel {
+        switch model.backendKind {
+        case .granitePython:
           // Granite preload checks runtime dependencies and marks model readiness.
           await MainActor.run {
             SettingsManager.shared.selectedModel = model
@@ -476,9 +552,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           guard graniteEngine?.isModelLoaded == true else {
             throw GraniteError.modelNotReady
           }
-        } else {
+        case .qwenMLX:
+          guard let qwenEngine else {
+            throw QwenError.modelNotReady
+          }
+          try await qwenEngine.loadModel(variant: model.rawValue)
+          guard qwenEngine.isModelLoaded else {
+            throw QwenError.modelNotReady
+          }
+        case .whisperKit:
           // WhisperEngine.loadModel unloads/reloads internally.
-          try await whisperEngine?.loadModel(variant: model.rawValue)
+          guard let whisperEngine else {
+            throw WhisperError.noModelLoaded
+          }
+          try await whisperEngine.loadModel(variant: model.rawValue)
+          guard whisperEngine.isModelLoaded else {
+            throw WhisperError.noModelLoaded
+          }
         }
 
         let loadTime = CFAbsoluteTimeGetCurrent() - startTime
@@ -490,6 +580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           appState.modelStatus = .ready
           whisperEngine?.resetPerformanceTracking()
           graniteEngine?.resetPerformanceTracking()
+          qwenEngine?.resetPerformanceTracking()
           debugPrint("✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!", category: "MODEL")
           dependencies.notifications.showModelUpgradeComplete(model: model)
         }
@@ -592,24 +683,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func startRecording() {
-    // Check if model is loaded FIRST - this is critical
-    guard isActiveEngineLoaded else {
-      debugPrint("⚠️ Model not loaded yet - cannot record", category: "RECORD")
-
-      // Show user feedback
-      if appState.modelStatus.isLoading || isUpgradingModel {
-        debugPrint("⏳ Model is loading/upgrading - please wait a moment...", category: "RECORD")
-        dependencies.notifications.showModelLoading()
-      } else {
-        debugPrint("❌ No model loaded - check model status", category: "RECORD")
-      }
-      return
-    }
-
     // Refresh model status before recording
     ModelManager.shared.loadDownloadedModels()
 
-    let selectedModel = SettingsManager.shared.selectedModel
+    var selectedModel = SettingsManager.shared.selectedModel
     let downloadedModels = ModelManager.shared.downloadedModels
     AppLogger.general.info("startRecording: Selected model: \(selectedModel.rawValue)")
     AppLogger.general.info(
@@ -624,12 +701,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    // If selected model isn't downloaded, switch to first available model
+    // If selected model isn't downloaded, switch to the best deterministic fallback.
     if !ModelManager.shared.isDownloaded(selectedModel),
-      let firstDownloaded = downloadedModels.first {
+      let fallbackModel = fallbackOrder(preferredBackend: selectedModel.backendKind).first(where: {
+        downloadedModels.contains($0)
+      }) {
       AppLogger.general.info(
-        "startRecording: Selected model not available, switching to \(firstDownloaded.rawValue)")
-      SettingsManager.shared.selectedModel = firstDownloaded
+        "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
+      SettingsManager.shared.selectedModel = fallbackModel
+      appState.currentModel = fallbackModel
+      selectedModel = fallbackModel
+    }
+
+    // If the newly selected backend is not loaded yet, load it before recording.
+    if !isActiveEngineLoaded {
+      debugPrint("⏳ Selected model is not loaded yet - loading now...", category: "RECORD")
+      appState.modelStatus = .loading
+      appState.transcriptionState = .loadingModel
+      showOverlay()
+
+      Task {
+        let preloadSucceeded = await self.preloadSelectedModel()
+
+        await MainActor.run {
+          if preloadSucceeded && self.isActiveEngineLoaded {
+            self.appState.modelStatus = .ready
+            self.beginRecordingAfterModelReady()
+          } else {
+            self.hideOverlay()
+            self.appState.modelStatus = .failed("Failed to load model")
+            self.appState.transcriptionState = .error(message: "Model failed to load")
+            self.dependencies.notifications.showTranscriptionError(
+              "Model failed to load. Please try again.")
+          }
+        }
+      }
+      return
     }
 
     // Check if model is still loading - if so, show the overlay with loading state
@@ -814,12 +921,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // Transcribe audio using the appropriate engine
       let selectedModel = SettingsManager.shared.selectedModel
       let result: TranscriptionResult
-      if selectedModel.isGraniteModel {
+      switch selectedModel.backendKind {
+      case .granitePython:
         guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer) else {
           throw TranscriptionError.transcriptionFailed("No result from Granite engine")
         }
         result = graniteResult
-      } else {
+      case .qwenMLX:
+        guard let qwenResult = try await qwenEngine?.transcribe(audioBuffer: audioBuffer) else {
+          throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
+        }
+        result = qwenResult
+      case .whisperKit:
         guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer) else {
           throw TranscriptionError.transcriptionFailed("No result from Whisper engine")
         }
@@ -882,18 +995,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Overlay
 
   private func showOverlay() {
-    if transcriptionOverlay == nil {
-      transcriptionOverlay = TranscriptionOverlayController(appState: appState)
-      transcriptionOverlay?.onCancel = { [weak self] in
-        self?.cancelTranscription()
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      if transcriptionOverlay == nil {
+        transcriptionOverlay = TranscriptionOverlayController(appState: appState)
+        transcriptionOverlay?.onCancel = { [weak self] in
+          self?.cancelTranscription()
+        }
       }
+      transcriptionOverlay?.show(on: recordingTargetScreen)
     }
-    // Show on the screen where the user was last interacting
-    transcriptionOverlay?.show(on: recordingTargetScreen)
   }
 
   private func hideOverlay() {
-    transcriptionOverlay?.hide()
+    Task { @MainActor [weak self] in
+      self?.transcriptionOverlay?.hide()
+    }
   }
 
   // MARK: - Public Actions
@@ -936,9 +1053,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self?.appState.modelStatus = .loading
       Task { [weak self] in
         let selectedModel = SettingsManager.shared.selectedModel
-        if selectedModel.isGraniteModel {
+        switch selectedModel.backendKind {
+        case .granitePython:
           await self?.graniteEngine?.preloadModel()
-        } else {
+        case .qwenMLX:
+          await self?.qwenEngine?.preloadModel()
+        case .whisperKit:
           await self?.whisperEngine?.preloadModel()
         }
         await MainActor.run { [weak self] in

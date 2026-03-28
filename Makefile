@@ -7,34 +7,47 @@ APP_BUNDLE = $(APP_NAME).app
 CONTENTS_DIR = $(APP_BUNDLE)/Contents
 MACOS_DIR = $(CONTENTS_DIR)/MacOS
 RESOURCES_DIR = $(CONTENTS_DIR)/Resources
+SPEECH_SWIFT_METALLIB_SCRIPT = $(BUILD_DIR)/checkouts/speech-swift/scripts/build_mlx_metallib.sh
+MLX_METALLIB_DEBUG = $(BUILD_DIR)/debug/mlx.metallib
+MLX_METALLIB_RELEASE = $(BUILD_DIR)/release/mlx.metallib
+VOICEY_LOG_PREDICATE = subsystem == "work.voicey.Voicey" || subsystem == "work.voicey.VoiceyDirect"
+RUN_WITH_LOG_STREAM = LOG_PID=""; trap 'if [ -n "$$LOG_PID" ]; then kill $$LOG_PID 2>/dev/null || true; wait $$LOG_PID 2>/dev/null || true; fi' EXIT INT TERM; echo "Streaming Voicey logs. Press Ctrl-C to stop."; log stream --style compact --predicate '$(VOICEY_LOG_PREDICATE)' --level debug & LOG_PID=$$!; sleep 1; open -n $(APP_BUNDLE); wait $$LOG_PID
 
-.PHONY: all build release clean run install logs logs-direct reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
+.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
 
 all: build
 
 # Debug build
 build:
 	swift build
+	BUILD_DIR="$(CURDIR)/$(BUILD_DIR)" "$(SPEECH_SWIFT_METALLIB_SCRIPT)" debug
 
 # Debug build (direct distribution features enabled, includes Sparkle)
 build-direct:
 	VOICEY_DIRECT=1 swift build -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
+	BUILD_DIR="$(CURDIR)/$(BUILD_DIR)" "$(SPEECH_SWIFT_METALLIB_SCRIPT)" debug
 
 # Release build (compile only)
 build-release:
 	swift build -c release
+	BUILD_DIR="$(CURDIR)/$(BUILD_DIR)" "$(SPEECH_SWIFT_METALLIB_SCRIPT)" release
+
+# Backwards-compatible release build alias
+release: build-release
 
 # Release build (direct distribution features enabled, includes Sparkle)
 release-direct:
 	VOICEY_DIRECT=1 swift build -c release -Xswiftc -DVOICEY_DIRECT_DISTRIBUTION
+	BUILD_DIR="$(CURDIR)/$(BUILD_DIR)" "$(SPEECH_SWIFT_METALLIB_SCRIPT)" release
 
 # Create app bundle from release build
-bundle: release
+bundle: build-release
 	@echo "Creating app bundle..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(MACOS_DIR)
 	@mkdir -p $(RESOURCES_DIR)
 	@cp $(RELEASE_DIR)/Voicey $(MACOS_DIR)/$(APP_NAME)
+	@cp $(MLX_METALLIB_RELEASE) $(MACOS_DIR)/mlx.metallib
 	@cp Info.plist $(CONTENTS_DIR)/
 	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
@@ -50,6 +63,7 @@ bundle-debug: build
 	@mkdir -p $(MACOS_DIR)
 	@mkdir -p $(RESOURCES_DIR)
 	@cp $(BUILD_DIR)/debug/Voicey $(MACOS_DIR)/$(APP_NAME)
+	@cp $(MLX_METALLIB_DEBUG) $(MACOS_DIR)/mlx.metallib
 	@cp Info.plist $(CONTENTS_DIR)/
 	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
@@ -58,9 +72,35 @@ bundle-debug: build
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "Debug app bundle created: $(APP_BUNDLE)"
 
+# Create debug app bundle with direct-distribution features
+bundle-debug-direct: build-direct
+	@echo "Creating debug app bundle (direct distribution)..."
+	@rm -rf $(APP_BUNDLE)
+	@mkdir -p $(MACOS_DIR)
+	@mkdir -p $(RESOURCES_DIR)
+	@mkdir -p $(FRAMEWORKS_DIR)
+	@cp $(BUILD_DIR)/debug/Voicey $(MACOS_DIR)/$(APP_NAME)
+	@cp $(MLX_METALLIB_DEBUG) $(MACOS_DIR)/mlx.metallib
+	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
+	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
+	@cp -R $(BUILD_DIR)/debug/Voicey_Voicey.bundle $(RESOURCES_DIR)/
+	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
+	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
+	@# Copy Sparkle.framework for auto-updates
+	@if [ ! -d "$(SPARKLE_FRAMEWORK_DEBUG)" ]; then \
+		echo "Error: Sparkle.framework not found at $(SPARKLE_FRAMEWORK_DEBUG)"; \
+		exit 1; \
+	fi
+	@cp -R "$(SPARKLE_FRAMEWORK_DEBUG)" "$(FRAMEWORKS_DIR)/"
+	@echo "Sparkle.framework copied to bundle"
+	@echo "Adding @rpath for Sparkle.framework..."
+	@install_name_tool -add_rpath "@executable_path/../Frameworks" "$(MACOS_DIR)/$(APP_NAME)"
+	@echo "Debug app bundle created: $(APP_BUNDLE)"
+
 # Create app bundle with direct-distribution features (Sparkle auto-updates)
 FRAMEWORKS_DIR = $(CONTENTS_DIR)/Frameworks
-SPARKLE_FRAMEWORK = .build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework
+SPARKLE_FRAMEWORK_DEBUG = $(BUILD_DIR)/debug/Sparkle.framework
+SPARKLE_FRAMEWORK_RELEASE = $(RELEASE_DIR)/Sparkle.framework
 
 bundle-direct: release-direct
 	@echo "Creating app bundle (direct distribution)..."
@@ -69,20 +109,21 @@ bundle-direct: release-direct
 	@mkdir -p $(RESOURCES_DIR)
 	@mkdir -p $(FRAMEWORKS_DIR)
 	@cp $(RELEASE_DIR)/Voicey $(MACOS_DIR)/$(APP_NAME)
+	@cp $(MLX_METALLIB_RELEASE) $(MACOS_DIR)/mlx.metallib
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
 	@cp -R $(RELEASE_DIR)/Voicey_Voicey.bundle $(RESOURCES_DIR)/
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@# Copy Sparkle.framework for auto-updates
-	@if [ -d "$(SPARKLE_FRAMEWORK)" ]; then \
-		cp -R "$(SPARKLE_FRAMEWORK)" "$(FRAMEWORKS_DIR)/"; \
-		echo "Sparkle.framework copied to bundle"; \
-		echo "Adding @rpath for Sparkle.framework..."; \
-		install_name_tool -add_rpath "@executable_path/../Frameworks" "$(MACOS_DIR)/$(APP_NAME)" 2>/dev/null || true; \
-	else \
-		echo "Warning: Sparkle.framework not found at $(SPARKLE_FRAMEWORK)"; \
+	@if [ ! -d "$(SPARKLE_FRAMEWORK_RELEASE)" ]; then \
+		echo "Error: Sparkle.framework not found at $(SPARKLE_FRAMEWORK_RELEASE)"; \
+		exit 1; \
 	fi
+	@cp -R "$(SPARKLE_FRAMEWORK_RELEASE)" "$(FRAMEWORKS_DIR)/"
+	@echo "Sparkle.framework copied to bundle"
+	@echo "Adding @rpath for Sparkle.framework..."
+	@install_name_tool -add_rpath "@executable_path/../Frameworks" "$(MACOS_DIR)/$(APP_NAME)"
 	@echo "App bundle created: $(APP_BUNDLE)"
 
 # Sign the app for development (ad-hoc)
@@ -265,27 +306,37 @@ test-sparkle-linking:
 	@echo ""
 	@echo "🎉 All Sparkle linking tests passed!"
 
-# Run debug build with direct-distribution flags (Sparkle-enabled default)
-run: build-direct
+# Run debug bundle with direct-distribution flags (recommended default)
+run: bundle-debug-direct
+	@echo "Ad-hoc signing debug bundle for local testing..."
+	@codesign --force --deep --sign - $(APP_BUNDLE)
+	@$(RUN_WITH_LOG_STREAM)
+
+# Run raw debug binary with direct-distribution flags
+run-binary: build-direct
 	$(BUILD_DIR)/debug/$(APP_NAME)
 
-# Run debug build without direct-distribution flags
-run-appstore: build
+# Run debug bundle without direct-distribution flags
+run-appstore: bundle-debug
+	@$(RUN_WITH_LOG_STREAM)
+
+# Run raw debug binary without direct-distribution flags
+run-appstore-binary: build
 	$(BUILD_DIR)/debug/$(APP_NAME)
 
 # Run as an app bundle (recommended for testing permissions like Accessibility)
 run-bundle: bundle
-	@open -n $(APP_BUNDLE)
+	@$(RUN_WITH_LOG_STREAM)
 
 # Run the debug app bundle
 run-bundle-debug: bundle-debug
-	@open -n $(APP_BUNDLE)
+	@$(RUN_WITH_LOG_STREAM)
 
 # Run direct distribution bundle (with Sparkle, ad-hoc signed for testing)
 run-bundle-direct: bundle-direct
 	@echo "Ad-hoc signing for local testing..."
 	@codesign --force --deep --sign - $(APP_BUNDLE)
-	@open -n $(APP_BUNDLE)
+	@$(RUN_WITH_LOG_STREAM)
 
 # Install to Applications
 install: sign
@@ -318,11 +369,11 @@ format:
 
 # Stream debug logs (run in separate terminal)
 logs:
-	log stream --predicate 'subsystem == "work.voicey.Voicey"' --level debug
+	log stream --style compact --predicate 'subsystem == "work.voicey.Voicey"' --level debug
 
 # Stream debug logs for direct distribution build
 logs-direct:
-	log stream --predicate 'subsystem == "work.voicey.VoiceyDirect"' --level debug
+	log stream --style compact --predicate 'subsystem == "work.voicey.VoiceyDirect"' --level debug
 
 # Reset app state (keeps downloaded models)
 reset-state:
@@ -456,11 +507,15 @@ help:
 	@echo "Development:"
 	@echo "  build             - Build debug version (default)"
 	@echo "  release           - Build release version"
+	@echo "  ship-release      - Full signed/notarized release workflow"
 	@echo "  bundle            - Create app bundle from release build"
 	@echo "  sign              - Sign the app bundle (ad-hoc)"
 	@echo "  clean             - Clean build artifacts"
-	@echo "  run               - Build and run debug version"
+	@echo "  run               - Build and run debug app bundle (default)"
+	@echo "  run-binary        - Build and run raw debug binary"
 	@echo "  run-bundle        - Build and run as app bundle"
+	@echo "  run-appstore      - Build and run App Store-style debug app bundle"
+	@echo "  run-appstore-binary - Build and run raw App Store-style debug binary"
 	@echo "  logs              - Stream debug logs (run in separate terminal)"
 	@echo "  install           - Install to /Applications"
 	@echo "  xcode             - Generate and open Xcode project (requires xcodegen)"
@@ -491,12 +546,12 @@ help:
 	@echo "  help              - Show this help"
 	@echo ""
 	@echo "Release:"
-	@echo "  release VERSION=X.Y.Z - Full release (build, sign, notarize, publish)"
+	@echo "  ship-release VERSION=X.Y.Z - Full release (build, sign, notarize, publish)"
 	@echo ""
 	@echo "Testing:"
 	@echo "  test-sparkle-linking - Verify Sparkle is only linked in direct builds"
 
 # Full release process
-# Usage: make release VERSION=1.2.0
-release:
+# Usage: make ship-release VERSION=1.2.0
+ship-release:
 	@DEVELOPER_ID="$(DEVELOPER_ID)" APPLE_ID="$(APPLE_ID)" TEAM_ID="$(TEAM_ID)" APP_PASSWORD="$(APP_PASSWORD)" ./scripts/release.sh $(VERSION)

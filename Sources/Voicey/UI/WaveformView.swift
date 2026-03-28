@@ -18,8 +18,8 @@ struct WaveformView: View {
       }
     }
     .frame(maxHeight: .infinity)
-    .onChange(of: level) { newLevel in
-      lastLevel = newLevel
+    .onChange(of: level) {
+      lastLevel = level
     }
     .onAppear {
       startTimer()

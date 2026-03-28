@@ -153,7 +153,7 @@
 "advanced.updatesDeliveredFrom" = "Updates werden direkt von voicy.work bereitgestellt";
 
 /* Model Download Window */
-"download.whisperModels" = "Whisper-Modelle";
+"download.whisperModels" = "Sprachmodelle";
 "download.description" = "Laden Sie ein Spracherkennungsmodell herunter, um die Transkription zu aktivieren.\nGrößere Modelle sind genauer, benötigen aber mehr Speicher.";
 "download.done" = "Fertig";
 

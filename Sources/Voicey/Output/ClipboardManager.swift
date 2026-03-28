@@ -2,7 +2,7 @@ import AppKit
 import os
 
 /// Manages clipboard operations
-final class ClipboardManager {
+final class ClipboardManager: @unchecked Sendable {
   static let shared = ClipboardManager()
 
   private let pasteboard = NSPasteboard.general

@@ -4,7 +4,7 @@ import UserNotifications
 import os
 
 /// Manages system notifications for the app
-final class NotificationManager: NotificationProviding {
+final class NotificationManager: NotificationProviding, @unchecked Sendable {
   static let shared = NotificationManager()
 
   /// Whether notifications are available (requires proper app bundle)

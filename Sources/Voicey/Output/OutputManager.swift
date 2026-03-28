@@ -3,7 +3,7 @@ import Foundation
 import os
 
 /// Manages delivering transcribed text to the user via clipboard
-final class OutputManager {
+final class OutputManager: @unchecked Sendable {
   private let clipboardManager = ClipboardManager.shared
   private let notifications: NotificationProviding
   private let settings: SettingsProviding
@@ -20,7 +20,7 @@ final class OutputManager {
   }
 
   /// Deliver transcribed text by copying to clipboard and showing notification
-  func deliver(text: String, targetPID: pid_t? = nil, completion: (() -> Void)? = nil) {
+  func deliver(text: String, targetPID: pid_t? = nil, completion: (@Sendable () -> Void)? = nil) {
     AppLogger.output.info("Deliver: TextLength=\(text.count)")
     AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
 
@@ -108,7 +108,7 @@ final class OutputManager {
     }
 
     debugPrint("🎯 Auto-paste: Activating target app '\(targetApp.localizedName ?? "unknown")' (pid: \(pid), bundle: \(targetApp.bundleIdentifier ?? "none"))", category: "OUTPUT")
-    let activated = targetApp.activate(options: [.activateIgnoringOtherApps])
+    let activated = targetApp.activate()
     debugPrint("🎯 Auto-paste: activate() returned \(activated)", category: "OUTPUT")
 
     // Wait for app to become active (up to 500ms)

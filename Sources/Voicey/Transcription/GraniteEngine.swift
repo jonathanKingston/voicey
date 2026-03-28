@@ -3,7 +3,7 @@ import os
 import Darwin
 
 /// Engine for IBM Granite Speech models using Python mlx-audio for inference on Apple Silicon
-final class GraniteEngine {
+final class GraniteEngine: @unchecked Sendable {
   private var isLoading = false
   private var modelReady = false
   private var modelPath: String?

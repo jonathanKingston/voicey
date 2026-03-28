@@ -3,27 +3,33 @@ import ServiceManagement
 import os
 
 /// Manages user settings and preferences
-final class SettingsManager: SettingsProviding {
+final class SettingsManager: SettingsProviding, @unchecked Sendable {
   static let shared = SettingsManager()
 
-  /// Use a specific suite to ensure consistent storage regardless of how app is launched
+  /// Use standard defaults for bundled apps and an explicit suite only when the
+  /// process has no bundle identifier (for example, a raw SwiftPM binary).
   private let defaults: UserDefaults
-  private static let suiteName = "work.voicey.Voicey"
+  #if VOICEY_DIRECT_DISTRIBUTION
+  private static let fallbackSuiteName = "work.voicey.VoiceyDirect"
+  #else
+  private static let fallbackSuiteName = "work.voicey.Voicey"
+  #endif
+
+  static var defaultsStore: UserDefaults {
+    if Bundle.main.bundleIdentifier != nil {
+      return .standard
+    }
+    return UserDefaults(suiteName: Self.fallbackSuiteName) ?? .standard
+  }
 
   private init() {
-    // Use explicit suite name so settings work consistently when running from
-    // command line (.build/debug/Voicey) or as app bundle (Voicey.app)
-    if let suite = UserDefaults(suiteName: Self.suiteName) {
-      defaults = suite
-    } else {
-      defaults = UserDefaults.standard
-    }
+    defaults = Self.defaultsStore
     registerDefaults()
   }
 
   private func registerDefaults() {
     defaults.register(defaults: [
-      // Default to Granite Speech model - the recommended model
+      // Default to the recommended native Qwen3 model for this machine.
       Keys.selectedModel: ModelManager.defaultModel.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
@@ -39,6 +45,7 @@ final class SettingsManager: SettingsProviding {
 
   private enum Keys {
     static let selectedModel = "selectedModel"
+    static let lastSeenDefaultModel = "lastSeenDefaultModel"
     static let launchAtLogin = "launchAtLogin"
     static let showDockIcon = "showDockIcon"
     static let autoPasteEnabled = "autoPasteEnabled"
@@ -54,11 +61,16 @@ final class SettingsManager: SettingsProviding {
   var selectedModel: SpeechModel {
     get {
       let storedValue = defaults.string(forKey: Keys.selectedModel) ?? ""
-      return SpeechModel(rawValue: storedValue) ?? .graniteSpeech
+      return SpeechModel(rawValue: storedValue) ?? ModelManager.defaultModel
     }
     set {
       defaults.set(newValue.rawValue, forKey: Keys.selectedModel)
     }
+  }
+
+  var lastSeenDefaultModel: String? {
+    get { defaults.string(forKey: Keys.lastSeenDefaultModel) }
+    set { defaults.set(newValue, forKey: Keys.lastSeenDefaultModel) }
   }
 
   // MARK: - App Behavior
@@ -142,8 +154,18 @@ final class SettingsManager: SettingsProviding {
   // MARK: - Reset
 
   func resetToDefaults() {
-    defaults.removePersistentDomain(forName: Self.suiteName)
+    if Bundle.main.bundleIdentifier != nil {
+      if let bundleIdentifier = Bundle.main.bundleIdentifier {
+        defaults.removePersistentDomain(forName: bundleIdentifier)
+      }
+    } else {
+      defaults.removePersistentDomain(forName: Self.fallbackSuiteName)
+    }
     defaults.synchronize()
     registerDefaults()
   }
+}
+
+extension Notification.Name {
+  static let voiceySelectedModelDidChange = Notification.Name("voiceySelectedModelDidChange")
 }

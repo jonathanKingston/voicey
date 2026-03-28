@@ -268,7 +268,7 @@ final class AudioCaptureManager {
 
   static func availableInputDevices() -> [AVCaptureDevice] {
     let discoverySession = AVCaptureDevice.DiscoverySession(
-      deviceTypes: [.builtInMicrophone, .externalUnknown],
+      deviceTypes: [.microphone, .external],
       mediaType: .audio,
       position: .unspecified
     )
