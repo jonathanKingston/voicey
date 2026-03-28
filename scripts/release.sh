@@ -12,6 +12,22 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  echo "Error: Releases must be run from main (current: $CURRENT_BRANCH)"
+  exit 1
+fi
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "Error: Working tree must be clean before releasing."
+  exit 1
+fi
+
+if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+  echo "Error: Untracked files present. Clean them before releasing."
+  exit 1
+fi
+
 # Check required env vars
 if [ -z "$DEVELOPER_ID" ]; then echo "Error: Set DEVELOPER_ID to your Developer ID Application certificate name"; exit 1; fi
 if [ -z "$APPLE_ID" ]; then echo "Error: Set APPLE_ID to your Apple ID email"; exit 1; fi
@@ -97,16 +113,41 @@ fi
 
 VOICEY_DIRECT=1 swift package resolve
 
+VERSION_FILES=(Info.plist Info.direct.plist project.yml)
+if ! git diff --quiet -- "${VERSION_FILES[@]}"; then
+  echo "📝 Committing version bump..."
+  git add "${VERSION_FILES[@]}"
+  git commit -m "Release v$VERSION"
+fi
+
+TAG="v$VERSION"
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+  TAG_TARGET="$(git rev-list -n 1 "$TAG")"
+  HEAD_SHA="$(git rev-parse HEAD)"
+  if [ "$TAG_TARGET" != "$HEAD_SHA" ]; then
+    echo "Error: Tag $TAG already exists and does not point at HEAD."
+    exit 1
+  fi
+  echo "🏷️ Tag $TAG already exists at HEAD; reusing."
+else
+  echo "🏷️ Creating tag $TAG..."
+  git tag -a "$TAG" -m "Release v$VERSION"
+fi
+
+echo "⬆️ Pushing release commit and tag..."
+git push origin HEAD
+git push origin "$TAG"
+
 # Create GitHub release if it doesn't already exist
-if gh release view "v$VERSION" >/dev/null 2>&1; then
-  echo "🐙 GitHub release v$VERSION already exists; skipping publish."
+if gh release view "$TAG" >/dev/null 2>&1; then
+  echo "🐙 GitHub release $TAG already exists; skipping publish."
 else
   echo "🐙 Creating GitHub release..."
   ASSETS=("Voicey-$VERSION.zip")
   if [ "${SKIP_DMG:-}" != "1" ] && [ -f "$DMG_PATH" ]; then
     ASSETS+=("$DMG_PATH")
   fi
-  gh release create "v$VERSION" \
+  gh release create "$TAG" \
     --title "Voicey $VERSION" \
     --generate-notes \
     "${ASSETS[@]}"
