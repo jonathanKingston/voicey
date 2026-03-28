@@ -101,9 +101,11 @@ if [ "${SKIP_DMG:-}" = "1" ]; then
 else
   DMG_STAGING_DIR="$(mktemp -d -t voicey-dmg-staging)"
   trap 'rm -rf "$DMG_STAGING_DIR"' EXIT
-  # Strip extended attributes when staging the app; notarized bundles can carry
-  # provenance/xattr metadata that causes hdiutil to fail while populating the image.
-  cp -R -X "Voicey.app" "$DMG_STAGING_DIR/"
+  cp -R "Voicey.app" "$DMG_STAGING_DIR/"
+  # Remove provenance only: Metal libraries store their code signature in xattrs,
+  # so stripping all attributes breaks notarization, but leaving provenance intact
+  # causes hdiutil to fail while populating the image on this machine.
+  xattr -rd com.apple.provenance "$DMG_STAGING_DIR/Voicey.app" 2>/dev/null || true
   ln -s "/Applications" "$DMG_STAGING_DIR/Applications"
 
   # Use APFS for the DMG filesystem (minimum supported macOS is 14.0).
