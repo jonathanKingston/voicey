@@ -46,6 +46,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   private enum Keys {
     static let selectedModel = "selectedModel"
     static let lastSeenDefaultModel = "lastSeenDefaultModel"
+    static let lastAppliedDefaultModel = "lastAppliedDefaultModel"
     static let launchAtLogin = "launchAtLogin"
     static let showDockIcon = "showDockIcon"
     static let autoPasteEnabled = "autoPasteEnabled"
@@ -71,6 +72,11 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var lastSeenDefaultModel: String? {
     get { defaults.string(forKey: Keys.lastSeenDefaultModel) }
     set { defaults.set(newValue, forKey: Keys.lastSeenDefaultModel) }
+  }
+
+  var lastAppliedDefaultModel: String? {
+    get { defaults.string(forKey: Keys.lastAppliedDefaultModel) }
+    set { defaults.set(newValue, forKey: Keys.lastAppliedDefaultModel) }
   }
 
   // MARK: - App Behavior

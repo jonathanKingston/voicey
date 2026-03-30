@@ -501,28 +501,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// If the app's recommended default model changed, download it in the background once.
+  /// If the app's recommended default model changed, migrate users who are still on the old default.
   private func checkForDefaultModelUpdate() {
     let targetModel = ModelManager.defaultModel
+    let currentModel = dependencies.settings.selectedModel
     let lastSeenDefault = dependencies.settings.lastSeenDefaultModel
+    let lastAppliedDefault = dependencies.settings.lastAppliedDefaultModel
 
     guard lastSeenDefault != targetModel.rawValue else {
       return
     }
 
+    // Record the new recommendation immediately so we don't repeatedly trigger the same migration path.
     dependencies.settings.lastSeenDefaultModel = targetModel.rawValue
 
-    guard !ModelManager.shared.isDownloaded(targetModel),
-          ModelManager.shared.isDownloading[targetModel] != true
-    else {
+    // Only auto-switch users who are still on what we last auto-applied as "default".
+    // If they manually picked another model, preserve that choice.
+    if let lastAppliedDefault, currentModel.rawValue != lastAppliedDefault {
+      return
+    }
+
+    if currentModel == targetModel {
+      dependencies.settings.lastAppliedDefaultModel = targetModel.rawValue
+      return
+    }
+
+    // If the target is already local, queue a switch when idle.
+    if ModelManager.shared.isDownloaded(targetModel) {
+      dependencies.settings.lastAppliedDefaultModel = targetModel.rawValue
+      debugPrint(
+        "🔄 Default model changed to \(targetModel.displayName); scheduling switch",
+        category: "MODEL"
+      )
+      ModelManager.shared.pendingUpgradeModel = targetModel
+      tryPerformPendingUpgrade()
       return
     }
 
     debugPrint(
-      "📥 Default model changed to \(targetModel.displayName); starting background download",
+      "📥 Default model changed to \(targetModel.displayName); downloading then scheduling switch",
       category: "MODEL"
     )
     ModelManager.shared.downloadModel(targetModel)
+
+    Task {
+      while ModelManager.shared.isDownloading[targetModel] == true {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+      }
+
+      guard ModelManager.shared.isDownloaded(targetModel) else {
+        AppLogger.model.warning(
+          "Default model update download failed: \(targetModel.displayName)"
+        )
+        return
+      }
+
+      await MainActor.run {
+        dependencies.settings.lastAppliedDefaultModel = targetModel.rawValue
+        ModelManager.shared.pendingUpgradeModel = targetModel
+        tryPerformPendingUpgrade()
+      }
+    }
   }
 
   /// Upgrade to a target model once it is ready.

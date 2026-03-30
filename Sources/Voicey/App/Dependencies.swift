@@ -6,6 +6,7 @@ import Foundation
 protocol SettingsProviding: AnyObject {
   var selectedModel: SpeechModel { get set }
   var lastSeenDefaultModel: String? { get set }
+  var lastAppliedDefaultModel: String? { get set }
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
   var autoPasteEnabled: Bool { get set }
