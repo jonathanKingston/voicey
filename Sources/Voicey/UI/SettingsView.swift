@@ -180,10 +180,7 @@ struct SetupSettingsView: View {
           .foregroundStyle(.secondary)
       }
       .padding(.top, 20)
-      .padding(.bottom, 16)
-
-      Divider()
-        .padding(.horizontal, 20)
+      .padding(.bottom, 8)
 
       // Setup steps
       VStack(spacing: 10) {
@@ -243,7 +240,7 @@ struct SetupSettingsView: View {
           action: enableLaunchAtLogin
         )
       }
-      .padding(.top, 20)
+      .padding(.top, 16)
 
       Spacer()
 
