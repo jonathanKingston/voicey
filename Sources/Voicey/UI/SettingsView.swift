@@ -63,6 +63,8 @@ struct SettingsView: View {
         .tag(Tab.advanced)
     }
     .frame(width: 500, height: 550)
+    // Prevent macOS keyboard-focus ring from drawing an extra blue outline around the selected tab.
+    .focusEffectDisabled()
     .task {
       microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
       if isSetupComplete {
