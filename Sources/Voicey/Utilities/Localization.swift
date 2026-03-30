@@ -1,10 +1,76 @@
 import Foundation
 
-#if SWIFT_PACKAGE
-private let localizationBundle = Bundle.module
-#else
-private let localizationBundle = Bundle.main
-#endif
+private let localizationBundle = LocalizationBundleResolver.resolve()
+
+private enum LocalizationBundleResolver {
+    private static let tableName = "Localizable"
+    private static let tableExtension = "strings"
+
+    static func resolve() -> Bundle {
+        if bundleContainsLocalizationTable(.main) {
+            return .main
+        }
+
+        for directory in searchDirectories {
+            if let bundle = firstLocalizationBundle(in: directory) {
+                return bundle
+            }
+        }
+
+        AppLogger.general.error(
+            "Localization resources missing; using Bundle.main fallback"
+        )
+        return .main
+    }
+
+    private static var searchDirectories: [URL] {
+        var directories = [URL]()
+
+        if let resourceURL = Bundle.main.resourceURL {
+            directories.append(resourceURL)
+        }
+
+        directories.append(Bundle.main.bundleURL.deletingLastPathComponent())
+        directories.append(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+
+        var seenPaths = Set<String>()
+        return directories.filter { seenPaths.insert($0.path).inserted }
+    }
+
+    private static func firstLocalizationBundle(in directory: URL) -> Bundle? {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        for url in urls where url.pathExtension == "bundle" {
+            guard let bundle = Bundle(url: url), bundleContainsLocalizationTable(bundle) else {
+                continue
+            }
+            return bundle
+        }
+
+        return nil
+    }
+
+    private static func bundleContainsLocalizationTable(_ bundle: Bundle) -> Bool {
+        if bundle.path(forResource: tableName, ofType: tableExtension) != nil {
+            return true
+        }
+
+        return bundle.localizations.contains { localization in
+            bundle.path(
+                forResource: tableName,
+                ofType: tableExtension,
+                inDirectory: nil,
+                forLocalization: localization
+            ) != nil
+        }
+    }
+}
 
 /// Localization utility for accessing translated strings
 /// Falls back to English if the user's language is not supported
