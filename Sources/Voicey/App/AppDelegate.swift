@@ -6,6 +6,7 @@ import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"
+  private static let settingsWindowAutosaveName = "VoiceySettingsWindow"
 
   var statusBarController: StatusBarController?
   let appState = AppState()
@@ -1037,12 +1038,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     window.title = "Voicey Settings"
     window.styleMask = [.titled, .closable]
     window.setContentSize(NSSize(width: 500, height: 550))
-    window.center()
+    if !window.setFrameUsingName(Self.settingsWindowAutosaveName) {
+      positionWindow(window, centeredOn: screenWithMouse() ?? NSScreen.main)
+    }
+    window.setFrameAutosaveName(Self.settingsWindowAutosaveName)
 
     settingsWindow = window
 
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
+  }
+
+  /// Returns the screen that currently contains the mouse cursor.
+  private func screenWithMouse() -> NSScreen? {
+    let mouseLocation = NSEvent.mouseLocation
+    return NSScreen.screens.first { NSMouseInRect(mouseLocation, $0.frame, false) }
+  }
+
+  /// Centers a window on the given screen and snaps origin to physical pixels.
+  private func positionWindow(_ window: NSWindow, centeredOn screen: NSScreen?) {
+    guard let screen else {
+      window.center()
+      return
+    }
+
+    let visibleFrame = screen.visibleFrame
+    let windowSize = window.frame.size
+    let rawOrigin = NSPoint(
+      x: visibleFrame.midX - windowSize.width / 2,
+      y: visibleFrame.midY - windowSize.height / 2
+    )
+    let scale = screen.backingScaleFactor
+    let snappedOrigin = NSPoint(
+      x: (rawOrigin.x * scale).rounded() / scale,
+      y: (rawOrigin.y * scale).rounded() / scale
+    )
+
+    window.setFrameOrigin(snappedOrigin)
   }
 
   func openModelDownloader() {
