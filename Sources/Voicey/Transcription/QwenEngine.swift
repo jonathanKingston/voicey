@@ -9,6 +9,11 @@ final class QwenEngine: @unchecked Sendable {
   private var isLoading = false
   private var loadedModelVariant: String?
 
+  private let minimumQwenMaxTokens = 448
+  private let maximumQwenMaxTokens = 4096
+  private let qwenTokensPerSecondEstimate = 8.0
+  private let qwenTokenBuffer = 128
+
   /// Callback to notify when model loading state changes
   var onLoadingStateChanged: ((Bool) -> Void)?
 
@@ -142,6 +147,8 @@ final class QwenEngine: @unchecked Sendable {
 
     let thermalStateBefore = ProcessInfo.processInfo.thermalState
     let audioDuration = Double(audioBuffer.count) / 16000.0
+    let tokenBudget = Int(ceil(audioDuration * qwenTokensPerSecondEstimate)) + qwenTokenBuffer
+    let maxTokens = min(maximumQwenMaxTokens, max(minimumQwenMaxTokens, tokenBudget))
     let startTime = CFAbsoluteTimeGetCurrent()
 
     if let decoderContext {
@@ -150,10 +157,14 @@ final class QwenEngine: @unchecked Sendable {
       )
     }
 
+    AppLogger.transcription.info(
+      "QwenEngine: Transcribing \(String(format: "%.1f", audioDuration))s audio with maxTokens=\(maxTokens)"
+    )
     let transcribedText = qwenModel.transcribe(
       audio: audioBuffer,
       sampleRate: 16000,
       language: nil,
+      maxTokens: maxTokens,
       context: decoderContext
     )
     let processingTime = CFAbsoluteTimeGetCurrent() - startTime
