@@ -22,49 +22,47 @@ struct SettingsView: View {
     TabView(selection: $selectedTab) {
       SetupSettingsView()
         .tabItem {
-          Label(L10n.Settings.setup, systemImage: "checkmark.circle")
+          Text(L10n.Settings.setup)
         }
         .tag(Tab.setup)
 
       GeneralSettingsView()
         .tabItem {
-          Label(L10n.Settings.general, systemImage: "gear")
+          Text(L10n.Settings.general)
         }
         .tag(Tab.general)
 
       HotkeySettingsView()
         .tabItem {
-          Label(L10n.Settings.hotkey, systemImage: "keyboard")
+          Text(L10n.Settings.hotkey)
         }
         .tag(Tab.hotkey)
 
       AudioSettingsView()
         .tabItem {
-          Label(L10n.Settings.audio, systemImage: "mic")
+          Text(L10n.Settings.audio)
         }
         .tag(Tab.audio)
 
       ModelSettingsView()
         .tabItem {
-          Label(L10n.Settings.model, systemImage: "cpu")
+          Text(L10n.Settings.model)
         }
         .tag(Tab.model)
 
       VoiceCommandsSettingsView()
         .tabItem {
-          Label(L10n.Settings.voiceCommands, systemImage: "text.bubble")
+          Text(L10n.Settings.voiceCommands)
         }
         .tag(Tab.voiceCommands)
 
       AdvancedSettingsView()
         .tabItem {
-          Label(L10n.Settings.advanced, systemImage: "wrench.and.screwdriver")
+          Text(L10n.Settings.advanced)
         }
         .tag(Tab.advanced)
     }
     .frame(width: 500, height: 550)
-    // Prevent macOS keyboard-focus ring from drawing an extra blue outline around the selected tab.
-    .focusEffectDisabled()
     .task {
       microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
       if isSetupComplete {
