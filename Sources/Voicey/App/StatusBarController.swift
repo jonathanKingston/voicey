@@ -135,6 +135,8 @@ final class StatusBarController {
     if appState?.isRecording == true { return }
 
     guard let button = ensureStatusItemButton() else { return }
+    // Clear any recording tint so template icons can adapt to menubar highlight/appearance.
+    button.contentTintColor = nil
 
     switch status {
     case .loading:

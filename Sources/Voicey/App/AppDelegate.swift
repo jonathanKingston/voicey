@@ -848,6 +848,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint("⏹️ Stopping recording...", category: "RECORD")
     AppLogger.audio.info("Stopping recording...")
 
+    // Always reset the menubar icon out of recording mode, including early-return paths.
+    defer {
+      statusBarController?.updateIcon(recording: false)
+    }
+
     appState.transcriptionState = .processing
 
     // Granite does better without additional end-of-audio trimming.
@@ -884,9 +889,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       tryPerformPendingUpgrade()
       return
     }
-
-    // Update menubar
-    statusBarController?.updateIcon(recording: false)
 
     // Process transcription
     Task {
