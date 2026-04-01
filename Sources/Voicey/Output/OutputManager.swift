@@ -21,6 +21,13 @@ final class OutputManager: @unchecked Sendable {
 
   /// Deliver transcribed text by copying to clipboard and showing notification
   func deliver(text: String, targetPID: pid_t? = nil, completion: (@Sendable () -> Void)? = nil) {
+    guard text.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil else {
+      AppLogger.output.warning(
+        "Deliver: Skipping clipboard/auto-paste because text is empty or whitespace")
+      completion?()
+      return
+    }
+
     AppLogger.output.info("Deliver: TextLength=\(text.count)")
     AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
 

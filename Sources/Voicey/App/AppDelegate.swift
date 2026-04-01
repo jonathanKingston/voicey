@@ -948,6 +948,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.transcription.info(
         "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
       )
+      let hasDeliverableText =
+        processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
       // Output text
       await MainActor.run {
@@ -955,10 +957,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.lastTranscription = processedText
 
         // Check if we have any text to deliver
-        if processedText.isEmpty {
+        if !hasDeliverableText {
           debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
           AppLogger.transcription.warning(
-            "processTranscription: No text to deliver (empty after processing)")
+            "processTranscription: No text to deliver (empty/whitespace after processing)")
           self.hideOverlay()
           self.appState.transcriptionState = .idle
           // Check for pending model upgrade now that we're idle
