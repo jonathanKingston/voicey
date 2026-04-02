@@ -8,6 +8,8 @@ final class StatusBarController {
   private weak var appState: AppState?
   private weak var delegate: AppDelegate?
   private var animationTimer: Timer?
+  private var workspaceObservers: [NSObjectProtocol] = []
+  private var distributedThemeObserver: NSObjectProtocol?
   private var cancellables = Set<AnyCancellable>()
 
   init(appState: AppState, delegate: AppDelegate) {
@@ -20,6 +22,23 @@ final class StatusBarController {
     setupStatusItem()
     setupMenu()
     observeModelStatus()
+    observeSystemStateChanges()
+    refreshPresentation()
+  }
+
+  deinit {
+    animationTimer?.invalidate()
+    animationTimer = nil
+
+    for observer in workspaceObservers {
+      NSWorkspace.shared.notificationCenter.removeObserver(observer)
+    }
+    workspaceObservers.removeAll()
+
+    if let observer = distributedThemeObserver {
+      DistributedNotificationCenter.default().removeObserver(observer)
+      distributedThemeObserver = nil
+    }
   }
 
   private func setupStatusItem() {
@@ -42,8 +61,62 @@ final class StatusBarController {
       .store(in: &cancellables)
   }
 
+  private func observeSystemStateChanges() {
+    let workspaceCenter = NSWorkspace.shared.notificationCenter
+    let workspaceNotifications: [Notification.Name] = [
+      NSWorkspace.activeSpaceDidChangeNotification,
+      NSWorkspace.didWakeNotification,
+      NSWorkspace.sessionDidBecomeActiveNotification
+    ]
+
+    workspaceObservers = workspaceNotifications.map { notification in
+      workspaceCenter.addObserver(
+        forName: notification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        self?.refreshPresentation()
+      }
+    }
+
+    distributedThemeObserver = DistributedNotificationCenter.default().addObserver(
+      forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      self?.refreshPresentation()
+    }
+  }
+
+  private func refreshPresentation() {
+    guard let appState else { return }
+
+    updateTooltip(for: appState.modelStatus)
+
+    if appState.isRecording {
+      startRecordingAnimation()
+    } else {
+      stopRecordingAnimation()
+      updateIconForModelStatus(appState.modelStatus)
+    }
+
+    if let startItem = menu.items.first {
+      startItem.title = appState.isRecording ? L10n.Menu.stopTranscription : L10n.Menu.startTranscription
+    }
+  }
+
+  @discardableResult
+  private func ensureStatusItemButton() -> NSStatusBarButton? {
+    if statusItem.button == nil {
+      NSStatusBar.system.removeStatusItem(statusItem)
+      statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+      setupStatusItem()
+    }
+    return statusItem.button
+  }
+
   private func updateTooltip(for status: ModelStatus) {
-    guard let button = statusItem.button else { return }
+    guard let button = ensureStatusItemButton() else { return }
 
     switch status {
     case .notDownloaded:
@@ -61,7 +134,9 @@ final class StatusBarController {
     // Don't update icon if we're recording
     if appState?.isRecording == true { return }
 
-    guard let button = statusItem.button else { return }
+    guard let button = ensureStatusItemButton() else { return }
+    // Clear any recording tint so template icons can adapt to menubar highlight/appearance.
+    button.contentTintColor = nil
 
     switch status {
     case .loading:
@@ -151,18 +226,22 @@ final class StatusBarController {
   }
 
   private func startRecordingAnimation() {
+    animationTimer?.invalidate()
+    animationTimer = nil
+
     // Set red mic icon immediately
-    if let button = statusItem.button {
+    if let button = ensureStatusItemButton() {
       let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
       let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording")
       button.image = image?.withSymbolConfiguration(config)
       button.image?.isTemplate = false
+      button.alphaValue = 1.0
       button.contentTintColor = .systemRed
     }
 
     // Pulse animation
     animationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-      guard let button = self?.statusItem.button else { return }
+      guard let button = self?.ensureStatusItemButton() else { return }
       if button.contentTintColor == .systemRed {
         button.contentTintColor = .systemOrange
       } else {
@@ -175,10 +254,11 @@ final class StatusBarController {
     animationTimer?.invalidate()
     animationTimer = nil
 
-    if let button = statusItem.button {
+    if let button = ensureStatusItemButton() {
       let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voicey")
       image?.isTemplate = true
       button.image = image
+      button.alphaValue = 1.0
       button.contentTintColor = nil
     }
   }
