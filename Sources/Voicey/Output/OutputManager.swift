@@ -8,6 +8,16 @@ final class OutputManager: @unchecked Sendable {
   private let notifications: NotificationProviding
   private let settings: SettingsProviding
   private let permissions: PermissionsProviding
+  private static let terminalBundleIdentifiers: Set<String> = [
+    "com.apple.Terminal",
+    "com.googlecode.iterm2",
+    "dev.warp.Warp-Stable",
+    "dev.warp.Warp",
+    "co.zeit.hyper",
+    "net.kovidgoyal.kitty",
+    "org.alacritty",
+    "com.github.wez.wezterm"
+  ]
 
   init(
     notifications: NotificationProviding = NotificationManager.shared,
@@ -31,9 +41,10 @@ final class OutputManager: @unchecked Sendable {
     AppLogger.output.info("Deliver: TextLength=\(text.count)")
     AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
 
-    // Save original clipboard if user wants it restored after paste
-    let shouldRestoreClipboard = settings.autoPasteEnabled && settings.restoreClipboardAfterPaste
-    if shouldRestoreClipboard {
+    // Save original clipboard if user wants it restored after paste.
+    // The final restore decision is made after target app activation.
+    let restoreClipboardEnabled = settings.autoPasteEnabled && settings.restoreClipboardAfterPaste
+    if restoreClipboardEnabled {
       clipboardManager.saveContents()
     }
 
@@ -74,17 +85,31 @@ final class OutputManager: @unchecked Sendable {
         // Activate target app and wait for focus
         await self.activateTargetApp(pid: targetPID)
 
+        let targetApp = self.resolvedTargetApplication(pid: targetPID)
+        let preferKeyboardPaste = self.shouldPreferKeyboardPaste(for: targetApp)
+        if preferKeyboardPaste {
+          AppLogger.output.info(
+            "Auto-paste: Terminal/TUI target detected (\(targetApp?.bundleIdentifier ?? "unknown")), preferring keyboard paste simulation"
+          )
+        }
+
         // Attempt to paste via accessibility
-        let success = AccessibilityPaster.paste(text)
+        let success = AccessibilityPaster.paste(text, preferKeyboardPaste: preferKeyboardPaste)
 
         if success {
           AppLogger.output.info("Deliver: Auto-paste succeeded")
           debugPrint("✅ Auto-paste: Successfully inserted via Accessibility API!", category: "OUTPUT")
 
-          // Restore clipboard after a short delay (let paste complete)
+          // Keep transcription on clipboard for terminal/TUI targets so manual retry remains possible.
+          let shouldRestoreClipboard = restoreClipboardEnabled && !preferKeyboardPaste
           if shouldRestoreClipboard {
             try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
             self.clipboardManager.restoreContents()
+          } else if restoreClipboardEnabled {
+            self.clipboardManager.discardSavedContents()
+            AppLogger.output.info(
+              "Auto-paste: Preserving transcription on clipboard for terminal/TUI target"
+            )
           }
         } else {
           AppLogger.output.warning("Deliver: Auto-paste failed, text remains on clipboard")
@@ -133,5 +158,19 @@ final class OutputManager: @unchecked Sendable {
 
     // Extra delay for focus to settle on the text field
     try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms more
+  }
+
+  private func resolvedTargetApplication(pid: pid_t?) -> NSRunningApplication? {
+    if let pid {
+      return NSRunningApplication(processIdentifier: pid)
+    }
+    return NSWorkspace.shared.frontmostApplication
+  }
+
+  private func shouldPreferKeyboardPaste(for app: NSRunningApplication?) -> Bool {
+    guard let bundleIdentifier = app?.bundleIdentifier else {
+      return false
+    }
+    return Self.terminalBundleIdentifiers.contains(bundleIdentifier)
   }
 }

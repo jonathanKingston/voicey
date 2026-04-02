@@ -13,7 +13,7 @@ enum AccessibilityPaster {
   /// - Parameter text: The text to insert (used as fallback for direct value manipulation)
   /// - Returns: `true` if successful, `false` if it couldn't paste
   @discardableResult
-  static func paste(_ text: String) -> Bool {
+  static func paste(_ text: String, preferKeyboardPaste: Bool = false) -> Bool {
     debugPrint("🔌 AccessibilityPaster: Attempting to paste \(text.count) characters", category: "AX")
 
     guard AXIsProcessTrusted() else {
@@ -29,6 +29,14 @@ enum AccessibilityPaster {
       return false
     }
     let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
+
+    if preferKeyboardPaste {
+      debugPrint("⌨️ AccessibilityPaster: Terminal/TUI target detected, trying keyboard paste first", category: "AX")
+      if performKeyboardPaste(frontAppPid: frontApp.processIdentifier) {
+        return true
+      }
+      debugPrint("⚠️ AccessibilityPaster: Keyboard paste failed, trying AX fallbacks", category: "AX")
+    }
 
     // Try to get focused element
     let focusedElement = getFocusedElement()
@@ -70,34 +78,41 @@ enum AccessibilityPaster {
     }
 
     // METHOD 6: CGEventPost - Last resort fallback
-    // Voice Type uses this successfully from sandbox. Post Cmd+V via CGEvent.
     // This simulates the keyboard shortcut directly rather than using accessibility actions.
     debugPrint("🔧 AccessibilityPaster: Trying CGEventPost as final fallback", category: "AX")
-    AppLogger.output.info("AccessibilityPaster: Trying CGEventPost (Cmd+V simulation) as final fallback")
-
-    // Small delay before posting to ensure target app has focus
-    Thread.sleep(forTimeInterval: 0.05)
-
-    // Try system-wide post first (Voice Type's approach)
-    if KeyboardSimulator.postPasteCommand() {
-      debugPrint("✅ AccessibilityPaster: Posted Cmd+V via CGEventPost - paste should occur", category: "AX")
-      AppLogger.output.info("AccessibilityPaster: CGEventPost succeeded - Cmd+V posted")
-      // Small delay for the event to be processed
-      Thread.sleep(forTimeInterval: 0.1)
-      return true
-    }
-
-    // Fallback: Try posting to specific PID
-    if KeyboardSimulator.postPasteCommandToPid(frontApp.processIdentifier) {
-      debugPrint("✅ AccessibilityPaster: Posted Cmd+V via postToPid - paste should occur", category: "AX")
-      AppLogger.output.info("AccessibilityPaster: CGEventPostToPid succeeded")
-      Thread.sleep(forTimeInterval: 0.1)
+    if performKeyboardPaste(frontAppPid: frontApp.processIdentifier) {
       return true
     }
 
     // All methods failed - text is already on clipboard, user can paste manually
     debugPrint("❌ AccessibilityPaster: All methods failed (including CGEventPost)", category: "AX")
     AppLogger.output.warning("AccessibilityPaster: All paste methods failed - user should paste manually with ⌘V")
+    return false
+  }
+
+  /// Perform Cmd+V simulation via CGEvent posting.
+  private static func performKeyboardPaste(frontAppPid: pid_t) -> Bool {
+    AppLogger.output.info("AccessibilityPaster: Trying CGEventPost (Cmd+V simulation)")
+
+    // Small delay before posting to ensure target app has focus.
+    Thread.sleep(forTimeInterval: 0.05)
+
+    // Try system-wide post first.
+    if KeyboardSimulator.postPasteCommand() {
+      debugPrint("✅ AccessibilityPaster: Posted Cmd+V via CGEventPost - paste should occur", category: "AX")
+      AppLogger.output.info("AccessibilityPaster: CGEventPost succeeded - Cmd+V posted")
+      Thread.sleep(forTimeInterval: 0.1)
+      return true
+    }
+
+    // Fallback: try posting directly to the target process.
+    if KeyboardSimulator.postPasteCommandToPid(frontAppPid) {
+      debugPrint("✅ AccessibilityPaster: Posted Cmd+V via postToPid - paste should occur", category: "AX")
+      AppLogger.output.info("AccessibilityPaster: CGEventPostToPid succeeded")
+      Thread.sleep(forTimeInterval: 0.1)
+      return true
+    }
+
     return false
   }
 
