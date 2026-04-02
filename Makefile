@@ -101,6 +101,7 @@ bundle-debug-direct: build-direct
 FRAMEWORKS_DIR = $(CONTENTS_DIR)/Frameworks
 SPARKLE_FRAMEWORK_DEBUG = $(BUILD_DIR)/debug/Sparkle.framework
 SPARKLE_FRAMEWORK_RELEASE = $(RELEASE_DIR)/Sparkle.framework
+APPLE_DEV_IDENTITY ?= $(shell security find-identity -v -p codesigning | grep "Apple Development" | head -1 | awk '{print $$2}')
 
 bundle-direct: release-direct
 	@echo "Creating app bundle (direct distribution)..."
@@ -131,6 +132,20 @@ sign: bundle
 	@echo "Signing app (ad-hoc)..."
 	@codesign --force --deep --sign - $(APP_BUNDLE)
 	@echo "App signed"
+
+# Sign debug bundles for local development.
+# Prefer a stable Apple Development identity so TCC permissions survive rebuilds.
+sign-local-debug:
+	@if [ -z "$(APPLE_DEV_IDENTITY)" ] || [ "$(APPLE_DEV_IDENTITY)" = "-" ]; then \
+		echo "Warning: No Apple Development identity found. Falling back to ad-hoc signing."; \
+		echo "Accessibility and microphone permissions may not persist across rebuilds."; \
+		codesign --force --deep --sign - "$(APP_BUNDLE)"; \
+	else \
+		echo "Signing debug bundle with Apple Development identity..."; \
+		codesign --force --sign "$(APPLE_DEV_IDENTITY)" "$(APP_BUNDLE)/Contents/MacOS/mlx.metallib"; \
+		codesign --force --deep --sign "$(APPLE_DEV_IDENTITY)" "$(APP_BUNDLE)"; \
+	fi
+	@echo "Debug bundle signed"
 
 # Sign for App Store submission (requires Apple Developer certificate)
 # Auto-detects certificate hash if not provided. Override with: make sign-appstore IDENTITY="..." or IDENTITY=HASH
@@ -310,9 +325,7 @@ test-sparkle-linking:
 	@echo "🎉 All Sparkle linking tests passed!"
 
 # Run debug bundle with direct-distribution flags (recommended default)
-run: bundle-debug-direct
-	@echo "Ad-hoc signing debug bundle for local testing..."
-	@codesign --force --deep --sign - $(APP_BUNDLE)
+run: bundle-debug-direct sign-local-debug
 	@$(RUN_WITH_LOG_STREAM)
 
 # Run raw debug binary with direct-distribution flags
@@ -320,7 +333,7 @@ run-binary: build-direct
 	$(BUILD_DIR)/debug/$(APP_NAME)
 
 # Run debug bundle without direct-distribution flags
-run-appstore: bundle-debug
+run-appstore: bundle-debug sign-local-debug
 	@$(RUN_WITH_LOG_STREAM)
 
 # Run raw debug binary without direct-distribution flags
@@ -332,14 +345,27 @@ run-bundle: bundle
 	@$(RUN_WITH_LOG_STREAM)
 
 # Run the debug app bundle
-run-bundle-debug: bundle-debug
+run-bundle-debug: bundle-debug sign-local-debug
 	@$(RUN_WITH_LOG_STREAM)
 
 # Run direct distribution bundle (with Sparkle, ad-hoc signed for testing)
-run-bundle-direct: bundle-direct
-	@echo "Ad-hoc signing for local testing..."
-	@codesign --force --deep --sign - $(APP_BUNDLE)
+run-bundle-direct: bundle-direct sign-local-debug
 	@$(RUN_WITH_LOG_STREAM)
+
+# Reset and re-open Accessibility permission flow for the direct debug build.
+accessibility-setup-direct: bundle-debug-direct sign-local-debug
+	@echo "Resetting Accessibility permission for VoiceyDirect..."
+	@tccutil reset Accessibility work.voicey.VoiceyDirect 2>/dev/null || echo "  (reset failed; you may need to remove Voicey manually in System Settings)"
+	@echo "Opening Accessibility settings..."
+	@open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+	@echo "Launching signed debug bundle..."
+	@open -n "$(APP_BUNDLE)"
+	@echo ""
+	@echo "In System Settings > Privacy & Security > Accessibility:"
+	@echo "  1. Enable Voicey if it appears in the list"
+	@echo "  2. If it does not appear, click '+' and choose: $(CURDIR)/$(APP_BUNDLE)"
+	@echo ""
+	@echo "This target uses Apple Development signing when available so the grant is more likely to persist across rebuilds."
 
 # Install to Applications
 install: sign
@@ -544,6 +570,7 @@ help:
 	@echo "  reset-state       - Reset app state (keeps models)"
 	@echo "  reset-all         - Reset everything including models"
 	@echo "  reset-permissions - Reset system permissions (mic, accessibility, login)"
+	@echo "  accessibility-setup-direct - Reset/open Accessibility flow for direct debug build"
 	@echo "  reset-full        - Reset everything: state, models, and permissions"
 	@echo "  show-state        - Show current app settings and models"
 	@echo "  help              - Show this help"
