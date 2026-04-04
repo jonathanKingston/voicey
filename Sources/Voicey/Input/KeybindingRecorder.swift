@@ -110,7 +110,11 @@ struct KeybindingRecorderView: View {
   }
 }
 
-#Preview {
-  KeybindingRecorderView(name: .toggleTranscription)
-    .padding()
+#if DEBUG
+struct KeybindingRecorderView_Previews: PreviewProvider {
+  static var previews: some View {
+    KeybindingRecorderView(name: .toggleTranscription)
+      .padding()
+  }
 }
+#endif

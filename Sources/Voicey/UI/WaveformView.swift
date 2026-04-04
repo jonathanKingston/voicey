@@ -212,20 +212,20 @@ struct CircularLevelView: View {
 
 // MARK: - Previews
 
-#Preview("Waveform") {
-  WaveformView(level: 0.5)
-    .frame(width: 100, height: 30)
-    .padding()
-}
+struct WaveformView_Previews: PreviewProvider {
+  static var previews: some View {
+    Group {
+      WaveformView(level: 0.5)
+        .frame(width: 100, height: 30)
+        .padding()
 
-#Preview("Level Meter") {
-  LevelMeterView(level: 0.7)
-    .frame(width: 100, height: 20)
-    .padding()
-}
+      LevelMeterView(level: 0.7)
+        .frame(width: 100, height: 20)
+        .padding()
 
-#Preview("Circular") {
-  CircularLevelView(level: 0.6)
-    .frame(width: 40, height: 40)
-    .padding()
+      CircularLevelView(level: 0.6)
+        .frame(width: 40, height: 40)
+        .padding()
+    }
+  }
 }

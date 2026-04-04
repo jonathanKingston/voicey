@@ -382,15 +382,17 @@ struct TranscriptionOverlayView: View {
   }
 }
 
-#Preview {
-  TranscriptionOverlayView(onCancel: { print("Cancelled") })
-    .environmentObject(
-      {
-        let state = AppState()
-        state.transcriptionState = .recording(startTime: Date())
-        state.audioLevel = 0.5
-        return state
-      }()
-    )
-    .padding()
+struct TranscriptionOverlayView_Previews: PreviewProvider {
+  static var previews: some View {
+    TranscriptionOverlayView(onCancel: { print("Cancelled") })
+      .environmentObject(
+        {
+          let state = AppState()
+          state.transcriptionState = .recording(startTime: Date())
+          state.audioLevel = 0.5
+          return state
+        }()
+      )
+      .padding()
+  }
 }
