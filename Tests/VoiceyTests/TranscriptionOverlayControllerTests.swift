@@ -4,6 +4,8 @@ import XCTest
 
 @MainActor
 final class TranscriptionOverlayControllerTests: XCTestCase {
+  private let overlayScreenshotPathEnvironmentKey = "VOICEY_OVERLAY_SCREENSHOT_PATH"
+
   override func setUp() {
     super.setUp()
     _ = NSApplication.shared.setActivationPolicy(.accessory)
@@ -34,6 +36,10 @@ final class TranscriptionOverlayControllerTests: XCTestCase {
       keyWindow.firstResponder === keyWindow,
       "Expected overlay panel to keep first responder so the cancel button does not receive initial focus"
     )
+
+    if let screenshotPath = ProcessInfo.processInfo.environment[overlayScreenshotPathEnvironmentKey] {
+      try? saveScreenshot(of: keyWindow, to: screenshotPath)
+    }
   }
 
   private func pumpRunLoop() {
@@ -46,5 +52,24 @@ final class TranscriptionOverlayControllerTests: XCTestCase {
       window.close()
     }
     pumpRunLoop()
+  }
+
+  private func saveScreenshot(of window: NSWindow, to path: String) throws {
+    let contentView = try XCTUnwrap(window.contentView)
+    contentView.layoutSubtreeIfNeeded()
+    contentView.displayIfNeeded()
+
+    let bounds = contentView.bounds
+    let bitmap = try XCTUnwrap(contentView.bitmapImageRepForCachingDisplay(in: bounds))
+    contentView.cacheDisplay(in: bounds, to: bitmap)
+
+    let pngData = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+    let url = URL(fileURLWithPath: path)
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(),
+      withIntermediateDirectories: true,
+      attributes: nil
+    )
+    try pngData.write(to: url)
   }
 }
