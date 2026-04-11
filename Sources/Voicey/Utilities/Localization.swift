@@ -5,8 +5,15 @@ private let localizationBundle = LocalizationBundleResolver.resolve()
 private enum LocalizationBundleResolver {
     private static let tableName = "Localizable"
     private static let tableExtension = "strings"
+    private static let validationKey = "state.listening"
 
     static func resolve() -> Bundle {
+        #if SWIFT_PACKAGE
+        if bundleContainsLocalizationTable(.module) {
+            return .module
+        }
+        #endif
+
         if bundleContainsLocalizationTable(.main) {
             return .main
         }
@@ -57,11 +64,9 @@ private enum LocalizationBundleResolver {
     }
 
     private static func bundleContainsLocalizationTable(_ bundle: Bundle) -> Bool {
-        if bundle.path(forResource: tableName, ofType: tableExtension) != nil {
-            return true
-        }
-
-        return bundle.localizations.contains { localization in
+        let hasLocalizationTable =
+            bundle.path(forResource: tableName, ofType: tableExtension) != nil ||
+            bundle.localizations.contains { localization in
             bundle.path(
                 forResource: tableName,
                 ofType: tableExtension,
@@ -69,6 +74,18 @@ private enum LocalizationBundleResolver {
                 forLocalization: localization
             ) != nil
         }
+
+        guard hasLocalizationTable else {
+            return false
+        }
+
+        let localizedValidationString = NSLocalizedString(
+            validationKey,
+            tableName: tableName,
+            bundle: bundle,
+            comment: ""
+        )
+        return localizedValidationString != validationKey
     }
 }
 

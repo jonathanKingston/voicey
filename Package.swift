@@ -34,7 +34,7 @@ let package = Package(
     name: "Voicey",
     defaultLocalization: "en",
     platforms: [
-        .macOS(.v14)
+        .macOS("15.0")
     ],
     products: [
         .executable(name: "Voicey", targets: ["Voicey"])
@@ -55,6 +55,11 @@ let package = Package(
                 .linkedFramework("Metal"),
                 .linkedFramework("CoreML")
             ]
+        ),
+        .testTarget(
+            name: "VoiceyTests",
+            dependencies: ["Voicey"],
+            path: "Tests/VoiceyTests"
         )
     ]
 )
