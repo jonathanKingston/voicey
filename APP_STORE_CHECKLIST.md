@@ -250,7 +250,7 @@ For Voicey, likely all "None" → Rating: 4+
 ### Testing
 - [ ] App runs correctly with sandbox enabled
 - [ ] All features work as expected
-- [ ] Tested on minimum supported macOS (14.0)
+- [ ] Tested on minimum supported macOS (15.0)
 - [ ] Tested on latest macOS
 
 ---
