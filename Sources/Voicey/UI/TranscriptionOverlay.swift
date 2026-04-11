@@ -47,9 +47,12 @@ final class TranscriptionOverlayController {
       // Reposition to the target screen each time we show
       positionWindow(on: screen)
     }
-    window?.orderFront(nil)
-    // Make the panel key to receive keyboard events
-    window?.makeKey()
+    guard let window else { return }
+    window.orderFront(nil)
+    // Keep the panel as first responder so it receives Escape without AppKit
+    // auto-highlighting the close button when the overlay becomes key.
+    window.makeKey()
+    _ = window.makeFirstResponder(window)
   }
 
   func hide() {
@@ -166,6 +169,7 @@ struct TranscriptionOverlayView: View {
           .foregroundStyle(.secondary)
       }
       .buttonStyle(.plain)
+      .focusEffectDisabled()
       .help(L10n.Overlay.cancelHelp)
     }
     .padding(.horizontal, 20)
