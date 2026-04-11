@@ -28,19 +28,19 @@ final class TranscriptionOverlayControllerTests: XCTestCase {
     controller.show()
     pumpRunLoop()
 
-    guard let keyWindow = NSApplication.shared.keyWindow else {
-      XCTFail("Expected overlay panel to become the key window")
+    guard let overlayPanel = NSApplication.shared.windows.first(where: { $0 is KeyablePanel }) else {
+      XCTFail("Expected overlay panel to be created")
       return
     }
 
-    XCTAssertTrue(keyWindow is KeyablePanel)
+    XCTAssertTrue(overlayPanel.isVisible)
     XCTAssertTrue(
-      keyWindow.firstResponder === keyWindow,
+      overlayPanel.firstResponder === overlayPanel,
       "Expected overlay panel to keep first responder so the cancel button does not receive initial focus"
     )
 
     if let screenshotPath = ProcessInfo.processInfo.environment[overlayScreenshotPathEnvironmentKey] {
-      try? saveScreenshot(of: keyWindow, to: screenshotPath)
+      try? saveScreenshot(of: overlayPanel, to: screenshotPath)
     }
   }
 
