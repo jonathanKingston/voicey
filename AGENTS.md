@@ -100,3 +100,35 @@ These issues were found during code review. Avoid repeating them:
 ## Code Review History
 
 See [`CODE_REVIEW.md`](CODE_REVIEW.md) for the full history of issues found and fixed. This provides context on past problems and their solutions.
+
+## Cursor Cloud specific instructions
+
+### Platform constraint
+
+Voicey is a **macOS-only** application. The Cloud Agent VM runs Linux, so `swift build` / `make build` / `make run` will fail with missing Apple framework errors (SwiftUI, AppKit, AVFoundation, CoreML, Metal, etc.). This is expected and not a bug.
+
+### What works on Linux
+
+| Task | Command | Notes |
+|------|---------|-------|
+| Dependency resolution | `swift package resolve` | Fetches all SPM dependencies successfully |
+| Linting | `swiftlint lint Sources/` | Runs against project source files |
+| Formatting | `swift-format -i -r Sources/` | Bundled with the Swift toolchain |
+| Syntax/logic review | Manual code inspection | Review Swift files directly for correctness |
+
+### What does NOT work on Linux
+
+- `swift build` — fails at Apple-only framework imports (SwiftUI, AppKit, CoreML, etc.)
+- `make build` / `make run` / `make bundle` — all depend on `swift build` succeeding
+- Any target that requires `codesign`, `xcodegen`, `productbuild`, or macOS system tools
+
+### Developing in Cloud Agent
+
+When making code changes on this codebase from a Cloud Agent:
+
+1. Run `swiftlint lint Sources/` to validate style/lint rules after changes.
+2. Run `swift-format -i -r Sources/` if formatting is needed (or `make format`).
+3. Compilation and runtime testing must happen on a macOS machine. The Cloud Agent cannot verify builds.
+4. The Swift toolchain is at `/opt/swift/usr/bin`. It is added to `PATH` via `~/.bashrc`.
+5. SwiftLint is installed at `/usr/local/bin/swiftlint` (v0.58.2, Linux x86_64 binary).
+6. `libstdc++-14-dev` must be installed for SPM dependency resolution to compile C++ dependencies (BoringSSL in swift-crypto).
