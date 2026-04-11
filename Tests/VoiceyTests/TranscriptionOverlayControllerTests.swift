@@ -21,6 +21,8 @@ final class TranscriptionOverlayControllerTests: XCTestCase {
     appState.transcriptionState = .recording(startTime: Date())
     appState.audioLevel = 0.4
 
+    XCTAssertEqual(L10n.State.listening, "Listening...")
+
     let controller = TranscriptionOverlayController(appState: appState)
 
     controller.show()

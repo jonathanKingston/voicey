@@ -8,6 +8,12 @@ private enum LocalizationBundleResolver {
     private static let validationKey = "state.listening"
 
     static func resolve() -> Bundle {
+        #if SWIFT_PACKAGE
+        if bundleContainsLocalizationTable(.module) {
+            return .module
+        }
+        #endif
+
         if bundleContainsLocalizationTable(.main) {
             return .main
         }
