@@ -404,6 +404,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func setupMediaKeyMonitor() {
+    if !dependencies.permissions.checkAccessibilityPermission() {
+      AppLogger.general.warning(
+        "Accessibility permission not granted; media key monitoring may be unavailable"
+      )
+    }
+
     mediaKeyMonitor = MediaKeyMonitor { [weak self] in
       self?.handleTranscriptionTrigger(source: "media key")
     }
