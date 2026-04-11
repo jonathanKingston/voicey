@@ -16,8 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let dependencies: Dependencies
 
   #if VOICEY_DIRECT_DISTRIBUTION
-  // Sparkle updater for direct distribution builds
-  private let sparkleUpdater = SparkleUpdater.shared
+    // Sparkle updater for direct distribution builds
+    private let sparkleUpdater = SparkleUpdater.shared
   #endif
 
   // Keep strong reference to prevent deallocation while visible
@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // ESC key monitors
   private var localEscKeyMonitor: Any?
+  private var mediaKeyMonitor: MediaKeyMonitor?
   private var selectedModelObserver: Any?
 
   // Model upgrade lock - prevents recording during model swap
@@ -75,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Setup global hotkey
     setupHotkey()
+    setupMediaKeyMonitor()
 
     // Keep runtime state in sync when the user changes models from settings.
     setupSelectedModelObserver()
@@ -123,7 +125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let autoPasteEnabled = dependencies.settings.autoPasteEnabled
     let hasAccessibility = dependencies.permissions.checkAccessibilityPermission()
     let needsAccessibility = autoPasteEnabled && !hasAccessibility
-    debugPrint("🔍 Has accessibility: \(hasAccessibility), auto-paste enabled: \(autoPasteEnabled)", category: "STARTUP")
+    debugPrint(
+      "🔍 Has accessibility: \(hasAccessibility), auto-paste enabled: \(autoPasteEnabled)",
+      category: "STARTUP")
 
     // Show onboarding if any required state is missing
     // This ensures users are guided through setup even if permissions were revoked
@@ -145,6 +149,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if let monitor = localEscKeyMonitor {
       NSEvent.removeMonitor(monitor)
     }
+    mediaKeyMonitor?.stop()
+    mediaKeyMonitor = nil
 
     // Clean up
     transcriptionOverlay = nil
@@ -178,12 +184,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let baseOrder: [SpeechModel] = [
       ModelManager.defaultModel,
       .qwen3Large, .qwen3Small, .graniteSpeech,
-      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn
+      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn,
     ]
 
     var ordered: [SpeechModel] = []
-    let prioritized = preferredBackend == nil ? baseOrder : baseOrder.filter { $0.backendKind == preferredBackend }
-    let remainder = preferredBackend == nil ? [] : baseOrder.filter { $0.backendKind != preferredBackend }
+    let prioritized =
+      preferredBackend == nil ? baseOrder : baseOrder.filter { $0.backendKind == preferredBackend }
+    let remainder =
+      preferredBackend == nil ? [] : baseOrder.filter { $0.backendKind != preferredBackend }
 
     for model in prioritized + remainder where !ordered.contains(model) {
       ordered.append(model)
@@ -389,8 +397,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func setupHotkey() {
     KeyboardShortcuts.onKeyDown(for: .toggleTranscription) { [weak self] in
-      self?.toggleTranscription()
+      Task { @MainActor in
+        self?.handleTranscriptionTrigger(source: "keyboard shortcut")
+      }
     }
+  }
+
+  private func setupMediaKeyMonitor() {
+    mediaKeyMonitor = MediaKeyMonitor { [weak self] in
+      self?.handleTranscriptionTrigger(source: "media key")
+    }
+    mediaKeyMonitor?.start()
+  }
+
+  @MainActor
+  private func handleTranscriptionTrigger(source: String) {
+    AppLogger.general.info("Received transcription trigger from \(source)")
+    toggleTranscription()
   }
 
   private func setupEscapeKeyMonitor() {
@@ -565,7 +588,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Upgrade to a target model once it is ready.
   private func performModelUpgrade(to model: SpeechModel) {
     let previousModel = SettingsManager.shared.selectedModel
-    debugPrint("🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
+    debugPrint(
+      "🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
 
     Task {
       // Release upgrade lock immediately so normal recording can continue while loading in background.
@@ -619,7 +643,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           whisperEngine?.resetPerformanceTracking()
           graniteEngine?.resetPerformanceTracking()
           qwenEngine?.resetPerformanceTracking()
-          debugPrint("✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!", category: "MODEL")
+          debugPrint(
+            "✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!",
+            category: "MODEL")
           dependencies.notifications.showModelUpgradeComplete(model: model)
         }
       } catch {
@@ -743,7 +769,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if !ModelManager.shared.isDownloaded(selectedModel),
       let fallbackModel = fallbackOrder(preferredBackend: selectedModel.backendKind).first(where: {
         downloadedModels.contains($0)
-      }) {
+      })
+    {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
       SettingsManager.shared.selectedModel = fallbackModel
@@ -844,7 +871,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Get the window list for all on-screen windows
     let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-    guard let windowInfoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+    guard
+      let windowInfoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
+    else {
       return nil
     }
 
@@ -856,11 +885,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Get the frontmost window (first in the list for this app, as list is front-to-back)
     guard let frontWindow = appWindows.first,
-          let boundsDict = frontWindow[kCGWindowBounds as String] as? [String: CGFloat],
-          let originX = boundsDict["X"],
-          let originY = boundsDict["Y"],
-          let width = boundsDict["Width"],
-          let height = boundsDict["Height"] else {
+      let boundsDict = frontWindow[kCGWindowBounds as String] as? [String: CGFloat],
+      let originX = boundsDict["X"],
+      let originY = boundsDict["Y"],
+      let width = boundsDict["Width"],
+      let height = boundsDict["Height"]
+    else {
       return nil
     }
 
@@ -898,8 +928,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
 
     // Stop audio capture and get buffer
-    guard let audioBuffer = audioCaptureManager?.stopCapture(
-      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic) else {
+    guard
+      let audioBuffer = audioCaptureManager?.stopCapture(
+        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+    else {
       debugPrint("❌ No audio buffer!", category: "ERROR")
       AppLogger.audio.error("No audio buffer!")
       hideOverlay()
@@ -963,7 +995,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let result: TranscriptionResult
       switch selectedModel.backendKind {
       case .granitePython:
-        guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer) else {
+        guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer)
+        else {
           throw TranscriptionError.transcriptionFailed("No result from Granite engine")
         }
         result = graniteResult
@@ -973,7 +1006,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         result = qwenResult
       case .whisperKit:
-        guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer) else {
+        guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer)
+        else {
           throw TranscriptionError.transcriptionFailed("No result from Whisper engine")
         }
         result = whisperResult
@@ -1011,7 +1045,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
         // Deliver text to clipboard and optionally auto-paste
-        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) { [weak self] in
+        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) {
+          [weak self] in
           debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
           self?.hideOverlay()
           self?.appState.transcriptionState = .idle
