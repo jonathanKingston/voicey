@@ -55,6 +55,11 @@ let package = Package(
                 .linkedFramework("Metal"),
                 .linkedFramework("CoreML")
             ]
+        ),
+        .testTarget(
+            name: "VoiceyTests",
+            dependencies: ["Voicey"],
+            path: "Tests/VoiceyTests"
         )
     ]
 )
