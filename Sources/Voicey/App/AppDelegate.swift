@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var coordinatorSpeechEngine: MacSpeechEngineRouter?
   private var coordinatorTextDeliverer: MacOutputTextDeliverer?
   private var activeTranscriptionRequestID: String?
+  private var recordingStartTask: Task<Void, Never>?
 
   // The app that was frontmost when recording started (used for optional auto-paste)
   private var recordingTargetPID: pid_t?
@@ -874,6 +875,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let selectedModel = SettingsManager.shared.selectedModel
     audioCaptureManager.configureTrailingTrimHeuristic(enabled: !selectedModel.isGraniteModel)
     activeTranscriptionRequestID = UUID().uuidString
+    appState.transcriptionState = .recording(startTime: Date())
 
     // Show overlay on the screen where the user was last interacting
     showOverlay()
@@ -887,8 +889,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    Task { @MainActor [weak self] in
+    recordingStartTask = Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { recordingStartTask = nil }
       do {
         try await transcriptionCoordinator.startRecording(requestID: requestID)
         if case .recording(let startedAt) = await transcriptionCoordinator.state {
@@ -957,8 +960,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.audio.info("Stopping recording...")
     statusBarController?.updateIcon(recording: false)
 
-    appState.transcriptionState = .processing
-
     guard let transcriptionCoordinator else {
       hideOverlay()
       appState.transcriptionState = .error(message: "Transcription coordinator unavailable")
@@ -969,6 +970,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     Task { @MainActor [weak self] in
       guard let self else { return }
+      if let recordingStartTask {
+        await recordingStartTask.value
+      }
+      guard activeTranscriptionRequestID != nil else {
+        return
+      }
+      appState.transcriptionState = .processing
+
       do {
         try await transcriptionCoordinator.stopRecording()
         let coordinatorState = await transcriptionCoordinator.state
@@ -1047,6 +1056,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     Task { @MainActor [weak self] in
       guard let self else { return }
+      recordingStartTask?.cancel()
+      recordingStartTask = nil
       await transcriptionCoordinator?.cancel()
       appState.transcriptionState = .idle
       hideOverlay()
@@ -1056,6 +1067,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func finalizeTranscriptionCycle() {
+    recordingStartTask = nil
     recordingTargetPID = nil
     recordingTargetScreen = nil
     activeTranscriptionRequestID = nil
