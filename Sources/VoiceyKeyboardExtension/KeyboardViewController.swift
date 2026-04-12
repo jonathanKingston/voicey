@@ -105,15 +105,27 @@ final class KeyboardViewController: UIInputViewController {
           setStatus("No transcript ready")
           return
         }
+        if let error = result.error {
+          setStatus("Last request failed: \(error)")
+          return
+        }
+        guard result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+          setStatus("Result text is empty")
+          return
+        }
 
-        var keyboardState = try await store.loadKeyboardState() ?? KeyboardWorkflowState()
+        let keyboardState = try await store.loadKeyboardState() ?? KeyboardWorkflowState()
+        if let lastSeenRequestID = keyboardState.lastSeenRequestID, lastSeenRequestID != result.requestID {
+          setStatus("Latest result is stale")
+          return
+        }
         if keyboardState.lastInsertedRequestID == result.requestID {
           setStatus("Latest transcript already inserted")
           return
         }
 
         textDocumentProxy.insertText(result.text)
-        keyboardState = try await store.markKeyboardInserted(requestID: result.requestID)
+        _ = try await store.markKeyboardInserted(requestID: result.requestID)
         setStatus("Inserted transcript")
       } catch {
         setStatus("Insert failed")
@@ -128,12 +140,22 @@ final class KeyboardViewController: UIInputViewController {
         try await store.purgeExpiredRequest()
         let request = try await store.loadRequest()
         let result = try await store.loadResult()
+        let keyboardState = try await store.loadKeyboardState()
 
         if let request, request.status == .pending || request.status == .processing {
           setStatus("Request \(request.status.rawValue)")
+        } else if let result, let error = result.error {
+          setStatus("Last request failed: \(error)")
         } else if let result {
-          setStatus("Result ready")
-          _ = result
+          if keyboardState?.lastInsertedRequestID == result.requestID {
+            setStatus("Transcript inserted")
+          } else if let lastSeenRequestID = keyboardState?.lastSeenRequestID,
+            lastSeenRequestID != result.requestID
+          {
+            setStatus("Stale result available")
+          } else {
+            setStatus("Result ready")
+          }
         } else {
           setStatus("Idle")
         }

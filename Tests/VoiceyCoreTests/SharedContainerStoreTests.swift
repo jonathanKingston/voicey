@@ -159,4 +159,43 @@ final class SharedContainerStoreTests: XCTestCase {
     XCTAssertEqual(state?.lastSeenRequestID, "request-99")
     XCTAssertEqual(state?.lastInsertedRequestID, "request-99")
   }
+
+  func testMarkKeyboardIdlePreservesLastInsertedRequest() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+    try await store.saveKeyboardState(
+      KeyboardWorkflowState(
+        isProcessing: true,
+        lastSeenRequestID: "request-11",
+        lastInsertedRequestID: "request-10"
+      )
+    )
+
+    _ = try await store.markKeyboardIdle(lastSeenRequestID: "request-11")
+    let state = try await store.loadKeyboardState()
+
+    XCTAssertEqual(state?.isProcessing, false)
+    XCTAssertEqual(state?.lastSeenRequestID, "request-11")
+    XCTAssertEqual(state?.lastInsertedRequestID, "request-10")
+  }
+
+  func testMarkRequestProcessingRejectsTransitionFromCompleted() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+    let request = DictationRequest(requestID: "request-completed", status: .completed)
+    try await store.saveRequest(request)
+
+    do {
+      _ = try await store.markRequestProcessing(requestID: "request-completed")
+      XCTFail("Expected invalid transition error")
+    } catch let error as SharedContainerStoreError {
+      switch error {
+      case .invalidRequestTransition(let from, let to):
+        XCTAssertEqual(from, .completed)
+        XCTAssertEqual(to, .processing)
+      default:
+        XCTFail("Expected invalidRequestTransition, got \(error)")
+      }
+    } catch {
+      XCTFail("Unexpected error type: \(error)")
+    }
+  }
 }

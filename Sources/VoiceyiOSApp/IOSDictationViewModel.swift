@@ -29,7 +29,38 @@ final class IOSDictationViewModel: ObservableObject {
     switch route {
     case .startDictation:
       statusMessage = "Opened from keyboard request"
-      refreshState()
+      beginProcessingFromKeyboardHandoff()
+    }
+  }
+
+  private func beginProcessingFromKeyboardHandoff() {
+    Task {
+      guard let store else { return }
+      do {
+        try await store.purgeExpiredRequest()
+        guard let request = try await store.loadRequest() else {
+          statusMessage = "No request available"
+          pendingRequestID = nil
+          return
+        }
+
+        pendingRequestID = request.requestID
+        switch request.status {
+        case .pending:
+          try await store.markRequestProcessing(requestID: request.requestID)
+          statusMessage = "Request processing"
+        case .processing:
+          statusMessage = "Request processing"
+        case .completed:
+          statusMessage = "Request completed"
+        case .failed:
+          statusMessage = "Request failed"
+        case .cancelled:
+          statusMessage = "Request cancelled"
+        }
+      } catch {
+        statusMessage = "Failed to process request"
+      }
     }
   }
 
