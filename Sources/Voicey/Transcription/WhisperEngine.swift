@@ -1,88 +1,12 @@
 import Foundation
 import WhisperKit
 import os
+import VoiceyCore
 
-/// Result from Whisper transcription including text and timing information
-struct TranscriptionResult {
-  let text: String
-  let segments: [TranscriptionSegment]
-  let language: String
-  let processingTime: TimeInterval
-  let performanceMetrics: PerformanceMetrics
-}
-
-/// Performance metrics for transcription
-struct PerformanceMetrics {
-  /// Real-time factor: processing time / audio duration
-  /// < 1.0 means faster than real-time
-  /// > 1.0 means slower than real-time
-  let realTimeFactor: Double
-
-  /// Audio duration in seconds
-  let audioDuration: TimeInterval
-
-  /// Processing time in seconds
-  let processingTime: TimeInterval
-
-  /// System thermal state at time of transcription
-  let thermalState: ProcessInfo.ThermalState
-
-  /// Whether the system appears to be struggling
-  var isStruggling: Bool {
-    // Consider struggling if:
-    // 1. RTF > 2.0 (taking twice as long as the audio duration)
-    // 2. System is thermally throttled
-    // 3. RTF > 1.0 and thermal state is serious/critical
-    if realTimeFactor > 2.0 { return true }
-    if thermalState == .critical { return true }
-    if thermalState == .serious && realTimeFactor > 1.0 { return true }
-    return false
-  }
-
-  /// Human-readable description of performance
-  var description: String {
-    let rtfStr = String(format: "%.2fx", realTimeFactor)
-    let thermalStr: String
-    switch thermalState {
-    case .nominal: thermalStr = "nominal"
-    case .fair: thermalStr = "fair"
-    case .serious: thermalStr = "serious"
-    case .critical: thermalStr = "critical"
-    @unknown default: thermalStr = "unknown"
-    }
-    return "RTF: \(rtfStr), Thermal: \(thermalStr)"
-  }
-
-  /// Suggestion for improving performance
-  var suggestion: String? {
-    if thermalState == .critical || thermalState == .serious {
-      return
-        "System is running hot. Consider using a smaller model or letting the device cool down."
-    }
-    if realTimeFactor > 2.0 {
-      return
-        "Transcription is slow. Consider switching to a faster model like 'Small' for better performance."
-    }
-    if realTimeFactor > 1.5 {
-      return "Transcription may be slow on longer recordings. A smaller model might help."
-    }
-    return nil
-  }
-}
-
-struct TranscriptionSegment {
-  let text: String
-  let startTime: TimeInterval
-  let endTime: TimeInterval
-  let tokens: [TranscriptionToken]
-}
-
-struct TranscriptionToken {
-  let text: String
-  let probability: Float
-  let startTime: TimeInterval
-  let endTime: TimeInterval
-}
+typealias TranscriptionResult = VoiceyCore.TranscriptionResult
+typealias PerformanceMetrics = VoiceyCore.PerformanceMetrics
+typealias TranscriptionSegment = VoiceyCore.TranscriptionSegment
+typealias TranscriptionToken = VoiceyCore.TranscriptionToken
 
 /// Wrapper around WhisperKit for on-device speech-to-text
 /// Note: This class should be accessed from the main thread for UI callbacks.
