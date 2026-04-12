@@ -60,7 +60,15 @@ final class IOSDictationViewModel: ObservableObject {
         switch request.status {
         case .pending, .processing:
           statusMessage = "Starting recording..."
-          try await startRecording(request: request, store: store)
+          do {
+            try await startRecording(request: request, store: store)
+          } catch {
+            await failRequestOnStartError(
+              requestID: request.requestID,
+              store: store,
+              error: error
+            )
+          }
         case .completed:
           statusMessage = "Request completed"
         case .failed:
@@ -108,11 +116,37 @@ final class IOSDictationViewModel: ObservableObject {
           return
         }
 
-        try await startRecording(request: request, store: store)
+        do {
+          try await startRecording(request: request, store: store)
+        } catch {
+          await failRequestOnStartError(
+            requestID: request.requestID,
+            store: store,
+            error: error
+          )
+        }
       } catch {
         statusMessage = "Failed to start recording"
       }
     }
+  }
+
+  private func failRequestOnStartError(
+    requestID: String,
+    store: SharedContainerStore,
+    error: Error
+  ) async {
+    try? await store.markRequestFailed(
+      requestID: requestID,
+      errorMessage: error.localizedDescription,
+      language: "auto",
+      model: speechEngine.identifier
+    )
+    _ = try? await store.markKeyboardIdle(lastSeenRequestID: requestID)
+    activeRequestID = nil
+    isRecording = false
+    pendingRequestID = requestID
+    statusMessage = "Failed to start recording"
   }
 
   private func startRecording(
