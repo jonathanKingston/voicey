@@ -6,6 +6,12 @@ struct IOSDictationRootView: View {
   var body: some View {
     NavigationStack {
       Form {
+        Section("Keyboard Integration") {
+          Text("1. Enable Voicey Keyboard in Settings > General > Keyboard.")
+          Text("2. Allow Full Access for Voicey Keyboard.")
+          Text("3. Tap Dictate from the keyboard to hand off into this app.")
+        }
+
         Section("Setup") {
           if let setupErrorMessage = viewModel.setupErrorMessage {
             Text(setupErrorMessage)
@@ -55,6 +61,9 @@ struct IOSDictationRootView: View {
     }
     .task {
       viewModel.refreshState()
+    }
+    .onOpenURL { url in
+      viewModel.handleIncomingURL(url)
     }
   }
 }
