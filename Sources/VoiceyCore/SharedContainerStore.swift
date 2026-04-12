@@ -138,8 +138,9 @@ public actor SharedContainerStore {
     try saveRequestForce(cancelled)
   }
 
-  public func markRequestProcessing(requestID: String) throws {
-    _ = try updateRequest(requestID: requestID, to: .processing)
+  @discardableResult
+  public func markRequestProcessing(requestID: String) throws -> DictationRequest {
+    try updateRequest(requestID: requestID, to: .processing)
   }
 
   public func markRequestCompleted(
