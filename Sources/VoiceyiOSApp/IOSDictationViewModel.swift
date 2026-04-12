@@ -66,13 +66,7 @@ final class IOSDictationViewModel: ObservableObject {
           statusMessage = "No pending request"
           return
         }
-        let processingRequest = DictationRequest(
-          requestID: request.requestID,
-          createdAt: request.createdAt,
-          source: request.source,
-          status: .processing
-        )
-        try await store.saveRequest(processingRequest)
+        try await store.markRequestProcessing(requestID: request.requestID)
         statusMessage = "Request processing"
       } catch {
         statusMessage = "Failed to mark processing"
@@ -95,21 +89,12 @@ final class IOSDictationViewModel: ObservableObject {
           return
         }
 
-        let result = DictationResult(
+        try await store.markRequestCompleted(
           requestID: request.requestID,
           text: trimmedTranscript,
           language: "auto",
           model: "ios-manual-entry"
         )
-        let completedRequest = DictationRequest(
-          requestID: request.requestID,
-          createdAt: request.createdAt,
-          source: request.source,
-          status: .completed
-        )
-
-        try await store.saveResult(result)
-        try await store.saveRequest(completedRequest)
         try await store.saveKeyboardState(
           KeyboardWorkflowState(
             isProcessing: false,

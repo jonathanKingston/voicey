@@ -3,6 +3,9 @@ import Foundation
 public enum SharedContainerStoreError: LocalizedError {
   case appGroupUnavailable(String)
   case concurrentRequestNotAllowed
+  case requestNotFound
+  case requestIdentifierMismatch(expected: String, found: String)
+  case invalidRequestTransition(from: DictationRequestStatus, to: DictationRequestStatus)
   case invalidRequestText
 
   public var errorDescription: String? {
@@ -11,6 +14,12 @@ public enum SharedContainerStoreError: LocalizedError {
       return "Unable to access App Group container: \(identifier)"
     case .concurrentRequestNotAllowed:
       return "A dictation request is already in flight."
+    case .requestNotFound:
+      return "No request exists for this transition."
+    case .requestIdentifierMismatch(let expected, let found):
+      return "Request identifier mismatch. Expected \(expected), found \(found)."
+    case .invalidRequestTransition(let from, let to):
+      return "Invalid request transition from \(from.rawValue) to \(to.rawValue)."
     case .invalidRequestText:
       return "Dictation text is empty."
     }
@@ -76,7 +85,8 @@ public actor SharedContainerStore {
   }
 
   public func saveResult(_ result: DictationResult) throws {
-    guard result.text.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil else {
+    let hasTextPayload = result.text.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
+    guard hasTextPayload || result.error != nil else {
       throw SharedContainerStoreError.invalidRequestText
     }
     try write(result, as: .result)
@@ -128,8 +138,89 @@ public actor SharedContainerStore {
     try saveRequestForce(cancelled)
   }
 
+  public func markRequestProcessing(requestID: String) throws {
+    _ = try updateRequest(requestID: requestID, to: .processing)
+  }
+
+  public func markRequestCompleted(
+    requestID: String,
+    text: String,
+    language: String = "auto",
+    model: String = "unknown"
+  ) throws {
+    let updatedRequest = try updateRequest(requestID: requestID, to: .completed)
+    let result = DictationResult(
+      requestID: requestID,
+      text: text,
+      language: language,
+      model: model
+    )
+    try saveResult(result)
+    try saveRequestForce(updatedRequest)
+  }
+
+  public func markRequestFailed(
+    requestID: String,
+    errorMessage: String,
+    language: String = "auto",
+    model: String = "unknown"
+  ) throws {
+    let updatedRequest = try updateRequest(requestID: requestID, to: .failed)
+    let result = DictationResult(
+      requestID: requestID,
+      text: "",
+      language: language,
+      model: model,
+      error: errorMessage
+    )
+    try saveResult(result)
+    try saveRequestForce(updatedRequest)
+  }
+
   private func saveRequestForce(_ request: DictationRequest) throws {
     try write(request, as: .request)
+  }
+
+  private func updateRequest(
+    requestID: String,
+    to nextStatus: DictationRequestStatus
+  ) throws -> DictationRequest {
+    guard let request = try loadRequest() else {
+      throw SharedContainerStoreError.requestNotFound
+    }
+    guard request.requestID == requestID else {
+      throw SharedContainerStoreError.requestIdentifierMismatch(
+        expected: requestID,
+        found: request.requestID
+      )
+    }
+
+    guard isValidTransition(from: request.status, to: nextStatus) else {
+      throw SharedContainerStoreError.invalidRequestTransition(from: request.status, to: nextStatus)
+    }
+
+    let updated = DictationRequest(
+      requestID: request.requestID,
+      createdAt: request.createdAt,
+      source: request.source,
+      status: nextStatus
+    )
+    try saveRequestForce(updated)
+    return updated
+  }
+
+  private func isValidTransition(from current: DictationRequestStatus, to next: DictationRequestStatus)
+    -> Bool
+  {
+    switch (current, next) {
+    case (.pending, .processing), (.pending, .completed), (.pending, .failed), (.pending, .cancelled),
+      (.processing, .completed), (.processing, .failed), (.processing, .cancelled):
+      return true
+    case let (lhs, rhs) where lhs == rhs:
+      return true
+    default:
+      return false
+    }
   }
 
   private func write<T: Codable>(_ value: T, as record: DictationSharedRecord) throws {

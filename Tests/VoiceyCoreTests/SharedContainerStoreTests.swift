@@ -79,4 +79,55 @@ final class SharedContainerStoreTests: XCTestCase {
     XCTAssertEqual(loaded?.status, .cancelled)
     XCTAssertEqual(loaded?.requestID, request.requestID)
   }
+
+  func testMarkRequestProcessingTransitionsPendingToProcessing() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+    let request = DictationRequest(requestID: "request-1", status: .pending)
+    try await store.saveRequest(request)
+
+    try await store.markRequestProcessing(requestID: "request-1")
+    let loaded = try await store.loadRequest()
+
+    XCTAssertEqual(loaded?.status, .processing)
+  }
+
+  func testMarkRequestCompletedStoresCompletedRequestAndResult() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+    let request = DictationRequest(requestID: "request-2", status: .processing)
+    try await store.saveRequest(request)
+
+    try await store.markRequestCompleted(
+      requestID: "request-2",
+      text: "dictation done",
+      language: "en",
+      model: "qwen3-small"
+    )
+
+    let loadedRequest = try await store.loadRequest()
+    let loadedResult = try await store.loadResult()
+
+    XCTAssertEqual(loadedRequest?.status, .completed)
+    XCTAssertEqual(loadedResult?.requestID, "request-2")
+    XCTAssertEqual(loadedResult?.text, "dictation done")
+    XCTAssertEqual(loadedResult?.error, nil)
+  }
+
+  func testMarkRequestFailedStoresErrorResultWithEmptyText() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+    let request = DictationRequest(requestID: "request-3", status: .processing)
+    try await store.saveRequest(request)
+
+    try await store.markRequestFailed(
+      requestID: "request-3",
+      errorMessage: "microphone unavailable"
+    )
+
+    let loadedRequest = try await store.loadRequest()
+    let loadedResult = try await store.loadResult()
+
+    XCTAssertEqual(loadedRequest?.status, .failed)
+    XCTAssertEqual(loadedResult?.requestID, "request-3")
+    XCTAssertEqual(loadedResult?.text, "")
+    XCTAssertEqual(loadedResult?.error, "microphone unavailable")
+  }
 }
