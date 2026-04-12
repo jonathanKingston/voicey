@@ -17,4 +17,16 @@ final class TranscriptionRuntimeStateTests: XCTestCase {
     XCTAssertNotNil(recordingState.recordingDuration)
     XCTAssertNil(TranscriptionRuntimeState.idle.recordingDuration)
   }
+
+  func testModelRuntimeStatusReadinessFlags() {
+    XCTAssertFalse(ModelRuntimeStatus.notDownloaded.isReady)
+    XCTAssertFalse(ModelRuntimeStatus.loading.isReady)
+    XCTAssertTrue(ModelRuntimeStatus.ready.isReady)
+    XCTAssertFalse(ModelRuntimeStatus.failed("x").isReady)
+
+    XCTAssertFalse(ModelRuntimeStatus.notDownloaded.isLoading)
+    XCTAssertTrue(ModelRuntimeStatus.loading.isLoading)
+    XCTAssertFalse(ModelRuntimeStatus.ready.isLoading)
+    XCTAssertFalse(ModelRuntimeStatus.failed("x").isLoading)
+  }
 }

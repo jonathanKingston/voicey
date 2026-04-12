@@ -24,23 +24,10 @@ extension TranscriptionRuntimeState {
   }
 }
 
+typealias ModelStatus = ModelRuntimeStatus
+
 /// Model readiness status - shown in status bar
-enum ModelStatus: Equatable {
-  case notDownloaded
-  case loading
-  case ready
-  case failed(String)
-
-  var isReady: Bool {
-    if case .ready = self { return true }
-    return false
-  }
-
-  var isLoading: Bool {
-    if case .loading = self { return true }
-    return false
-  }
-
+extension ModelRuntimeStatus {
   var statusText: String {
     switch self {
     case .notDownloaded: return L10n.ModelStatus.noModel
