@@ -45,6 +45,7 @@ targets:
       - path: Sources/Voicey/Resources
         buildPhase: resources
     dependencies:
+      - target: VoiceyCoreMac
       - package: KeyboardShortcuts
       - package: WhisperKit
       - package: SpeechSwift
@@ -91,6 +92,7 @@ targets:
       - path: Sources/Voicey/Resources
         buildPhase: resources
     dependencies:
+      - target: VoiceyCoreMac
       - package: KeyboardShortcuts
       - package: WhisperKit
       - package: SpeechSwift
@@ -135,6 +137,25 @@ targets:
         PRODUCT_NAME: VoiceyCore
         PRODUCT_MODULE_NAME: VoiceyCore
         PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyiOS.core
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+
+  VoiceyCoreMac:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/VoiceyCore
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_NAME: VoiceyCore
+        PRODUCT_MODULE_NAME: VoiceyCore
+        PRODUCT_BUNDLE_IDENTIFIER: work.voicey.Voicey.core.mac
         CODE_SIGN_STYLE: Automatic
       configs:
         Debug:

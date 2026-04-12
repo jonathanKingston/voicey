@@ -54,3 +54,69 @@ public protocol TranscriptionCoordinating: Sendable {
   func stopRecording() async throws
   func cancel() async
 }
+
+public enum TranscriptionSessionEvent: Equatable, Sendable {
+  case startRecording(startedAt: Date)
+  case startProcessing(requestID: String)
+  case complete(text: String, metadata: TranscriptionSessionMetadata)
+  case fail(message: String)
+  case cancel
+}
+
+public enum TranscriptionSessionTransitionError: LocalizedError {
+  case invalidTransition(from: TranscriptionSessionState, event: TranscriptionSessionEvent)
+  case emptyCompletedText
+  case emptyFailureMessage
+  case emptyRequestIdentifier
+
+  public var errorDescription: String? {
+    switch self {
+    case .invalidTransition(let from, let event):
+      return "Invalid transcription transition from \(from) with event \(event)."
+    case .emptyCompletedText:
+      return "Completed transcription text cannot be empty."
+    case .emptyFailureMessage:
+      return "Failure message cannot be empty."
+    case .emptyRequestIdentifier:
+      return "Request identifier cannot be empty."
+    }
+  }
+}
+
+public enum TranscriptionSessionReducer {
+  public static func reduce(
+    _ current: TranscriptionSessionState,
+    event: TranscriptionSessionEvent
+  ) throws -> TranscriptionSessionState {
+    switch (current, event) {
+    case (_, .cancel):
+      return .idle
+
+    case (.idle, .startRecording(let startedAt)),
+      (.completed, .startRecording(let startedAt)),
+      (.failed, .startRecording(let startedAt)):
+      return .recording(startedAt: startedAt)
+
+    case (.recording, .startProcessing(let requestID)):
+      guard requestID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+        throw TranscriptionSessionTransitionError.emptyRequestIdentifier
+      }
+      return .processing(requestID: requestID)
+
+    case (.processing, .complete(let text, let metadata)):
+      guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+        throw TranscriptionSessionTransitionError.emptyCompletedText
+      }
+      return .completed(text: text, metadata: metadata)
+
+    case (.processing, .fail(let message)):
+      guard message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+        throw TranscriptionSessionTransitionError.emptyFailureMessage
+      }
+      return .failed(message: message)
+
+    default:
+      throw TranscriptionSessionTransitionError.invalidTransition(from: current, event: event)
+    }
+  }
+}
