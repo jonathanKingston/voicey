@@ -32,19 +32,21 @@ struct IOSDictationRootView: View {
             viewModel.refreshState()
           }
 
-          Button("Mark Request Processing") {
-            viewModel.markRequestProcessing()
+          Button(viewModel.isRecording ? "Stop Recording & Publish" : "Start Recording") {
+            if viewModel.isRecording {
+              viewModel.stopRecordingAndPublishResult()
+            } else {
+              viewModel.startRecordingFromPendingRequest()
+            }
           }
-        }
+          .disabled(viewModel.pendingRequestID == nil)
 
-        Section("Publish Result") {
-          TextField("Transcript text", text: $viewModel.draftTranscript, axis: .vertical)
-            .lineLimit(3...6)
-
-          Button("Publish Transcript to Keyboard") {
-            viewModel.publishResult()
+          if viewModel.isRecording {
+            ProgressView("Recording in progress…")
+            Button("Cancel Recording", role: .destructive) {
+              viewModel.cancelRecording()
+            }
           }
-          .disabled(viewModel.draftTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
 
         Section("Last Published Result") {
