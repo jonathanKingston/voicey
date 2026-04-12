@@ -28,6 +28,12 @@ packages:
   SpeechSwift:
     url: https://github.com/soniqo/speech-swift
     branch: main
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle.git
+    from: "2.6.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle.git
+    from: "2.6.0"
 
 targets:
   # App Store / TestFlight target
@@ -52,6 +58,7 @@ targets:
         product: Qwen3ASR
       - package: SpeechSwift
         product: AudioCommon
+      - package: Sparkle
       - sdk: AVFoundation.framework
       - sdk: CoreAudio.framework
       - sdk: Accelerate.framework
@@ -99,6 +106,7 @@ targets:
         product: Qwen3ASR
       - package: SpeechSwift
         product: AudioCommon
+      - package: Sparkle
       - sdk: AVFoundation.framework
       - sdk: CoreAudio.framework
       - sdk: Accelerate.framework
