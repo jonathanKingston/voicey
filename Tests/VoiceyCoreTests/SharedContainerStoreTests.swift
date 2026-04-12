@@ -44,6 +44,24 @@ final class SharedContainerStoreTests: XCTestCase {
     }
   }
 
+  func testSaveRequestAllowsStatusUpdateForSameRequestID() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+    let pendingRequest = DictationRequest(requestID: "request-1", status: .pending)
+    try await store.saveRequest(pendingRequest)
+
+    let processingRequest = DictationRequest(
+      requestID: "request-1",
+      createdAt: pendingRequest.createdAt,
+      source: pendingRequest.source,
+      status: .processing
+    )
+    try await store.saveRequest(processingRequest)
+
+    let stored = try await store.loadRequest()
+    XCTAssertEqual(stored?.requestID, "request-1")
+    XCTAssertEqual(stored?.status, .processing)
+  }
+
   func testPurgeExpiredRequestMarksCancelled() async throws {
     let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
     let oldDate = Date(timeIntervalSinceNow: -1000)
