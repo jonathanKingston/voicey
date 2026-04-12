@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var qwenEngine: QwenEngine?
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
+  private var transcriptionCoordinator: TranscriptionCoordinator?
+  private var coordinatorSpeechEngine: MacSpeechEngineRouter?
+  private var coordinatorTextDeliverer: MacOutputTextDeliverer?
+  private var activeTranscriptionRequestID: String?
 
   // The app that was frontmost when recording started (used for optional auto-paste)
   private var recordingTargetPID: pid_t?
@@ -271,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @MainActor
   private func handleSelectedModelChange(_ model: SpeechModel) async {
     appState.currentModel = model
+    coordinatorSpeechEngine?.selectModel(model)
     unloadInactiveEngines(keeping: model.backendKind)
     ModelManager.shared.loadDownloadedModels()
 
@@ -338,6 +343,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     postProcessor = PostProcessor()
     outputManager = OutputManager()
+    if
+      let audioCaptureManager,
+      let whisperEngine,
+      let graniteEngine,
+      let qwenEngine,
+      let postProcessor,
+      let outputManager
+    {
+      let speechRouter = MacSpeechEngineRouter(
+        whisperEngine: whisperEngine,
+        graniteEngine: graniteEngine,
+        qwenEngine: qwenEngine,
+        postProcessor: postProcessor
+      )
+      let textDeliverer = MacOutputTextDeliverer(outputManager: outputManager)
+      speechRouter.selectModel(SettingsManager.shared.selectedModel)
+      self.coordinatorSpeechEngine = speechRouter
+      self.coordinatorTextDeliverer = textDeliverer
+      self.transcriptionCoordinator = TranscriptionCoordinator(
+        audioCapturer: audioCaptureManager,
+        speechEngine: speechRouter,
+        textDeliverer: textDeliverer
+      )
+    }
 
     // Setup model upgrade callback
     ModelManager.shared.onUpgradeReady = { [weak self] model in
@@ -753,6 +782,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.currentModel = fallbackModel
       selectedModel = fallbackModel
     }
+    coordinatorSpeechEngine?.selectModel(selectedModel)
 
     // If the newly selected backend is not loaded yet, load it before recording.
     if !isActiveEngineLoaded {
@@ -818,6 +848,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint("🎙️ Starting recording...", category: "RECORD")
     AppLogger.audio.info("Starting recording...")
 
+    guard
+      let transcriptionCoordinator,
+      let coordinatorTextDeliverer,
+      let audioCaptureManager
+    else {
+      hideOverlay()
+      appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
+      dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
+      return
+    }
+
     // Capture the frontmost app BEFORE we show the overlay so we can return focus for auto-paste.
     let frontmost = NSWorkspace.shared.frontmostApplication
     if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
@@ -829,16 +870,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       recordingTargetScreen = nil
     }
 
-    appState.transcriptionState = .recording(startTime: Date())
+    coordinatorTextDeliverer.setTargetPID(recordingTargetPID)
+    let selectedModel = SettingsManager.shared.selectedModel
+    audioCaptureManager.configureTrailingTrimHeuristic(enabled: !selectedModel.isGraniteModel)
+    activeTranscriptionRequestID = UUID().uuidString
 
     // Show overlay on the screen where the user was last interacting
     showOverlay()
-
-    // Start audio capture
-    audioCaptureManager?.startCapture()
-
-    // Update menubar
     statusBarController?.updateIcon(recording: true)
+
+    guard let requestID = activeTranscriptionRequestID else {
+      hideOverlay()
+      appState.transcriptionState = .error(message: "Missing transcription request context")
+      dependencies.notifications.showTranscriptionError("Missing transcription request context")
+      statusBarController?.updateIcon(recording: false)
+      return
+    }
+
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await transcriptionCoordinator.startRecording(requestID: requestID)
+        if case .recording(let startedAt) = await transcriptionCoordinator.state {
+          appState.transcriptionState = .recording(startTime: startedAt)
+        } else {
+          appState.transcriptionState = .recording(startTime: Date())
+        }
+      } catch {
+        debugPrint("❌ Failed to start recording: \(error)", category: "ERROR")
+        AppLogger.audio.error("Failed to start recording: \(error)")
+        hideOverlay()
+        appState.transcriptionState = .error(message: error.localizedDescription)
+        dependencies.notifications.showTranscriptionError(error.localizedDescription)
+        statusBarController?.updateIcon(recording: false)
+        finalizeTranscriptionCycle()
+      }
+    }
   }
 
   /// Determine which screen contains the key window of the given application
@@ -888,153 +955,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func stopRecording() {
     debugPrint("⏹️ Stopping recording...", category: "RECORD")
     AppLogger.audio.info("Stopping recording...")
-
-    // Always reset the menubar icon out of recording mode, including early-return paths.
-    defer {
-      statusBarController?.updateIcon(recording: false)
-    }
+    statusBarController?.updateIcon(recording: false)
 
     appState.transcriptionState = .processing
 
-    // Granite does better without additional end-of-audio trimming.
-    let selectedModel = SettingsManager.shared.selectedModel
-    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
-
-    // Stop audio capture and get buffer
-    guard let audioBuffer = audioCaptureManager?.stopCapture(
-      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic) else {
-      debugPrint("❌ No audio buffer!", category: "ERROR")
-      AppLogger.audio.error("No audio buffer!")
+    guard let transcriptionCoordinator else {
       hideOverlay()
-      appState.transcriptionState = .error(message: "No audio captured")
+      appState.transcriptionState = .error(message: "Transcription coordinator unavailable")
+      dependencies.notifications.showTranscriptionError("Transcription coordinator unavailable")
+      finalizeTranscriptionCycle()
       return
     }
 
-    let durationSec = Double(audioBuffer.count) / 16000.0
-    debugPrint(
-      "📊 Got \(audioBuffer.count) samples (~\(String(format: "%.1f", durationSec))s of audio)",
-      category: "AUDIO")
-    AppLogger.audio.info(
-      "Got audio buffer with \(audioBuffer.count) samples (~\(String(format: "%.1f", durationSec))s)"
-    )
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await transcriptionCoordinator.stopRecording()
+        let coordinatorState = await transcriptionCoordinator.state
 
-    // Check minimum duration (0.5 seconds)
-    if durationSec < 0.5 {
-      debugPrint(
-        "⚠️ Audio too short (\(String(format: "%.2f", durationSec))s), skipping", category: "AUDIO")
-      AppLogger.audio.warning(
-        "Audio too short (\(String(format: "%.2f", durationSec))s), skipping transcription")
-      hideOverlay()
-      appState.transcriptionState = .idle
-      // Check for pending model upgrade now that we're idle
-      tryPerformPendingUpgrade()
-      return
-    }
+        switch coordinatorState {
+        case .completed(let text, _):
+          appState.transcriptionState = .completed(text: text)
+          appState.lastTranscription = text
+          hideOverlay()
+          appState.transcriptionState = .idle
+        case .failed(let message):
+          hideOverlay()
+          appState.transcriptionState = .error(message: message)
+          dependencies.notifications.showTranscriptionError(message)
+        default:
+          hideOverlay()
+          appState.transcriptionState = .idle
+        }
 
-    // Process transcription
-    Task {
-      await processTranscription(audioBuffer: audioBuffer)
+        finalizeTranscriptionCycle()
+      } catch {
+        await transcriptionCoordinator.cancel()
+
+        if let speechError = error as? MacSpeechEngineRouterError,
+           case .audioTooShort(let duration) = speechError
+        {
+          debugPrint(
+            "⚠️ Audio too short (\(String(format: "%.2f", duration))s), skipping",
+            category: "AUDIO"
+          )
+          AppLogger.audio.warning(
+            "Audio too short (\(String(format: "%.2f", duration))s), skipping transcription"
+          )
+          hideOverlay()
+          appState.transcriptionState = .idle
+          finalizeTranscriptionCycle()
+          return
+        }
+
+        if let coordinatorError = error as? TranscriptionCoordinatorError,
+           coordinatorError == .emptyTranscription
+        {
+          debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
+          AppLogger.transcription.warning(
+            "No text to deliver (empty/whitespace after processing)"
+          )
+          hideOverlay()
+          appState.transcriptionState = .idle
+          finalizeTranscriptionCycle()
+          return
+        }
+
+        if let captureError = error as? AudioCaptureManagerError,
+           captureError == .noAudioCaptured
+        {
+          debugPrint("❌ No audio buffer!", category: "ERROR")
+          AppLogger.audio.error("No audio buffer!")
+          hideOverlay()
+          appState.transcriptionState = .error(message: "No audio captured")
+          finalizeTranscriptionCycle()
+          return
+        }
+
+        debugPrint("❌ Transcription error: \(error)", category: "ERROR")
+        AppLogger.transcription.error("Transcription error: \(error)")
+        hideOverlay()
+        appState.transcriptionState = .error(message: error.localizedDescription)
+        dependencies.notifications.showTranscriptionError(error.localizedDescription)
+        finalizeTranscriptionCycle()
+      }
     }
   }
 
   func cancelTranscription() {
     AppLogger.general.info("Cancelling transcription...")
 
-    appState.transcriptionState = .idle
-
-    // Stop and discard audio
-    _ = audioCaptureManager?.stopCapture()
-
-    // Hide overlay
-    hideOverlay()
-
-    // Update menubar
-    statusBarController?.updateIcon(recording: false)
-
-    // Check for pending model upgrade now that we're idle
-    tryPerformPendingUpgrade()
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      await transcriptionCoordinator?.cancel()
+      appState.transcriptionState = .idle
+      hideOverlay()
+      statusBarController?.updateIcon(recording: false)
+      finalizeTranscriptionCycle()
+    }
   }
 
-  private func processTranscription(audioBuffer: [Float]) async {
-    do {
-      debugPrint("🔄 Starting transcription...", category: "TRANSCRIBE")
-      AppLogger.transcription.info(
-        "processTranscription: Starting with \(audioBuffer.count) samples")
-
-      // Transcribe audio using the appropriate engine
-      let selectedModel = SettingsManager.shared.selectedModel
-      let result: TranscriptionResult
-      switch selectedModel.backendKind {
-      case .granitePython:
-        guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer) else {
-          throw TranscriptionError.transcriptionFailed("No result from Granite engine")
-        }
-        result = graniteResult
-      case .qwenMLX:
-        guard let qwenResult = try await qwenEngine?.transcribe(audioBuffer: audioBuffer) else {
-          throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
-        }
-        result = qwenResult
-      case .whisperKit:
-        guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer) else {
-          throw TranscriptionError.transcriptionFailed("No result from Whisper engine")
-        }
-        result = whisperResult
-      }
-
-      debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
-      AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
-
-      // Post-process text
-      let processedText = postProcessor?.process(result) ?? result.text
-      debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
-      AppLogger.transcription.info(
-        "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
-      )
-      let hasDeliverableText =
-        processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
-
-      // Output text
-      await MainActor.run {
-        appState.transcriptionState = .completed(text: processedText)
-        appState.lastTranscription = processedText
-
-        // Check if we have any text to deliver
-        if !hasDeliverableText {
-          debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
-          AppLogger.transcription.warning(
-            "processTranscription: No text to deliver (empty/whitespace after processing)")
-          self.hideOverlay()
-          self.appState.transcriptionState = .idle
-          // Check for pending model upgrade now that we're idle
-          self.tryPerformPendingUpgrade()
-          return
-        }
-
-        debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
-
-        // Deliver text to clipboard and optionally auto-paste
-        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) { [weak self] in
-          debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
-          self?.hideOverlay()
-          self?.appState.transcriptionState = .idle
-          self?.tryPerformPendingUpgrade()
-        }
-
-        // Clear targets after attempting output
-        self.recordingTargetPID = nil
-        self.recordingTargetScreen = nil
-      }
-    } catch {
-      debugPrint("❌ Transcription error: \(error)", category: "ERROR")
-      AppLogger.transcription.error("Transcription error: \(error)")
-      await MainActor.run { [weak self] in
-        self?.hideOverlay()
-        self?.appState.transcriptionState = .error(message: error.localizedDescription)
-        self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-        self?.tryPerformPendingUpgrade()
-      }
-    }
+  private func finalizeTranscriptionCycle() {
+    recordingTargetPID = nil
+    recordingTargetScreen = nil
+    activeTranscriptionRequestID = nil
+    coordinatorTextDeliverer?.clearTargetPID()
+    tryPerformPendingUpgrade()
   }
 
   // MARK: - Overlay
@@ -1181,28 +1207,151 @@ extension AppDelegate: AudioCaptureManagerDelegate {
   }
 }
 
+enum MacSpeechEngineRouterError: LocalizedError {
+  case audioTooShort(duration: TimeInterval)
+  case invalidModelIdentifier(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .audioTooShort(let duration):
+      return "Audio too short (\(String(format: "%.2f", duration))s)"
+    case .invalidModelIdentifier(let identifier):
+      return "Unsupported model identifier: \(identifier)"
+    }
+  }
+}
+
+final class MacSpeechEngineRouter: @unchecked Sendable, SpeechEngine {
+  private static let minimumAudioDurationSeconds: TimeInterval = 0.5
+  private static let targetSampleRate: Double = 16_000
+
+  private let whisperEngine: WhisperEngine
+  private let graniteEngine: GraniteEngine
+  private let qwenEngine: QwenEngine
+  private let postProcessor: PostProcessor
+  private let modelLock = NSLock()
+
+  private var selectedModel: SpeechModel = SettingsManager.shared.selectedModel
+
+  init(
+    whisperEngine: WhisperEngine,
+    graniteEngine: GraniteEngine,
+    qwenEngine: QwenEngine,
+    postProcessor: PostProcessor
+  ) {
+    self.whisperEngine = whisperEngine
+    self.graniteEngine = graniteEngine
+    self.qwenEngine = qwenEngine
+    self.postProcessor = postProcessor
+  }
+
+  var identifier: String {
+    currentModel.rawValue
+  }
+
+  var isReady: Bool {
+    switch currentModel.backendKind {
+    case .granitePython:
+      return graniteEngine.isModelLoaded
+    case .qwenMLX:
+      return qwenEngine.isModelLoaded
+    case .whisperKit:
+      return whisperEngine.isModelLoaded
+    }
+  }
+
+  func selectModel(_ model: SpeechModel) {
+    modelLock.lock()
+    selectedModel = model
+    modelLock.unlock()
+  }
+
+  func preload(modelIdentifier: String) async throws {
+    guard let model = SpeechModel(rawValue: modelIdentifier) else {
+      throw MacSpeechEngineRouterError.invalidModelIdentifier(modelIdentifier)
+    }
+    selectModel(model)
+    switch model.backendKind {
+    case .granitePython:
+      try await graniteEngine.loadModel(variant: model.rawValue)
+    case .qwenMLX:
+      try await qwenEngine.loadModel(variant: model.rawValue)
+    case .whisperKit:
+      try await whisperEngine.loadModel(variant: model.rawValue)
+    }
+  }
+
+  func transcribe(samples: [Float]) async throws -> TranscriptionResult {
+    let audioDuration = Double(samples.count) / Self.targetSampleRate
+    guard audioDuration >= Self.minimumAudioDurationSeconds else {
+      throw MacSpeechEngineRouterError.audioTooShort(duration: audioDuration)
+    }
+
+    let rawResult: TranscriptionResult
+    switch currentModel.backendKind {
+    case .granitePython:
+      rawResult = try await graniteEngine.transcribe(audioBuffer: samples)
+    case .qwenMLX:
+      rawResult = try await qwenEngine.transcribe(audioBuffer: samples)
+    case .whisperKit:
+      rawResult = try await whisperEngine.transcribe(audioBuffer: samples)
+    }
+
+    let processedText = postProcessor.process(rawResult)
+    return TranscriptionResult(
+      text: processedText,
+      segments: rawResult.segments,
+      language: rawResult.language,
+      processingTime: rawResult.processingTime,
+      performanceMetrics: rawResult.performanceMetrics
+    )
+  }
+
+  private var currentModel: SpeechModel {
+    modelLock.lock()
+    defer { modelLock.unlock() }
+    return selectedModel
+  }
+}
+
+final class MacOutputTextDeliverer: @unchecked Sendable, TextDelivering {
+  private let outputManager: OutputManager
+  private let targetPIDLock = NSLock()
+  private var targetPID: pid_t?
+
+  init(outputManager: OutputManager) {
+    self.outputManager = outputManager
+  }
+
+  func setTargetPID(_ targetPID: pid_t?) {
+    targetPIDLock.lock()
+    self.targetPID = targetPID
+    targetPIDLock.unlock()
+  }
+
+  func clearTargetPID() {
+    setTargetPID(nil)
+  }
+
+  func deliver(text: String) async throws {
+    let currentTargetPID = resolvedTargetPID
+    await withCheckedContinuation { continuation in
+      outputManager.deliver(text: text, targetPID: currentTargetPID) {
+        continuation.resume()
+      }
+    }
+  }
+
+  private var resolvedTargetPID: pid_t? {
+    targetPIDLock.lock()
+    defer { targetPIDLock.unlock() }
+    return targetPID
+  }
+}
+
 // MARK: - Keyboard Shortcuts Extension
 
 extension KeyboardShortcuts.Name {
   static let toggleTranscription = Self(
     "toggleTranscription", default: .init(.v, modifiers: .control))
-}
-
-// MARK: - Errors
-
-enum TranscriptionError: LocalizedError {
-  case transcriptionFailed(String)
-  case modelNotLoaded
-  case audioCaptureFailed
-
-  var errorDescription: String? {
-    switch self {
-    case .transcriptionFailed(let reason):
-      return "Transcription failed: \(reason)"
-    case .modelNotLoaded:
-      return "No transcription model loaded"
-    case .audioCaptureFailed:
-      return "Failed to capture audio"
-    }
-  }
 }

@@ -75,7 +75,7 @@ public actor TranscriptionCoordinator: TranscriptionCoordinating {
 
       let metadata = TranscriptionSessionMetadata(
         language: result.language,
-        modelIdentifier: "unknown",
+        modelIdentifier: speechEngine.identifier,
         processingTime: result.processingTime
       )
       state = try TranscriptionSessionReducer.reduce(

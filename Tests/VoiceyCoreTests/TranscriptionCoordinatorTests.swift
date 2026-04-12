@@ -36,7 +36,7 @@ final class TranscriptionCoordinatorTests: XCTestCase {
 
     XCTAssertEqual(text, "hello world")
     XCTAssertEqual(metadata.language, "en")
-    XCTAssertEqual(metadata.modelIdentifier, "unknown")
+    XCTAssertEqual(metadata.modelIdentifier, "mock")
     XCTAssertEqual(deliverer.deliveredTexts, ["hello world"])
   }
 

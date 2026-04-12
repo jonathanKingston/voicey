@@ -39,6 +39,7 @@ final class AudioCaptureManager {
   private let trailingSilenceRMSThreshold: Float = 0.01
   private let minimumRemainingAudioSeconds: Double = 0.3
   private let minimumTrimSeconds: Double = 0.08
+  private var applyTrailingTrimHeuristicByDefault = true
 
   init() {
     setupAudioSession()
@@ -126,6 +127,10 @@ final class AudioCaptureManager {
     )
 
     return result
+  }
+
+  func configureTrailingTrimHeuristic(enabled: Bool) {
+    applyTrailingTrimHeuristicByDefault = enabled
   }
 
   private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
@@ -304,7 +309,7 @@ extension AudioCaptureManager: AudioCapturing {
   }
 
   func stop() throws -> [Float] {
-    guard let audio = stopCapture() else {
+    guard let audio = stopCapture(applyTrailingTrimHeuristic: applyTrailingTrimHeuristicByDefault) else {
       throw AudioCaptureManagerError.noAudioCaptured
     }
     return audio
