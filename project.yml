@@ -123,6 +123,25 @@ targets:
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
 
+  VoiceyCore:
+    type: framework
+    platform: iOS
+    sources:
+      - path: Sources/VoiceyCore
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_NAME: VoiceyCore
+        PRODUCT_MODULE_NAME: VoiceyCore
+        PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyiOS.core
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+
   VoiceyKeyboardExtension:
     type: app-extension
     platform: iOS
@@ -130,9 +149,8 @@ targets:
       - path: Sources/VoiceyKeyboardExtension
         excludes:
           - "**/.DS_Store"
-      - path: Sources/VoiceyCore
-        excludes:
-          - "**/.DS_Store"
+    dependencies:
+      - target: VoiceyCore
     settings:
       base:
         PRODUCT_NAME: VoiceyKeyboardExtension
@@ -160,10 +178,8 @@ targets:
       - path: Sources/VoiceyiOSApp
         excludes:
           - "**/.DS_Store"
-      - path: Sources/VoiceyCore
-        excludes:
-          - "**/.DS_Store"
     dependencies:
+      - target: VoiceyCore
       - target: VoiceyKeyboardExtension
       - sdk: AVFoundation.framework
     settings:
@@ -209,6 +225,7 @@ schemes:
     build:
       targets:
         VoiceyiOSApp: all
+        VoiceyCore: all
         VoiceyKeyboardExtension: all
     run:
       config: Debug
@@ -218,6 +235,18 @@ schemes:
   VoiceyKeyboardExtension:
     build:
       targets:
+        VoiceyCore: all
+        VoiceyKeyboardExtension: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+  Voicey-iOS-Integration:
+    build:
+      targets:
+        VoiceyiOSApp: all
+        VoiceyCore: all
         VoiceyKeyboardExtension: all
     run:
       config: Debug

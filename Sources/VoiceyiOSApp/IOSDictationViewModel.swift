@@ -1,4 +1,5 @@
 import Foundation
+import VoiceyCore
 
 @MainActor
 final class IOSDictationViewModel: ObservableObject {

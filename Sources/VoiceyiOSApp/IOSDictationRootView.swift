@@ -1,4 +1,5 @@
 import SwiftUI
+import VoiceyCore
 
 struct IOSDictationRootView: View {
   @StateObject private var viewModel = IOSDictationViewModel()
