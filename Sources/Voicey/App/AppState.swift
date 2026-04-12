@@ -1,67 +1,10 @@
 import Combine
 import Foundation
+import VoiceyCore
 
-/// Represents the current state of the transcription process
-enum TranscriptionState: Equatable {
-  /// No transcription in progress
-  case idle
+typealias TranscriptionState = TranscriptionRuntimeState
 
-  /// Loading the Whisper model (first-time warmup)
-  case loadingModel
-
-  /// Currently recording audio
-  /// - Parameter startTime: When recording started (for duration tracking)
-  case recording(startTime: Date)
-
-  /// Processing recorded audio
-  case processing
-
-  /// Transcription completed successfully
-  /// - Parameter text: The transcribed text
-  case completed(text: String)
-
-  /// Transcription failed
-  /// - Parameter message: Error description
-  case error(message: String)
-
-  // MARK: - Convenience Properties
-
-  /// Whether we're currently recording
-  var isRecording: Bool {
-    if case .recording = self { return true }
-    return false
-  }
-
-  /// Whether we're currently processing
-  var isProcessing: Bool {
-    if case .processing = self { return true }
-    return false
-  }
-
-  /// Whether we're loading the model
-  var isLoadingModel: Bool {
-    if case .loadingModel = self { return true }
-    return false
-  }
-
-  /// Whether we're in an active state (loading, recording or processing)
-  var isActive: Bool {
-    switch self {
-    case .loadingModel, .recording, .processing:
-      return true
-    case .idle, .completed, .error:
-      return false
-    }
-  }
-
-  /// Recording duration if currently recording
-  var recordingDuration: TimeInterval? {
-    if case .recording(let startTime) = self {
-      return Date().timeIntervalSince(startTime)
-    }
-    return nil
-  }
-
+extension TranscriptionRuntimeState {
   /// Display text for the current state
   var displayText: String {
     switch self {
