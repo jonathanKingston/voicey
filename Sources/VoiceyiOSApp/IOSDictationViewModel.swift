@@ -22,20 +22,15 @@ final class IOSDictationViewModel: ObservableObject {
   }
 
   func handleIncomingURL(_ url: URL) {
-    guard url.scheme == VoiceyiOSConstants.appURLScheme else {
+    guard let route = DictationRoute.parse(url: url) else {
       return
     }
 
-    guard url.host == "dictation" else {
-      return
+    switch route {
+    case .startDictation:
+      statusMessage = "Opened from keyboard request"
+      refreshState()
     }
-
-    guard url.path == "/start" else {
-      return
-    }
-
-    statusMessage = "Opened from keyboard request"
-    refreshState()
   }
 
   func refreshState() {
