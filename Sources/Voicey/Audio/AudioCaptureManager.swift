@@ -1,9 +1,24 @@
 import AVFoundation
 import Accelerate
 import os
+import VoiceyCore
 
 protocol AudioCaptureManagerDelegate: AnyObject {
   func audioCaptureManager(_ manager: AudioCaptureManager, didUpdateLevel level: Float)
+}
+
+enum AudioCaptureManagerError: LocalizedError {
+  case failedToStartCapture
+  case noAudioCaptured
+
+  var errorDescription: String? {
+    switch self {
+    case .failedToStartCapture:
+      return "Failed to start audio capture"
+    case .noAudioCaptured:
+      return "No audio was captured"
+    }
+  }
 }
 
 final class AudioCaptureManager {
@@ -277,5 +292,21 @@ final class AudioCaptureManager {
 
   static var defaultInputDevice: AVCaptureDevice? {
     AVCaptureDevice.default(for: .audio)
+  }
+}
+
+extension AudioCaptureManager: AudioCapturing {
+  func start() throws {
+    startCapture()
+    guard let audioEngine, audioEngine.isRunning else {
+      throw AudioCaptureManagerError.failedToStartCapture
+    }
+  }
+
+  func stop() throws -> [Float] {
+    guard let audio = stopCapture() else {
+      throw AudioCaptureManagerError.noAudioCaptured
+    }
+    return audio
   }
 }

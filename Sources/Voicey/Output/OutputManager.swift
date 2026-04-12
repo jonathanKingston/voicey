@@ -1,6 +1,18 @@
 import AppKit
 import Foundation
 import os
+import VoiceyCore
+
+enum OutputManagerError: LocalizedError {
+  case emptyText
+
+  var errorDescription: String? {
+    switch self {
+    case .emptyText:
+      return "Cannot deliver empty transcription text"
+    }
+  }
+}
 
 /// Manages delivering transcribed text to the user via clipboard
 final class OutputManager: @unchecked Sendable {
@@ -172,5 +184,19 @@ final class OutputManager: @unchecked Sendable {
       return false
     }
     return Self.terminalBundleIdentifiers.contains(bundleIdentifier)
+  }
+}
+
+extension OutputManager: TextDelivering {
+  func deliver(text: String) async throws {
+    guard text.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil else {
+      throw OutputManagerError.emptyText
+    }
+
+    await withCheckedContinuation { continuation in
+      deliver(text: text, targetPID: nil) {
+        continuation.resume()
+      }
+    }
   }
 }
