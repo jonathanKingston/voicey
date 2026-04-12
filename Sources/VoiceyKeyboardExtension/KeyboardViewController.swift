@@ -8,6 +8,11 @@ final class KeyboardViewController: UIInputViewController {
   private let insertButton = UIButton(type: .system)
 
   private var store: SharedContainerStore?
+  private var currentUIState = KeyboardWorkflowPresentation(
+    statusMessage: "Idle",
+    canRequestDictation: true,
+    canInsertLatest: false
+  )
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -61,7 +66,12 @@ final class KeyboardViewController: UIInputViewController {
     do {
       store = try SharedContainerStore()
     } catch {
-      setStatus("App Group unavailable")
+      applyUIState(
+        KeyboardWorkflowPresentation(
+          statusMessage: "App Group unavailable",
+          canRequestDictation: false,
+          canInsertLatest: false
+        ))
       requestButton.isEnabled = false
       insertButton.isEnabled = false
       refreshButton.isEnabled = false
@@ -70,8 +80,13 @@ final class KeyboardViewController: UIInputViewController {
 
   @objc
   private func handleRequestTap() {
-    guard hasFullAccess else {
-      setStatus("Enable Full Access in Settings")
+    guard currentUIState.canRequestDictation else {
+      applyUIState(
+        KeyboardWorkflowPresentation(
+          statusMessage: "Enable Full Access in Settings",
+          canRequestDictation: false,
+          canInsertLatest: false
+        ))
       return
     }
 
@@ -82,10 +97,20 @@ final class KeyboardViewController: UIInputViewController {
         let request = DictationRequest(requestID: requestID)
         try await store.saveRequest(request)
         _ = try await store.markKeyboardProcessing(requestID: requestID)
-        setStatus("Request created")
+        applyUIState(
+          KeyboardWorkflowPresentation(
+            statusMessage: "Request created",
+            canRequestDictation: false,
+            canInsertLatest: false
+          ))
         openContainingApp()
       } catch {
-        setStatus(error.localizedDescription)
+        applyUIState(
+          KeyboardWorkflowPresentation(
+            statusMessage: error.localizedDescription,
+            canRequestDictation: hasFullAccess,
+            canInsertLatest: false
+          ))
       }
     }
   }
@@ -101,34 +126,47 @@ final class KeyboardViewController: UIInputViewController {
       guard let self, let store else { return }
 
       do {
-        guard let result = try await store.loadResult() else {
-          setStatus("No transcript ready")
-          return
-        }
-        if let error = result.error {
-          setStatus("Last request failed: \(error)")
-          return
-        }
-        guard result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-          setStatus("Result text is empty")
+        guard currentUIState.canInsertLatest else {
+          if currentUIState.statusMessage == "Result ready" {
+            applyUIState(
+              KeyboardWorkflowPresentation(
+                statusMessage: "No transcript ready",
+                canRequestDictation: hasFullAccess,
+                canInsertLatest: false
+              ))
+          } else {
+            applyUIState(currentUIState)
+          }
           return
         }
 
-        let keyboardState = try await store.loadKeyboardState() ?? KeyboardWorkflowState()
-        if let lastSeenRequestID = keyboardState.lastSeenRequestID, lastSeenRequestID != result.requestID {
-          setStatus("Latest result is stale")
-          return
-        }
-        if keyboardState.lastInsertedRequestID == result.requestID {
-          setStatus("Latest transcript already inserted")
+        guard let result = try await store.loadResult() else {
+          applyUIState(
+            KeyboardWorkflowPresentation(
+              statusMessage: "No transcript ready",
+              canRequestDictation: hasFullAccess,
+              canInsertLatest: false
+            ))
           return
         }
 
         textDocumentProxy.insertText(result.text)
         _ = try await store.markKeyboardInserted(requestID: result.requestID)
-        setStatus("Inserted transcript")
+        let refreshedKeyboardState = try await store.loadKeyboardState()
+        let refreshedState = KeyboardWorkflowResolver.resolve(
+          hasFullAccess: hasFullAccess,
+          request: try await store.loadRequest(),
+          result: try await store.loadResult(),
+          keyboardState: refreshedKeyboardState
+        )
+        applyUIState(refreshedState)
       } catch {
-        setStatus("Insert failed")
+        applyUIState(
+          KeyboardWorkflowPresentation(
+            statusMessage: "Insert failed",
+            canRequestDictation: hasFullAccess,
+            canInsertLatest: false
+          ))
       }
     }
   }
@@ -142,25 +180,20 @@ final class KeyboardViewController: UIInputViewController {
         let result = try await store.loadResult()
         let keyboardState = try await store.loadKeyboardState()
 
-        if let request, request.status == .pending || request.status == .processing {
-          setStatus("Request \(request.status.rawValue)")
-        } else if let result, let error = result.error {
-          setStatus("Last request failed: \(error)")
-        } else if let result {
-          if keyboardState?.lastInsertedRequestID == result.requestID {
-            setStatus("Transcript inserted")
-          } else if let lastSeenRequestID = keyboardState?.lastSeenRequestID,
-            lastSeenRequestID != result.requestID
-          {
-            setStatus("Stale result available")
-          } else {
-            setStatus("Result ready")
-          }
-        } else {
-          setStatus("Idle")
-        }
+        let state = KeyboardWorkflowResolver.resolve(
+          hasFullAccess: hasFullAccess,
+          request: request,
+          result: result,
+          keyboardState: keyboardState
+        )
+        applyUIState(state)
       } catch {
-        setStatus("Refresh failed")
+        applyUIState(
+          KeyboardWorkflowPresentation(
+            statusMessage: "Refresh failed",
+            canRequestDictation: hasFullAccess,
+            canInsertLatest: false
+          ))
       }
     }
   }
@@ -176,5 +209,14 @@ final class KeyboardViewController: UIInputViewController {
   @MainActor
   private func setStatus(_ text: String) {
     statusLabel.text = text
+  }
+
+  @MainActor
+  private func applyUIState(_ state: KeyboardWorkflowPresentation) {
+    currentUIState = state
+    setStatus(state.statusMessage)
+    requestButton.isEnabled = state.canRequestDictation
+    insertButton.isEnabled = state.canInsertLatest
+    refreshButton.isEnabled = true
   }
 }
