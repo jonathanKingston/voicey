@@ -35,7 +35,7 @@ public enum TranscriptionSessionState: Equatable, Sendable {
 
 public protocol SpeechEngine: Sendable {
   func preload(modelIdentifier: String) async throws
-  func transcribe(samples: [Float]) async throws -> DictationResult
+  func transcribe(samples: [Float]) async throws -> TranscriptionResult
   var isReady: Bool { get }
 }
 
@@ -49,7 +49,7 @@ public protocol TextDelivering: Sendable {
 }
 
 public protocol TranscriptionCoordinating: Sendable {
-  var state: TranscriptionSessionState { get }
+  var state: TranscriptionSessionState { get async }
   func startRecording(requestID: String) async throws
   func stopRecording() async throws
   func cancel() async
