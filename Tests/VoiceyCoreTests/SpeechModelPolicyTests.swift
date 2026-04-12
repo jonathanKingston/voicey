@@ -7,18 +7,34 @@ final class SpeechModelPolicyTests: XCTestCase {
   func testRecommendedModelUsesSmallQwenBelowThreshold() {
     let memory = 8 * gibibyteBytes
     let recommended = SpeechModelCatalog.recommendedModel(availableMemoryBytes: memory)
-    XCTAssertEqual(recommended.identifier, SpeechModelCatalog.qwen3Small.identifier)
+    XCTAssertEqual(recommended, .qwen3Small)
   }
 
   func testRecommendedModelUsesLargeQwenAtThreshold() {
     let memory = 16 * gibibyteBytes
     let recommended = SpeechModelCatalog.recommendedModel(availableMemoryBytes: memory)
-    XCTAssertEqual(recommended.identifier, SpeechModelCatalog.qwen3Large.identifier)
+    XCTAssertEqual(recommended, .qwen3Large)
   }
 
   func testSupportedModelsFiltersByMemoryRequirement() {
     let lowMemoryModels = SpeechModelCatalog.supportedModels(availableMemoryBytes: 8 * gibibyteBytes)
-    XCTAssertTrue(lowMemoryModels.contains(where: { $0.identifier == SpeechModelCatalog.qwen3Small.identifier }))
-    XCTAssertFalse(lowMemoryModels.contains(where: { $0.identifier == SpeechModelCatalog.qwen3Large.identifier }))
+    XCTAssertTrue(lowMemoryModels.contains(.qwen3Small))
+    XCTAssertFalse(lowMemoryModels.contains(.qwen3Large))
+  }
+
+  func testIsModelSupportedUsesRawIdentifier() {
+    let lowMemory = 8 * gibibyteBytes
+    XCTAssertTrue(
+      SpeechModelCatalog.isModelSupported(
+        SpeechModel.qwen3Small.rawValue,
+        availableMemoryBytes: lowMemory
+      )
+    )
+    XCTAssertFalse(
+      SpeechModelCatalog.isModelSupported(
+        SpeechModel.qwen3Large.rawValue,
+        availableMemoryBytes: lowMemory
+      )
+    )
   }
 }
