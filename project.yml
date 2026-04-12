@@ -199,6 +199,10 @@ targets:
       - path: Sources/VoiceySpeechApple
         excludes:
           - "**/.DS_Store"
+    dependencies:
+      - target: VoiceyCore
+      - sdk: Speech.framework
+      - sdk: AVFoundation.framework
     settings:
       base:
         PRODUCT_NAME: VoiceySpeechApple
