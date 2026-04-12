@@ -64,9 +64,13 @@ public actor SharedContainerStore {
   }
 
   public func saveRequest(_ request: DictationRequest) throws {
-    if let existing = try loadRequest(),
-      existing.status == .pending || existing.status == .processing {
-      throw SharedContainerStoreError.concurrentRequestNotAllowed
+    if let existing = try loadRequest() {
+      let hasInFlightRequest = existing.status == .pending || existing.status == .processing
+      let isSameRequest = existing.requestID == request.requestID
+
+      if hasInFlightRequest && !isSameRequest {
+        throw SharedContainerStoreError.concurrentRequestNotAllowed
+      }
     }
     try write(request, as: .request)
   }
