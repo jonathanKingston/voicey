@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import KeyboardShortcuts
 import SwiftUI
 import os
+import VoiceyCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"

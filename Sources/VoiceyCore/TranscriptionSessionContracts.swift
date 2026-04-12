@@ -37,6 +37,7 @@ public protocol SpeechEngine: Sendable {
   func preload(modelIdentifier: String) async throws
   func transcribe(samples: [Float]) async throws -> TranscriptionResult
   var isReady: Bool { get }
+  var identifier: String { get }
 }
 
 public protocol AudioCapturing: Sendable {

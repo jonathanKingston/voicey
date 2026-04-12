@@ -137,6 +137,8 @@ private final class MockSpeechEngine: @unchecked Sendable, SpeechEngine {
     self.result = result
   }
 
+  var identifier: String { "mock" }
+
   var isReady: Bool { true }
 
   func preload(modelIdentifier: String) async throws {}
