@@ -38,13 +38,19 @@ let package = Package(
     ],
     products: [
         .executable(name: "Voicey", targets: ["Voicey"]),
-        .library(name: "VoiceyCore", targets: ["VoiceyCore"])
+        .library(name: "VoiceyCore", targets: ["VoiceyCore"]),
+        .library(name: "VoiceySpeechApple", targets: ["VoiceySpeechApple"])
     ],
     dependencies: packageDependencies,
     targets: [
         .target(
             name: "VoiceyCore",
             path: "Sources/VoiceyCore"
+        ),
+        .target(
+            name: "VoiceySpeechApple",
+            dependencies: ["VoiceyCore"],
+            path: "Sources/VoiceySpeechApple"
         ),
         .executableTarget(
             name: "Voicey",

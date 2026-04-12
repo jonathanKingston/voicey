@@ -171,6 +171,25 @@ targets:
         com.apple.security.application-groups:
           - group.work.voicey.shared
 
+  VoiceySpeechApple:
+    type: framework
+    platform: iOS
+    sources:
+      - path: Sources/VoiceySpeechApple
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_NAME: VoiceySpeechApple
+        PRODUCT_MODULE_NAME: VoiceySpeechApple
+        PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyiOS.speech
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+
   VoiceyiOSApp:
     type: application
     platform: iOS
@@ -180,6 +199,7 @@ targets:
           - "**/.DS_Store"
     dependencies:
       - target: VoiceyCore
+      - target: VoiceySpeechApple
       - target: VoiceyKeyboardExtension
       - sdk: AVFoundation.framework
     settings:
@@ -226,6 +246,7 @@ schemes:
       targets:
         VoiceyiOSApp: all
         VoiceyCore: all
+        VoiceySpeechApple: all
         VoiceyKeyboardExtension: all
     run:
       config: Debug
@@ -247,6 +268,7 @@ schemes:
       targets:
         VoiceyiOSApp: all
         VoiceyCore: all
+        VoiceySpeechApple: all
         VoiceyKeyboardExtension: all
     run:
       config: Debug
