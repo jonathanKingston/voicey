@@ -38,6 +38,22 @@ public actor SharedContainerStore {
     }
 
     self.baseDirectory = containerURL.appendingPathComponent("dictation-shared", isDirectory: true)
+    if !fileManager.fileExists(atPath: baseDirectory.path) {
+      try fileManager.createDirectory(
+        at: baseDirectory,
+        withIntermediateDirectories: true
+      )
+    }
+  }
+
+  public init(
+    baseDirectory: URL,
+    fileManager: FileManager = .default
+  ) throws {
+    self.fileManager = fileManager
+    self.encoder = JSONEncoder()
+    self.decoder = JSONDecoder()
+    self.baseDirectory = baseDirectory
 
     if !fileManager.fileExists(atPath: baseDirectory.path) {
       try fileManager.createDirectory(
