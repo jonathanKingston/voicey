@@ -137,6 +137,7 @@ targets:
         PRODUCT_NAME: VoiceyCore
         PRODUCT_MODULE_NAME: VoiceyCore
         PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyiOS.core
+        GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
       configs:
         Debug:
@@ -156,6 +157,7 @@ targets:
         PRODUCT_NAME: VoiceyCore
         PRODUCT_MODULE_NAME: VoiceyCore
         PRODUCT_BUNDLE_IDENTIFIER: work.voicey.Voicey.core.mac
+        GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
       configs:
         Debug:
@@ -208,6 +210,7 @@ targets:
         PRODUCT_NAME: VoiceySpeechApple
         PRODUCT_MODULE_NAME: VoiceySpeechApple
         PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyiOS.speech
+        GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
       configs:
         Debug:
