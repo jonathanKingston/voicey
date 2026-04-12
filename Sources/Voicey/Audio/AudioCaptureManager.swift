@@ -21,7 +21,7 @@ enum AudioCaptureManagerError: LocalizedError {
   }
 }
 
-final class AudioCaptureManager {
+final class AudioCaptureManager: @unchecked Sendable {
   weak var delegate: AudioCaptureManagerDelegate?
 
   private var audioEngine: AVAudioEngine?
