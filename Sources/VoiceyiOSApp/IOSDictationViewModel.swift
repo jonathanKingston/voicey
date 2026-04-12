@@ -58,11 +58,9 @@ final class IOSDictationViewModel: ObservableObject {
 
         pendingRequestID = request.requestID
         switch request.status {
-        case .pending:
-          try await store.markRequestProcessing(requestID: request.requestID)
-          statusMessage = "Request processing, tap Start Recording"
-        case .processing:
-          statusMessage = "Request processing, tap Start Recording"
+        case .pending, .processing:
+          statusMessage = "Starting recording..."
+          try await startRecording(request: request, store: store)
         case .completed:
           statusMessage = "Request completed"
         case .failed:
@@ -110,25 +108,36 @@ final class IOSDictationViewModel: ObservableObject {
           return
         }
 
-        switch request.status {
-        case .pending:
-          try await store.markRequestProcessing(requestID: request.requestID)
-        case .processing:
-          break
-        case .completed, .failed, .cancelled:
-          statusMessage = "Create a new keyboard request first"
-          return
-        }
-
-        try await coordinator.startRecording(requestID: request.requestID)
-        activeRequestID = request.requestID
-        pendingRequestID = request.requestID
-        isRecording = true
-        statusMessage = "Recording..."
+        try await startRecording(request: request, store: store)
       } catch {
         statusMessage = "Failed to start recording"
       }
     }
+  }
+
+  private func startRecording(
+    request: DictationRequest,
+    store: SharedContainerStore
+  ) async throws {
+    guard isRecording == false else {
+      return
+    }
+
+    switch request.status {
+    case .pending:
+      try await store.markRequestProcessing(requestID: request.requestID)
+    case .processing:
+      break
+    case .completed, .failed, .cancelled:
+      statusMessage = "Create a new keyboard request first"
+      return
+    }
+
+    try await coordinator.startRecording(requestID: request.requestID)
+    activeRequestID = request.requestID
+    pendingRequestID = request.requestID
+    isRecording = true
+    statusMessage = "Recording..."
   }
 
   func stopRecordingAndPublishResult() {
