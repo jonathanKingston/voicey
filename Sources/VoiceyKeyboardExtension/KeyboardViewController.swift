@@ -155,7 +155,8 @@ final class KeyboardViewController: UIInputViewController {
   }
 
   private func openContainingApp() {
-    guard let appURL = URL(string: "\(VoiceyiOSConstants.appURLScheme)://dictation/start") else {
+    let route = "\(VoiceyiOSConstants.appURLScheme)://\(VoiceyiOSConstants.dictationRouteHost)\(VoiceyiOSConstants.dictationRouteStartPath)"
+    guard let appURL = URL(string: route) else {
       return
     }
     extensionContext?.open(appURL, completionHandler: nil)

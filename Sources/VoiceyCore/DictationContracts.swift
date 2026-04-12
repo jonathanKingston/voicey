@@ -77,5 +77,7 @@ public enum DictationSharedRecord: String, CaseIterable, Sendable {
 public enum VoiceyiOSConstants {
   public static let appGroupIdentifier = "group.work.voicey.shared"
   public static let appURLScheme = "voicey"
+  public static let dictationRouteHost = "dictation"
+  public static let dictationRouteStartPath = "/start"
   public static let dictationRequestTimeoutSeconds: TimeInterval = 600
 }

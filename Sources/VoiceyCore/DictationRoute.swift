@@ -8,12 +8,12 @@ public enum DictationRoute: Equatable, Sendable {
       return nil
     }
 
-    guard url.host == "dictation" else {
+    guard url.host == VoiceyiOSConstants.dictationRouteHost else {
       return nil
     }
 
     switch url.path {
-    case "/start":
+    case VoiceyiOSConstants.dictationRouteStartPath:
       return .startDictation
     default:
       return nil
