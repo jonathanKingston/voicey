@@ -3,6 +3,7 @@ import AudioCommon
 import Foundation
 import WhisperKit
 import os
+import VoiceyCore
 
 /// Available speech model variants
 enum SpeechModel: String, CaseIterable, Identifiable {

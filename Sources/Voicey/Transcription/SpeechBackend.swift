@@ -1,7 +1,4 @@
 import Foundation
+import VoiceyCore
 
-enum SpeechBackendKind: String, CaseIterable, Sendable {
-  case whisperKit
-  case granitePython
-  case qwenMLX
-}
+typealias SpeechBackendKind = VoiceyCore.SpeechBackendKind
