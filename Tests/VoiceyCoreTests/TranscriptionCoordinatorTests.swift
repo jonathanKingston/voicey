@@ -38,6 +38,7 @@ final class TranscriptionCoordinatorTests: XCTestCase {
     XCTAssertEqual(metadata.language, "en")
     XCTAssertEqual(metadata.modelIdentifier, "mock")
     XCTAssertEqual(deliverer.deliveredTexts, ["hello world"])
+    XCTAssertEqual(speech.preloadedModelIdentifiers, [])
   }
 
   func testStopRecordingWithoutRequestContextFailsFast() async throws {
@@ -97,6 +98,57 @@ final class TranscriptionCoordinatorTests: XCTestCase {
     let state = await coordinator.state
     XCTAssertEqual(state, .idle)
   }
+
+  func testStartRecordingPreloadsSpeechEngineWhenNotReady() async throws {
+    let audio = MockAudioCapturer(samplesToReturn: [0.1])
+    let speech = MockSpeechEngine(
+      result: .stub(text: "hello"),
+      isReady: false
+    )
+    let coordinator = TranscriptionCoordinator(
+      audioCapturer: audio,
+      speechEngine: speech,
+      textDeliverer: MockTextDeliverer()
+    )
+
+    try await coordinator.startRecording(requestID: "request-preload")
+
+    XCTAssertEqual(speech.preloadedModelIdentifiers, ["mock"])
+    XCTAssertEqual(audio.startCallCount, 1)
+
+    guard case .recording = await coordinator.state else {
+      XCTFail("Expected recording state")
+      return
+    }
+  }
+
+  func testStartRecordingFailsFastWhenPreloadFails() async throws {
+    let audio = MockAudioCapturer(samplesToReturn: [0.1])
+    let speech = MockSpeechEngine(
+      result: .stub(text: "hello"),
+      isReady: false,
+      preloadError: MockSpeechEngineError.preloadFailed
+    )
+    let coordinator = TranscriptionCoordinator(
+      audioCapturer: audio,
+      speechEngine: speech,
+      textDeliverer: MockTextDeliverer()
+    )
+
+    do {
+      try await coordinator.startRecording(requestID: "request-preload-error")
+      XCTFail("Expected preload failure to be surfaced")
+    } catch let error as MockSpeechEngineError {
+      XCTAssertEqual(error, .preloadFailed)
+    } catch {
+      XCTFail("Unexpected error: \(error)")
+    }
+
+    XCTAssertEqual(audio.startCallCount, 0)
+    XCTAssertEqual(audio.stopCallCount, 0)
+    let state = await coordinator.state
+    XCTAssertEqual(state, .idle)
+  }
 }
 
 private extension TranscriptionResult {
@@ -118,30 +170,55 @@ private extension TranscriptionResult {
 
 private final class MockAudioCapturer: @unchecked Sendable, AudioCapturing {
   private let samplesToReturn: [Float]
+  private(set) var startCallCount = 0
+  private(set) var stopCallCount = 0
 
   init(samplesToReturn: [Float] = []) {
     self.samplesToReturn = samplesToReturn
   }
 
-  func start() throws {}
+  func start() throws {
+    startCallCount += 1
+  }
 
   func stop() throws -> [Float] {
-    samplesToReturn
+    stopCallCount += 1
+    return samplesToReturn
   }
+}
+
+private enum MockSpeechEngineError: Error, Equatable {
+  case preloadFailed
 }
 
 private final class MockSpeechEngine: @unchecked Sendable, SpeechEngine {
   let result: TranscriptionResult
+  private let shouldStartReady: Bool
+  private let preloadError: Error?
+  private(set) var preloadedModelIdentifiers: [String] = []
 
-  init(result: TranscriptionResult) {
+  init(
+    result: TranscriptionResult,
+    isReady: Bool = true,
+    preloadError: Error? = nil
+  ) {
     self.result = result
+    self.shouldStartReady = isReady
+    self.preloadError = preloadError
   }
 
   var identifier: String { "mock" }
 
-  var isReady: Bool { true }
+  var isReady: Bool {
+    shouldStartReady || preloadedModelIdentifiers.isEmpty == false
+  }
 
-  func preload(modelIdentifier: String) async throws {}
+  func preload(modelIdentifier: String) async throws {
+    if let preloadError {
+      throw preloadError
+    }
+    preloadedModelIdentifiers.append(modelIdentifier)
+  }
 
   func transcribe(samples: [Float]) async throws -> TranscriptionResult {
     result

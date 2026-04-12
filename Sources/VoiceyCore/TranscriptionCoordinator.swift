@@ -42,6 +42,10 @@ public actor TranscriptionCoordinator: TranscriptionCoordinating {
       throw TranscriptionSessionTransitionError.emptyRequestIdentifier
     }
 
+    if speechEngine.isReady == false {
+      try await speechEngine.preload(modelIdentifier: speechEngine.identifier)
+    }
+
     try audioCapturer.start()
     do {
       state = try TranscriptionSessionReducer.reduce(
