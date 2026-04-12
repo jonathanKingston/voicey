@@ -95,12 +95,7 @@ final class IOSDictationViewModel: ObservableObject {
           language: "auto",
           model: "ios-manual-entry"
         )
-        try await store.saveKeyboardState(
-          KeyboardWorkflowState(
-            isProcessing: false,
-            lastSeenRequestID: request.requestID,
-            lastInsertedRequestID: nil
-          ))
+        _ = try await store.markKeyboardIdle(lastSeenRequestID: request.requestID)
 
         lastPublishedResult = trimmedTranscript
         statusMessage = "Result published"

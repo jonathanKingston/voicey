@@ -80,14 +80,8 @@ final class KeyboardViewController: UIInputViewController {
       do {
         let requestID = UUID().uuidString
         let request = DictationRequest(requestID: requestID)
-        let keyboardState = KeyboardWorkflowState(
-          isProcessing: true,
-          lastSeenRequestID: requestID,
-          lastInsertedRequestID: nil
-        )
-
         try await store.saveRequest(request)
-        try await store.saveKeyboardState(keyboardState)
+        _ = try await store.markKeyboardProcessing(requestID: requestID)
         setStatus("Request created")
         openContainingApp()
       } catch {
@@ -119,12 +113,7 @@ final class KeyboardViewController: UIInputViewController {
         }
 
         textDocumentProxy.insertText(result.text)
-        keyboardState = KeyboardWorkflowState(
-          isProcessing: false,
-          lastSeenRequestID: result.requestID,
-          lastInsertedRequestID: result.requestID
-        )
-        try await store.saveKeyboardState(keyboardState)
+        keyboardState = try await store.markKeyboardInserted(requestID: result.requestID)
         setStatus("Inserted transcript")
       } catch {
         setStatus("Insert failed")

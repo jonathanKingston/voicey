@@ -130,4 +130,33 @@ final class SharedContainerStoreTests: XCTestCase {
     XCTAssertEqual(loadedResult?.text, "")
     XCTAssertEqual(loadedResult?.error, "microphone unavailable")
   }
+
+  func testMarkKeyboardProcessingPreservesLastInsertedRequest() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+    try await store.saveKeyboardState(
+      KeyboardWorkflowState(
+        isProcessing: false,
+        lastSeenRequestID: "old-request",
+        lastInsertedRequestID: "already-inserted"
+      )
+    )
+
+    _ = try await store.markKeyboardProcessing(requestID: "new-request")
+    let state = try await store.loadKeyboardState()
+
+    XCTAssertEqual(state?.isProcessing, true)
+    XCTAssertEqual(state?.lastSeenRequestID, "new-request")
+    XCTAssertEqual(state?.lastInsertedRequestID, "already-inserted")
+  }
+
+  func testMarkKeyboardInsertedSetsInsertedAndIdleState() async throws {
+    let store = try SharedContainerStore(baseDirectory: temporaryDirectory)
+
+    _ = try await store.markKeyboardInserted(requestID: "request-99")
+    let state = try await store.loadKeyboardState()
+
+    XCTAssertEqual(state?.isProcessing, false)
+    XCTAssertEqual(state?.lastSeenRequestID, "request-99")
+    XCTAssertEqual(state?.lastInsertedRequestID, "request-99")
+  }
 }

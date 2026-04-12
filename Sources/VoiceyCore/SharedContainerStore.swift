@@ -96,6 +96,41 @@ public actor SharedContainerStore {
     try write(state, as: .keyboardState)
   }
 
+  @discardableResult
+  public func markKeyboardProcessing(requestID: String) throws -> KeyboardWorkflowState {
+    let existing = try loadKeyboardState()
+    let updated = KeyboardWorkflowState(
+      isProcessing: true,
+      lastSeenRequestID: requestID,
+      lastInsertedRequestID: existing?.lastInsertedRequestID
+    )
+    try saveKeyboardState(updated)
+    return updated
+  }
+
+  @discardableResult
+  public func markKeyboardIdle(lastSeenRequestID: String?) throws -> KeyboardWorkflowState {
+    let existing = try loadKeyboardState()
+    let updated = KeyboardWorkflowState(
+      isProcessing: false,
+      lastSeenRequestID: lastSeenRequestID ?? existing?.lastSeenRequestID,
+      lastInsertedRequestID: existing?.lastInsertedRequestID
+    )
+    try saveKeyboardState(updated)
+    return updated
+  }
+
+  @discardableResult
+  public func markKeyboardInserted(requestID: String) throws -> KeyboardWorkflowState {
+    let updated = KeyboardWorkflowState(
+      isProcessing: false,
+      lastSeenRequestID: requestID,
+      lastInsertedRequestID: requestID
+    )
+    try saveKeyboardState(updated)
+    return updated
+  }
+
   public func loadRequest() throws -> DictationRequest? {
     try read(DictationRequest.self, from: .request)
   }
