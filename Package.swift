@@ -37,13 +37,18 @@ let package = Package(
         .macOS("15.0")
     ],
     products: [
-        .executable(name: "Voicey", targets: ["Voicey"])
+        .executable(name: "Voicey", targets: ["Voicey"]),
+        .library(name: "VoiceyCore", targets: ["VoiceyCore"])
     ],
     dependencies: packageDependencies,
     targets: [
+        .target(
+            name: "VoiceyCore",
+            path: "Sources/VoiceyCore"
+        ),
         .executableTarget(
             name: "Voicey",
-            dependencies: targetDependencies,
+            dependencies: targetDependencies + ["VoiceyCore"],
             path: "Sources/Voicey",
             resources: [
                 .process("Resources")
@@ -58,8 +63,13 @@ let package = Package(
         ),
         .testTarget(
             name: "VoiceyTests",
-            dependencies: ["Voicey"],
+            dependencies: ["Voicey", "VoiceyCore"],
             path: "Tests/VoiceyTests"
+        ),
+        .testTarget(
+            name: "VoiceyCoreTests",
+            dependencies: ["VoiceyCore"],
+            path: "Tests/VoiceyCoreTests"
         )
     ]
 )
