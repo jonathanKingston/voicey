@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: work.voicey
   deploymentTarget:
     macOS: "15.0"
+    iOS: "17.0"
   xcodeVersion: "15.0"
   generateEmptyDirectories: true
   groupSortPosition: top
@@ -24,6 +25,9 @@ packages:
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit.git
     from: "0.9.0"
+  SpeechSwift:
+    url: https://github.com/soniqo/speech-swift
+    branch: main
 
 targets:
   # App Store / TestFlight target
@@ -43,6 +47,10 @@ targets:
     dependencies:
       - package: KeyboardShortcuts
       - package: WhisperKit
+      - package: SpeechSwift
+        product: Qwen3ASR
+      - package: SpeechSwift
+        product: AudioCommon
       - sdk: AVFoundation.framework
       - sdk: CoreAudio.framework
       - sdk: Accelerate.framework
@@ -85,6 +93,10 @@ targets:
     dependencies:
       - package: KeyboardShortcuts
       - package: WhisperKit
+      - package: SpeechSwift
+        product: Qwen3ASR
+      - package: SpeechSwift
+        product: AudioCommon
       - sdk: AVFoundation.framework
       - sdk: CoreAudio.framework
       - sdk: Accelerate.framework
@@ -111,6 +123,69 @@ targets:
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
 
+  VoiceyKeyboardExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/VoiceyKeyboardExtension
+        excludes:
+          - "**/.DS_Store"
+      - path: Sources/VoiceyCore
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_NAME: VoiceyKeyboardExtension
+        PRODUCT_MODULE_NAME: VoiceyKeyboardExtension
+        PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyiOS.keyboard
+        INFOPLIST_FILE: Info.KeyboardExtension.plist
+        CODE_SIGN_ENTITLEMENTS: VoiceyKeyboardExtension.entitlements
+        CODE_SIGN_STYLE: Automatic
+        APPLICATION_EXTENSION_API_ONLY: YES
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+    entitlements:
+      path: VoiceyKeyboardExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.work.voicey.shared
+
+  VoiceyiOSApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/VoiceyiOSApp
+        excludes:
+          - "**/.DS_Store"
+      - path: Sources/VoiceyCore
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: VoiceyKeyboardExtension
+      - sdk: AVFoundation.framework
+    settings:
+      base:
+        PRODUCT_NAME: VoiceyiOS
+        PRODUCT_MODULE_NAME: VoiceyiOSApp
+        PRODUCT_BUNDLE_IDENTIFIER: work.voicey.VoiceyiOS
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        INFOPLIST_FILE: Info.iOS.plist
+        CODE_SIGN_ENTITLEMENTS: VoiceyiOS.entitlements
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+    entitlements:
+      path: VoiceyiOS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.work.voicey.shared
+
 schemes:
   Voicey:
     build:
@@ -125,6 +200,25 @@ schemes:
     build:
       targets:
         VoiceyDirect: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+  VoiceyiOSApp:
+    build:
+      targets:
+        VoiceyiOSApp: all
+        VoiceyKeyboardExtension: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+  VoiceyKeyboardExtension:
+    build:
+      targets:
+        VoiceyKeyboardExtension: all
     run:
       config: Debug
     archive:
