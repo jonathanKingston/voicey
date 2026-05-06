@@ -746,7 +746,7 @@ struct ModelRowView: View {
 
   @ViewBuilder
   private var updateActionButton: some View {
-    if modelUpdateStatus == .checking {
+    if case .checking = modelUpdateStatus {
       ProgressView()
         .controlSize(.small)
     } else if shouldOfferUpdate {
@@ -767,7 +767,9 @@ struct ModelRowView: View {
   }
 
   private var shouldOfferUpdate: Bool {
-    !modelManager.hasKnownRevision(for: model) || modelUpdateStatus == .updateAvailable
+    if !modelManager.hasKnownRevision(for: model) { return true }
+    if case .updateAvailable = modelUpdateStatus { return true }
+    return false
   }
 
   private var updateStatusText: String? {
@@ -778,15 +780,15 @@ struct ModelRowView: View {
     }
 
     switch modelUpdateStatus {
-    case .checking:
+    case .some(.checking):
       return L10n.Model.checkingForModelUpdates
-    case .upToDate:
+    case .some(.upToDate):
       return L10n.Model.upToDate
-    case .updateAvailable:
+    case .some(.updateAvailable):
       return L10n.Model.updateAvailable
-    case .failed(let message):
+    case .some(.failed(let message)):
       return message
-    case nil:
+    case .none:
       return nil
     }
   }
@@ -797,9 +799,9 @@ struct ModelRowView: View {
     }
 
     switch modelUpdateStatus {
-    case .updateAvailable:
+    case .some(.updateAvailable):
       return .orange
-    case .failed:
+    case .some(.failed):
       return .red
     default:
       return .secondary
