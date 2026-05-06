@@ -47,6 +47,14 @@ playground.xcworkspace
 # Models (large files, download at runtime)
 Models/
 
+# Local benchmark data and outputs
+benchmark-data/
+benchmark-results/
+
+# Python tooling caches
+__pycache__/
+.venv/
+
 # Crash logs
 *.crash
 *.ips
@@ -67,6 +75,7 @@ AppIcon.iconset/
 icon_1024.png
 
 # Local release credentials
+.env
 .env.release
 
 # Local tooling logs

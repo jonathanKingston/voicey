@@ -1,7 +1,7 @@
 import AppKit
+import Darwin
 import SwiftUI
 
-@main
 struct VoiceyApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
@@ -10,5 +10,27 @@ struct VoiceyApp: App {
       SettingsView()
         .environmentObject(appDelegate.appState)
     }
+  }
+}
+
+@main
+enum VoiceyMain {
+  static func main() async {
+    if BenchmarkTranscribeCommand.canHandle(CommandLine.arguments) {
+      let exitCode = await BenchmarkTranscribeCommand.run(arguments: CommandLine.arguments)
+      exit(Int32(exitCode))
+    }
+
+    if BenchmarkTranscribeBatchCommand.canHandle(CommandLine.arguments) {
+      let exitCode = await BenchmarkTranscribeBatchCommand.run(arguments: CommandLine.arguments)
+      exit(Int32(exitCode))
+    }
+
+    if BenchmarkModelDownloadCommand.canHandle(CommandLine.arguments) {
+      let exitCode = await BenchmarkModelDownloadCommand.run(arguments: CommandLine.arguments)
+      exit(Int32(exitCode))
+    }
+
+    VoiceyApp.main()
   }
 }

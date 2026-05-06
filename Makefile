@@ -12,8 +12,19 @@ MLX_METALLIB_DEBUG = $(BUILD_DIR)/debug/mlx.metallib
 MLX_METALLIB_RELEASE = $(BUILD_DIR)/release/mlx.metallib
 VOICEY_LOG_PREDICATE = subsystem == "work.voicey.Voicey" || subsystem == "work.voicey.VoiceyDirect"
 RUN_WITH_LOG_STREAM = LOG_PID=""; trap 'if [ -n "$$LOG_PID" ]; then kill $$LOG_PID 2>/dev/null || true; wait $$LOG_PID 2>/dev/null || true; fi' EXIT INT TERM; echo "Streaming Voicey logs. Press Ctrl-C to stop."; log stream --style compact --predicate '$(VOICEY_LOG_PREDICATE)' --level debug & LOG_PID=$$!; sleep 1; open -n $(APP_BUNDLE); wait $$LOG_PID
+BENCHMARK_COMMON_VOICE_SOURCE ?= mdc
+BENCHMARK_COMMON_VOICE_DATASET ?= cmn1pv5hi00uto1072y1074y7
+BENCHMARK_COMMON_VOICE_HF_DATASET ?= mozilla-foundation/common_voice_13_0
+BENCHMARK_COMMON_VOICE_HF_CONFIG ?= en
+BENCHMARK_COMMON_VOICE_SPLIT ?= test
+BENCHMARK_COMMON_VOICE_LIMIT ?= 25
+BENCHMARK_COMMON_VOICE_SEED ?= 20260506
+BENCHMARK_COMMON_VOICE_HF_DIR = benchmark-data/common-voice/prepared/$(subst /,__,$(BENCHMARK_COMMON_VOICE_HF_DATASET))/$(BENCHMARK_COMMON_VOICE_HF_CONFIG)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
+BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMARK_COMMON_VOICE_DATASET)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
+BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
+BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 
-.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
+.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
 
 all: build
 
@@ -396,6 +407,41 @@ xcode-package:
 format:
 	swift-format -i -r Sources/
 
+# Run the Common Voice benchmark harness.
+benchmark-common-voice:
+	python3 scripts/benchmark_common_voice.py $(ARGS)
+
+# Download the Common Voice archive via MDC and extract only the deterministic benchmark sample.
+benchmark-prepare-common-voice:
+	python3 scripts/prepare_common_voice.py \
+		--source "$(BENCHMARK_COMMON_VOICE_SOURCE)" \
+		--dataset-id "$(BENCHMARK_COMMON_VOICE_DATASET)" \
+		--hf-dataset "$(BENCHMARK_COMMON_VOICE_HF_DATASET)" \
+		--hf-config "$(BENCHMARK_COMMON_VOICE_HF_CONFIG)" \
+		--split "$(BENCHMARK_COMMON_VOICE_SPLIT)" \
+		--limit "$(BENCHMARK_COMMON_VOICE_LIMIT)" \
+		--seed "$(BENCHMARK_COMMON_VOICE_SEED)" \
+		$(ARGS)
+
+# Download the Voicey models used by the benchmark.
+benchmark-download-models: build
+	.build/debug/Voicey benchmark-download-models $(BENCHMARK_VOICEY_MODELS)
+
+# Prepare data/models, then run the default real-wrapper Common Voice benchmark.
+benchmark-run-common-voice: build benchmark-prepare-common-voice benchmark-download-models
+	python3 scripts/benchmark_common_voice.py \
+		--tsv "$(BENCHMARK_COMMON_VOICE_DIR)/$(BENCHMARK_COMMON_VOICE_SPLIT).tsv" \
+		--clips-dir "$(BENCHMARK_COMMON_VOICE_DIR)/clips" \
+		--limit "$(BENCHMARK_COMMON_VOICE_LIMIT)" \
+		--seed "$(BENCHMARK_COMMON_VOICE_SEED)" \
+		$(foreach model,$(BENCHMARK_VOICEY_MODELS),--voicey-model "$(model)") \
+		--measure-duration
+
+# Validate the benchmark harness without requiring a real Common Voice download.
+test-common-voice-benchmark:
+	python3 scripts/test_common_voice_benchmark.py
+	python3 scripts/test_prepare_common_voice.py
+
 # Stream debug logs (run in separate terminal)
 logs:
 	log stream --style compact --predicate 'subsystem == "work.voicey.Voicey"' --level debug
@@ -580,6 +626,8 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  test-sparkle-linking - Verify Sparkle is only linked in direct builds"
+	@echo "  benchmark-common-voice - Run Common Voice benchmark harness (pass ARGS='...')"
+	@echo "  test-common-voice-benchmark - Test benchmark harness fixtures"
 
 # Full release process
 # Usage: make ship-release VERSION=1.2.0
