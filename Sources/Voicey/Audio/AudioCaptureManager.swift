@@ -308,7 +308,8 @@ final class AudioCaptureManager {
 
     let trimmedSeconds = Double(trimmedSampleCount) / targetSampleRate
     AppLogger.audio.info(
-      "AudioCapture: Trimmed \(trimmedSampleCount) trailing low-energy samples (~\(String(format: "%.2f", trimmedSeconds))s)"
+      "AudioCapture: Trimmed \(trimmedSampleCount) trailing low-energy samples "
+        + "(~\(String(format: "%.2f", trimmedSeconds))s)"
     )
 
     return Array(samples.prefix(keepEndIndex))

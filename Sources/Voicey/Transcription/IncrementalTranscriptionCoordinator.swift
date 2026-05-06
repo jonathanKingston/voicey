@@ -7,58 +7,6 @@ struct IncrementalTranscriptionSnapshot: Equatable {
 }
 
 final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
-  struct Configuration {
-    let sampleRate: Double
-    let pauseDuration: TimeInterval
-    let safetyTailDuration: TimeInterval
-    let minimumChunkDuration: TimeInterval
-    let speechRMSThreshold: Float
-    let trailingTrimDuration: TimeInterval
-    let trailingTrimWindowDuration: TimeInterval
-    let trailingTrimHopDuration: TimeInterval
-    let minimumTrailingTrimDuration: TimeInterval
-
-    static let `default` = Configuration(
-      sampleRate: 16_000,
-      pauseDuration: 1.0,
-      safetyTailDuration: 0.25,
-      minimumChunkDuration: 0.5,
-      speechRMSThreshold: 0.01,
-      trailingTrimDuration: 0.5,
-      trailingTrimWindowDuration: 0.02,
-      trailingTrimHopDuration: 0.01,
-      minimumTrailingTrimDuration: 0.08
-    )
-
-    var pauseSampleCount: Int {
-      Int(pauseDuration * sampleRate)
-    }
-
-    var safetyTailSampleCount: Int {
-      Int(safetyTailDuration * sampleRate)
-    }
-
-    var minimumChunkSampleCount: Int {
-      Int(minimumChunkDuration * sampleRate)
-    }
-
-    var trailingTrimSampleCount: Int {
-      Int(trailingTrimDuration * sampleRate)
-    }
-
-    var trailingTrimWindowSampleCount: Int {
-      max(1, Int(trailingTrimWindowDuration * sampleRate))
-    }
-
-    var trailingTrimHopSampleCount: Int {
-      max(1, Int(trailingTrimHopDuration * sampleRate))
-    }
-
-    var minimumTrailingTrimSampleCount: Int {
-      Int(minimumTrailingTrimDuration * sampleRate)
-    }
-  }
-
   private struct AudioChunk {
     let id: Int
     let startSampleIndex: Int
@@ -70,7 +18,7 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
     let result: TranscriptionResult
   }
 
-  private let configuration: Configuration
+  let configuration: IncrementalTranscriptionConfiguration
   private let transcribe: ([Float]) async throws -> TranscriptionResult
   private let onUpdate: (IncrementalTranscriptionSnapshot) async -> Void
   private let stateQueue = DispatchQueue(label: "work.voicey.incremental-transcription")
@@ -88,7 +36,7 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
   private var firstError: Error?
 
   init(
-    configuration: Configuration = .default,
+    configuration: IncrementalTranscriptionConfiguration = .default,
     transcribe: @escaping ([Float]) async throws -> TranscriptionResult,
     onUpdate: @escaping (IncrementalTranscriptionSnapshot) async -> Void
   ) {
@@ -350,7 +298,9 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
       }
     }
   }
+}
 
+private extension IncrementalTranscriptionCoordinator {
   private func publishSnapshotLocked() {
     let snapshot = IncrementalTranscriptionSnapshot(
       partialText: combinedTextLocked(),
@@ -414,58 +364,5 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
         }
       )
     }
-  }
-
-  private func trimTrailingLowEnergyAudio(_ samples: [Float]) -> [Float] {
-    guard !samples.isEmpty else { return samples }
-
-    let maxTrimSamples = configuration.trailingTrimSampleCount
-    let windowSamples = configuration.trailingTrimWindowSampleCount
-    let hopSamples = configuration.trailingTrimHopSampleCount
-    let minTrimSamples = configuration.minimumTrailingTrimSampleCount
-
-    guard samples.count > windowSamples else { return samples }
-    let boundedMaxTrim = min(maxTrimSamples, samples.count - windowSamples)
-    guard boundedMaxTrim >= minTrimSamples else { return samples }
-
-    let scanStart = samples.count - boundedMaxTrim
-    var scanIndex = samples.count - windowSamples
-    var keepEndIndex = samples.count
-
-    while scanIndex >= scanStart {
-      let windowRMS = rms(in: samples, start: scanIndex, count: windowSamples)
-      if windowRMS > configuration.speechRMSThreshold {
-        keepEndIndex = scanIndex + windowSamples
-        break
-      }
-      scanIndex -= hopSamples
-    }
-
-    let trimmedSampleCount = samples.count - keepEndIndex
-    guard trimmedSampleCount >= minTrimSamples else { return samples }
-
-    AppLogger.audio.info(
-      "IncrementalTranscription: Trimmed \(trimmedSampleCount) trailing low-energy samples"
-    )
-    return Array(samples.prefix(keepEndIndex))
-  }
-
-  private func rms(_ samples: [Float]) -> Float {
-    guard !samples.isEmpty else { return 0 }
-
-    let sumSquares = samples.reduce(Float(0)) { partialResult, sample in
-      partialResult + sample * sample
-    }
-    return sqrt(sumSquares / Float(samples.count))
-  }
-
-  private func rms(in samples: [Float], start: Int, count: Int) -> Float {
-    guard start >= 0, count > 0, start + count <= samples.count else { return 0 }
-
-    let window = samples[start..<(start + count)]
-    let sumSquares = window.reduce(Float(0)) { partialResult, sample in
-      partialResult + sample * sample
-    }
-    return sqrt(sumSquares / Float(count))
   }
 }
