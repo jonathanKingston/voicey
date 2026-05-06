@@ -136,6 +136,16 @@ def build_parser() -> argparse.ArgumentParser:
     ),
   )
   parser.add_argument(
+    "--voicey-incremental-model",
+    action="append",
+    default=[],
+    metavar="MODEL",
+    help=(
+      "Voicey SpeechModel raw value to benchmark via the pause-based incremental "
+      "transcription path. Repeat to compare multiple Voicey models."
+    ),
+  )
+  parser.add_argument(
     "--voicey-binary",
     type=Path,
     default=Path(".build/debug/Voicey"),
@@ -619,14 +629,21 @@ def format_optional_rate(value: float | None) -> str:
 
 
 def benchmark(args: argparse.Namespace) -> int:
-  if args.voicey_model and not args.model_command:
+  if (args.voicey_model or args.voicey_incremental_model) and not args.model_command:
     return benchmark_voicey_batch(args)
+  if args.voicey_incremental_model:
+    raise BenchmarkError(
+      "--voicey-incremental-model uses the optimized batch runner and cannot be "
+      "combined with --model-command"
+    )
 
   runners: list[Runner] = list(args.model_command)
   runners.extend(voicey_runners(args.voicey_model, args.voicey_binary))
   runner_names = [runner.name for runner in runners]
   if not runners:
-    raise BenchmarkError("provide at least one --model-command or --voicey-model")
+    raise BenchmarkError(
+      "provide at least one --model-command, --voicey-model, or --voicey-incremental-model"
+    )
   if len(set(runner_names)) != len(runner_names):
     raise BenchmarkError("model command names must be unique")
 
@@ -759,9 +776,10 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
   examples_path = args.output_dir / f"{args.suite_name}_{timestamp}_examples.md"
 
   write_batch_sample_tsv(sample_tsv_path, samples)
+  batch_runs = voicey_batch_runs(args.voicey_model, args.voicey_incremental_model)
 
   print(
-    f"Benchmarking {len(args.voicey_model)} Voicey model(s) on {len(samples)} of "
+    f"Benchmarking {len(batch_runs)} Voicey model run(s) on {len(samples)} of "
     f"{eligible_rows} eligible Common Voice rows"
   )
   print(f"Results: {results_path}")
@@ -769,11 +787,12 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
   samples_by_audio = {sample.relative_audio_path: sample for sample in samples}
   records: list[dict[str, Any]] = []
   with results_path.open("w", encoding="utf-8") as results_file:
-    for model in args.voicey_model:
-      print(f"[batch] {model}", flush=True)
+    for run in batch_runs:
+      print(f"[batch] {run.label}", flush=True)
       predictions = run_voicey_batch(
         binary=args.voicey_binary,
-        model=model,
+        command_name=run.command_name,
+        model=run.model,
         tsv_path=sample_tsv_path,
         clips_dir=args.clips_dir,
         timeout_seconds=args.timeout * len(samples),
@@ -787,7 +806,7 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
           keep_punctuation=args.keep_punctuation,
         )
         record = {
-          "model": model,
+          "model": run.label,
           "source_row": sample.source_row,
           "client_id": sample.client_id,
           "audio": sample.relative_audio_path,
@@ -821,7 +840,7 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
       "clips_dir": str(args.clips_dir),
       "limit": args.limit,
       "seed": args.seed,
-      "models": args.voicey_model,
+      "models": [run.label for run in batch_runs],
       "results_path": str(results_path),
       "examples_path": str(examples_path),
       "summaries": summaries,
@@ -831,6 +850,38 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
   print(f"Summary: {summary_path}")
   print(f"Examples: {examples_path}")
   return 0
+
+
+@dataclass(frozen=True)
+class VoiceyBatchRun:
+  label: str
+  model: str
+  command_name: str
+
+
+def voicey_batch_runs(
+  batch_models: Sequence[str],
+  incremental_models: Sequence[str],
+) -> list[VoiceyBatchRun]:
+  runs: list[VoiceyBatchRun] = []
+  for model in batch_models:
+    label = model if not incremental_models else f"{model}:batch"
+    runs.append(
+      VoiceyBatchRun(
+        label=label,
+        model=model,
+        command_name="benchmark-transcribe-batch",
+      )
+    )
+  for model in incremental_models:
+    runs.append(
+      VoiceyBatchRun(
+        label=f"{model}:incremental",
+        model=model,
+        command_name="benchmark-transcribe-incremental-batch",
+      )
+    )
+  return runs
 
 
 def write_batch_sample_tsv(path: Path, samples: Sequence[Sample]) -> None:
@@ -843,6 +894,7 @@ def write_batch_sample_tsv(path: Path, samples: Sequence[Sample]) -> None:
 
 def run_voicey_batch(
   binary: Path,
+  command_name: str,
   model: str,
   tsv_path: Path,
   clips_dir: Path,
@@ -850,7 +902,7 @@ def run_voicey_batch(
 ) -> list[dict[str, Any]]:
   command = [
     str(binary),
-    "benchmark-transcribe-batch",
+    command_name,
     "--model",
     model,
     "--tsv",
@@ -890,7 +942,6 @@ def voicey_runners(models: Sequence[str], binary: Path) -> list[Runner]:
     )
     for model in models
   ]
-
 
 def main(argv: Sequence[str] | None = None) -> int:
   parser = build_parser()

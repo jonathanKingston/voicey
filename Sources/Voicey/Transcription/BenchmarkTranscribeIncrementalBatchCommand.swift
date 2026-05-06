@@ -1,7 +1,7 @@
 import Foundation
 
-enum BenchmarkTranscribeBatchCommand {
-  private static let commandName = "benchmark-transcribe-batch"
+enum BenchmarkIncrementalBatchCommand {
+  private static let commandName = "benchmark-transcribe-incremental-batch"
 
   static func canHandle(_ arguments: [String]) -> Bool {
     arguments.dropFirst().first == commandName
@@ -11,13 +11,16 @@ enum BenchmarkTranscribeBatchCommand {
     RuntimeOutputMode.reservesStdoutForMachineReadableOutput = true
 
     do {
-      let options = try BatchOptions(arguments: Array(arguments.dropFirst(2)))
+      let options = try Options(arguments: Array(arguments.dropFirst(2)))
       if options.showHelp {
-        print(BatchOptions.helpText)
+        print(Options.helpText)
         return 0
       }
 
-      let samples = try BenchmarkBatchSample.load(tsvURL: options.tsvURL, clipsDirectory: options.clipsDirectory)
+      let samples = try BenchmarkBatchSample.load(
+        tsvURL: options.tsvURL,
+        clipsDirectory: options.clipsDirectory
+      )
       try await transcribe(samples: samples, model: options.model)
       return 0
     } catch {
@@ -35,34 +38,42 @@ enum BenchmarkTranscribeBatchCommand {
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await engine.loadModel(variant: model.rawValue)
       }
-      for sample in samples {
-        let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-          try await engine.transcribe(audioBuffer: sample.audioSamples())
-        }
-        try printBatchJSON(result: result, sample: sample, model: model)
+      try await transcribe(samples: samples, model: model) { audioBuffer in
+        try await engine.transcribe(audioBuffer: audioBuffer)
       }
     case .qwenMLX:
       let engine = QwenEngine()
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await engine.loadModel(variant: model.rawValue)
       }
-      for sample in samples {
-        let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-          try await engine.transcribe(audioBuffer: sample.audioSamples())
-        }
-        try printBatchJSON(result: result, sample: sample, model: model)
+      try await transcribe(samples: samples, model: model) { audioBuffer in
+        try await engine.transcribe(audioBuffer: audioBuffer)
       }
     case .granitePython:
       let engine = GraniteEngine()
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await engine.loadModel(variant: model.rawValue)
       }
-      for sample in samples {
-        let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-          try await engine.transcribe(audioBuffer: sample.audioSamples())
-        }
-        try printBatchJSON(result: result, sample: sample, model: model)
+      try await transcribe(samples: samples, model: model) { audioBuffer in
+        try await engine.transcribe(audioBuffer: audioBuffer)
       }
+    }
+  }
+
+  private static func transcribe(
+    samples: [BenchmarkBatchSample],
+    model: SpeechModel,
+    transcribeChunk: @escaping ([Float]) async throws -> TranscriptionResult
+  ) async throws {
+    for sample in samples {
+      let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
+        try await BenchmarkIncrementalTranscription.transcribe(
+          samples: sample.audioSamples(),
+          applyTrailingTrimHeuristic: !model.isGraniteModel,
+          transcribeChunk: transcribeChunk
+        )
+      }
+      try printBatchJSON(result: result, sample: sample, model: model)
     }
   }
 
@@ -74,6 +85,7 @@ enum BenchmarkTranscribeBatchCommand {
     let payload: [String: Any] = [
       "audio": sample.relativeAudioPath,
       "model": model.rawValue,
+      "mode": "incremental",
       "text": result.text,
       "language": result.language,
       "processingSeconds": result.processingTime,
@@ -88,12 +100,13 @@ enum BenchmarkTranscribeBatchCommand {
   }
 }
 
-private struct BatchOptions {
+private struct Options {
   static let helpText = """
     Usage:
-      Voicey benchmark-transcribe-batch --model MODEL --tsv PATH --clips-dir DIR
+      Voicey benchmark-transcribe-incremental-batch --model MODEL --tsv PATH --clips-dir DIR
 
-    Loads one Voicey model once, then transcribes every row in the TSV.
+    Loads one Voicey model once, then simulates Voicey's pause-based piecemeal
+    transcription over every row in the TSV.
     """
 
   let model: SpeechModel
@@ -161,35 +174,5 @@ private struct BatchOptions {
       throw BenchmarkTranscribeError.invalidModel(rawModel)
     }
     return model
-  }
-}
-
-struct BenchmarkBatchSample {
-  let relativeAudioPath: String
-  let audioURL: URL
-
-  static func load(tsvURL: URL, clipsDirectory: URL) throws -> [BenchmarkBatchSample] {
-    let contents = try String(contentsOf: tsvURL, encoding: .utf8)
-    var lines = contents.split(whereSeparator: \.isNewline).map(String.init)
-    guard !lines.isEmpty else { throw BenchmarkTranscribeError.emptyTSV }
-    let headers = lines.removeFirst().split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-    guard let pathIndex = headers.firstIndex(of: "path") else {
-      throw BenchmarkTranscribeError.requiredColumn("path")
-    }
-
-    return lines.compactMap { line in
-      let columns = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-      guard pathIndex < columns.count else { return nil }
-      let relativePath = columns[pathIndex]
-      guard !relativePath.isEmpty else { return nil }
-      return BenchmarkBatchSample(
-        relativeAudioPath: relativePath,
-        audioURL: clipsDirectory.appendingPathComponent(relativePath)
-      )
-    }
-  }
-
-  func audioSamples() throws -> [Float] {
-    try AudioFileSamples.load16kMonoFloatSamples(from: audioURL)
   }
 }
