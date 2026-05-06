@@ -53,6 +53,7 @@ benchmark-results/
 
 # Python tooling caches
 __pycache__/
+.venv/
 
 # Crash logs
 *.crash
@@ -74,6 +75,7 @@ AppIcon.iconset/
 icon_1024.png
 
 # Local release credentials
+.env
 .env.release
 
 # Local tooling logs

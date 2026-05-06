@@ -24,8 +24,8 @@ DEFAULT_LIMIT = 25
 DEFAULT_SEED = 20260506
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_OUTPUT_DIR = Path("benchmark-results")
-TEXT_COLUMNS = ("text", "sentence")
-PATH_COLUMN = "path"
+TEXT_COLUMNS = ("text", "sentence", "transcription", "reference")
+PATH_COLUMNS = ("path", "audio_file", "audio")
 MODEL_COMMAND_PLACEHOLDER = "{audio}"
 
 
@@ -117,13 +117,29 @@ def build_parser() -> argparse.ArgumentParser:
     "--model-command",
     action="append",
     type=parse_model_command,
-    required=True,
+    default=[],
     metavar="NAME=COMMAND",
     help=(
       "ASR command to benchmark. The command must print the transcript to stdout "
       "and include {audio}, which is replaced with the shell-quoted audio path. "
       "Repeat to compare multiple models."
     ),
+  )
+  parser.add_argument(
+    "--voicey-model",
+    action="append",
+    default=[],
+    metavar="MODEL",
+    help=(
+      "Voicey SpeechModel raw value to benchmark via `Voicey benchmark-transcribe`. "
+      "Repeat to compare multiple Voicey models."
+    ),
+  )
+  parser.add_argument(
+    "--voicey-binary",
+    type=Path,
+    default=Path(".build/debug/Voicey"),
+    help="Voicey binary used by --voicey-model. Defaults to .build/debug/Voicey.",
   )
   parser.add_argument(
     "--limit",
@@ -201,18 +217,26 @@ def validate_paths(tsv_path: Path, clips_dir: Path) -> None:
     raise BenchmarkError(f"Clips directory does not exist: {clips_dir}")
 
 
-def resolve_text_column(fieldnames: Sequence[str] | None) -> str:
+def resolve_columns(fieldnames: Sequence[str] | None) -> tuple[str, str]:
   if fieldnames is None:
     raise BenchmarkError("TSV file is empty or missing a header row")
-  if PATH_COLUMN not in fieldnames:
-    raise BenchmarkError(f"TSV file is missing required column: {PATH_COLUMN}")
 
+  path_column = next((column for column in PATH_COLUMNS if column in fieldnames), None)
+  if path_column is None:
+    expected = ", ".join(PATH_COLUMNS)
+    raise BenchmarkError(f"TSV file must contain one of these audio path columns: {expected}")
+
+  text_column = None
   for column in TEXT_COLUMNS:
     if column in fieldnames:
-      return column
+      text_column = column
+      break
 
-  expected = ", ".join(TEXT_COLUMNS)
-  raise BenchmarkError(f"TSV file must contain one of these text columns: {expected}")
+  if text_column is None:
+    expected = ", ".join(TEXT_COLUMNS)
+    raise BenchmarkError(f"TSV file must contain one of these text columns: {expected}")
+
+  return path_column, text_column
 
 
 def sample_common_voice_rows(
@@ -228,10 +252,10 @@ def sample_common_voice_rows(
 
   with tsv_path.open("r", encoding="utf-8", newline="") as tsv_file:
     reader = csv.DictReader(tsv_file, delimiter="\t")
-    text_column = resolve_text_column(reader.fieldnames)
+    path_column, text_column = resolve_columns(reader.fieldnames)
 
     for source_row, row in enumerate(reader, start=2):
-      relative_path = (row.get(PATH_COLUMN) or "").strip()
+      relative_path = (row.get(path_column) or "").strip()
       reference = (row.get(text_column) or "").strip()
 
       if not relative_path or not reference:
@@ -522,6 +546,72 @@ def print_summary(summaries: dict[str, dict[str, Any]]) -> None:
     print(f"{model}\t{summary['clips']}\t{summary['failures']}\t{wer}\t{cer}\t{rtf}")
 
 
+def write_examples(
+  path: Path,
+  records: Sequence[dict[str, Any]],
+  summaries: dict[str, dict[str, Any]],
+) -> None:
+  lines = [
+    "# Common Voice Benchmark Examples",
+    "",
+    "Lower WER/CER is better. RTF below 1.0 means faster than real time.",
+    "",
+    "## Summary",
+    "",
+    "| Model | Clips | WER | CER | RTF |",
+    "| --- | ---: | ---: | ---: | ---: |",
+  ]
+  for model, summary in sorted(summaries.items(), key=lambda item: item[1]["wer"] or 0):
+    lines.append(
+      "| "
+      f"{model} | {summary['clips']} | {format_optional_rate(summary['wer'])} | "
+      f"{format_optional_rate(summary['cer'])} | {format_optional_rate(summary['real_time_factor'])} |"
+    )
+
+  lines.extend(["", "## Per-Model Examples", ""])
+  for model in sorted({record["model"] for record in records}):
+    model_records = [record for record in records if record["model"] == model and "error" not in record]
+    if not model_records:
+      continue
+    ranked = sorted(model_records, key=lambda record: record["wer"])
+    picks = [
+      ("Best", ranked[0]),
+      ("Median", ranked[len(ranked) // 2]),
+      ("Worst", ranked[-1]),
+    ]
+    lines.extend([f"### {model}", ""])
+    for label, record in picks:
+      lines.extend(example_lines(label, record))
+
+  lines.extend(["", "## Side-By-Side Examples", ""])
+  for audio in list(dict.fromkeys(record["audio"] for record in records))[:5]:
+    audio_records = [record for record in records if record["audio"] == audio and "error" not in record]
+    if not audio_records:
+      continue
+    lines.extend([f"### {audio}", "", f"Reference: {audio_records[0]['reference']}", ""])
+    for record in sorted(audio_records, key=lambda item: item["model"]):
+      lines.append(
+        f"- `{record['model']}` WER {record['wer']:.3f}: {single_line(record['prediction'])}"
+      )
+    lines.append("")
+
+  path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def example_lines(label: str, record: dict[str, Any]) -> list[str]:
+  return [
+    f"**{label}** `{record['audio']}` WER {record['wer']:.3f}, CER {record['cer']:.3f}",
+    "",
+    f"- Reference: {single_line(record['reference'])}",
+    f"- Prediction: {single_line(record['prediction'])}",
+    "",
+  ]
+
+
+def single_line(text: str) -> str:
+  return " ".join(text.split())
+
+
 def format_optional_rate(value: float | None) -> str:
   if value is None:
     return "-"
@@ -529,8 +619,14 @@ def format_optional_rate(value: float | None) -> str:
 
 
 def benchmark(args: argparse.Namespace) -> int:
-  runners: list[Runner] = args.model_command
+  if args.voicey_model and not args.model_command:
+    return benchmark_voicey_batch(args)
+
+  runners: list[Runner] = list(args.model_command)
+  runners.extend(voicey_runners(args.voicey_model, args.voicey_binary))
   runner_names = [runner.name for runner in runners]
+  if not runners:
+    raise BenchmarkError("provide at least one --model-command or --voicey-model")
   if len(set(runner_names)) != len(runner_names):
     raise BenchmarkError("model command names must be unique")
 
@@ -550,6 +646,7 @@ def benchmark(args: argparse.Namespace) -> int:
   timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
   results_path = args.output_dir / f"{args.suite_name}_{timestamp}.jsonl"
   summary_path = args.output_dir / f"{args.suite_name}_{timestamp}_summary.json"
+  examples_path = args.output_dir / f"{args.suite_name}_{timestamp}_examples.md"
 
   print(
     f"Benchmarking {len(runners)} model command(s) on {len(samples)} of "
@@ -622,6 +719,7 @@ def benchmark(args: argparse.Namespace) -> int:
         results_file.flush()
 
   summaries = summarize_results(records)
+  write_examples(examples_path, records, summaries)
   write_json(
     summary_path,
     {
@@ -632,13 +730,166 @@ def benchmark(args: argparse.Namespace) -> int:
       "seed": args.seed,
       "models": runner_names,
       "results_path": str(results_path),
+      "examples_path": str(examples_path),
       "summaries": summaries,
     },
   )
   print_summary(summaries)
   print(f"Summary: {summary_path}")
+  print(f"Examples: {examples_path}")
 
   return 0
+
+
+def benchmark_voicey_batch(args: argparse.Namespace) -> int:
+  validate_paths(args.tsv, args.clips_dir)
+  samples, eligible_rows = sample_common_voice_rows(
+    tsv_path=args.tsv,
+    clips_dir=args.clips_dir,
+    limit=args.limit,
+    seed=args.seed,
+    skip_missing=args.skip_missing,
+  )
+
+  args.output_dir.mkdir(parents=True, exist_ok=True)
+  timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+  sample_tsv_path = args.output_dir / f"{args.suite_name}_{timestamp}_sample.tsv"
+  results_path = args.output_dir / f"{args.suite_name}_{timestamp}.jsonl"
+  summary_path = args.output_dir / f"{args.suite_name}_{timestamp}_summary.json"
+  examples_path = args.output_dir / f"{args.suite_name}_{timestamp}_examples.md"
+
+  write_batch_sample_tsv(sample_tsv_path, samples)
+
+  print(
+    f"Benchmarking {len(args.voicey_model)} Voicey model(s) on {len(samples)} of "
+    f"{eligible_rows} eligible Common Voice rows"
+  )
+  print(f"Results: {results_path}")
+
+  samples_by_audio = {sample.relative_audio_path: sample for sample in samples}
+  records: list[dict[str, Any]] = []
+  with results_path.open("w", encoding="utf-8") as results_file:
+    for model in args.voicey_model:
+      print(f"[batch] {model}", flush=True)
+      predictions = run_voicey_batch(
+        binary=args.voicey_binary,
+        model=model,
+        tsv_path=sample_tsv_path,
+        clips_dir=args.clips_dir,
+        timeout_seconds=args.timeout * len(samples),
+      )
+      for prediction in predictions:
+        sample = samples_by_audio[prediction["audio"]]
+        metrics = compute_text_metrics(
+          reference=sample.reference,
+          prediction=prediction["text"],
+          case_sensitive=args.case_sensitive,
+          keep_punctuation=args.keep_punctuation,
+        )
+        record = {
+          "model": model,
+          "source_row": sample.source_row,
+          "client_id": sample.client_id,
+          "audio": sample.relative_audio_path,
+          "reference": sample.reference,
+          "prediction": prediction["text"],
+          "normalized_reference": metrics.normalized_reference,
+          "normalized_prediction": metrics.normalized_prediction,
+          "reference_words": metrics.reference_words,
+          "word_errors": metrics.word_errors,
+          "wer": metrics.wer,
+          "reference_chars": metrics.reference_chars,
+          "char_errors": metrics.char_errors,
+          "cer": metrics.cer,
+          "processing_seconds": prediction.get("processingSeconds", 0.0),
+          "audio_seconds": prediction.get("audioSeconds"),
+          "real_time_factor": prediction.get("realTimeFactor"),
+          "stdout": "",
+          "stderr": "",
+        }
+        records.append(record)
+        results_file.write(json.dumps(record, sort_keys=True) + "\n")
+        results_file.flush()
+
+  summaries = summarize_results(records)
+  write_examples(examples_path, records, summaries)
+  write_json(
+    summary_path,
+    {
+      "created_at": timestamp,
+      "tsv": str(args.tsv),
+      "clips_dir": str(args.clips_dir),
+      "limit": args.limit,
+      "seed": args.seed,
+      "models": args.voicey_model,
+      "results_path": str(results_path),
+      "examples_path": str(examples_path),
+      "summaries": summaries,
+    },
+  )
+  print_summary(summaries)
+  print(f"Summary: {summary_path}")
+  print(f"Examples: {examples_path}")
+  return 0
+
+
+def write_batch_sample_tsv(path: Path, samples: Sequence[Sample]) -> None:
+  with path.open("w", encoding="utf-8", newline="") as output_file:
+    writer = csv.DictWriter(output_file, fieldnames=["path", "text"], delimiter="\t")
+    writer.writeheader()
+    for sample in samples:
+      writer.writerow({"path": sample.relative_audio_path, "text": sample.reference})
+
+
+def run_voicey_batch(
+  binary: Path,
+  model: str,
+  tsv_path: Path,
+  clips_dir: Path,
+  timeout_seconds: float,
+) -> list[dict[str, Any]]:
+  command = [
+    str(binary),
+    "benchmark-transcribe-batch",
+    "--model",
+    model,
+    "--tsv",
+    str(tsv_path),
+    "--clips-dir",
+    str(clips_dir),
+  ]
+  completed = subprocess.run(
+    command,
+    check=False,
+    capture_output=True,
+    text=True,
+    timeout=timeout_seconds,
+  )
+  if completed.returncode != 0:
+    raise BenchmarkError(
+      f"{model} exited with status {completed.returncode}\nSTDERR:\n{completed.stderr.strip()}"
+    )
+
+  predictions = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+  if not predictions:
+    raise BenchmarkError(f"{model} produced no batch predictions")
+  return predictions
+
+
+def voicey_runners(models: Sequence[str], binary: Path) -> list[Runner]:
+  if not models:
+    return []
+  binary_command = shlex.quote(str(binary))
+  return [
+    Runner(
+      name=model,
+      command_template=(
+        f"{binary_command} benchmark-transcribe --model {shlex.quote(model)} "
+        f"--audio {MODEL_COMMAND_PLACEHOLDER}"
+      ),
+    )
+    for model in models
+  ]
 
 
 def main(argv: Sequence[str] | None = None) -> int:

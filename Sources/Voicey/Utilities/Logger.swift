@@ -14,6 +14,10 @@ enum AppLogger {
   static let model = Logger(subsystem: subsystem, category: "model")
 }
 
+enum RuntimeOutputMode {
+  static var reservesStdoutForMachineReadableOutput = false
+}
+
 // Global function for convenience - logs to general category
 func log(_ message: String) {
   AppLogger.general.info("\(message)")
@@ -25,6 +29,12 @@ func debugPrint(_ message: String, category: String = "DEBUG") {
   let formatter = ISO8601DateFormatter()
   let timestamp = formatter.string(from: Date())
   AppLogger.general.debug("[\(category, privacy: .public)] \(message, privacy: .public)")
-  print("[\(timestamp)] [\(category)] \(message)")
-  fflush(stdout)  // Ensure immediate output
+  let line = "[\(timestamp)] [\(category)] \(message)\n"
+  if RuntimeOutputMode.reservesStdoutForMachineReadableOutput {
+    fputs(line, stderr)
+    fflush(stderr)
+  } else {
+    fputs(line, stdout)
+    fflush(stdout)  // Ensure immediate output
+  }
 }

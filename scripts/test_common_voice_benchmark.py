@@ -50,6 +50,15 @@ class CommonVoiceBenchmarkTests(unittest.TestCase):
     self.assertEqual(metrics.word_errors, 1)
     self.assertEqual(metrics.wer, 0.5)
 
+  def test_voicey_runner_uses_benchmark_transcribe(self) -> None:
+    runners = benchmark.voicey_runners(["large-v3_turbo"], Path(".build/debug/Voicey"))
+
+    self.assertEqual(len(runners), 1)
+    self.assertEqual(runners[0].name, "large-v3_turbo")
+    self.assertIn("benchmark-transcribe", runners[0].command_template)
+    self.assertIn("--model large-v3_turbo", runners[0].command_template)
+    self.assertIn("{audio}", runners[0].command_template)
+
   def test_cli_writes_results_for_small_fixture(self) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
       root = Path(temp_dir)
