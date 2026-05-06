@@ -7,4 +7,8 @@ extension AppDelegate: AudioCaptureManagerDelegate {
       self.enforceRecordingDurationLimitIfNeeded()
     }
   }
+
+  func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureSamples samples: [Float]) {
+    incrementalTranscriptionCoordinator?.append(samples: samples)
+  }
 }

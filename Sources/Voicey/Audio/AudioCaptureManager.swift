@@ -4,6 +4,7 @@ import os
 
 protocol AudioCaptureManagerDelegate: AnyObject {
   func audioCaptureManager(_ manager: AudioCaptureManager, didUpdateLevel level: Float)
+  func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureSamples samples: [Float])
 }
 
 final class AudioCaptureManager {
@@ -69,7 +70,9 @@ final class AudioCaptureManager {
 
     usesRustCaptureWorker = false
     AppLogger.audio.info("AudioCapture: Starting capture...")
-    audioBuffer.removeAll()
+    bufferQueue.sync {
+      audioBuffer.removeAll()
+    }
 
     audioEngine = AVAudioEngine()
     guard let audioEngine = audioEngine else {
@@ -193,7 +196,9 @@ final class AudioCaptureManager {
 
     // Append to buffer
     bufferQueue.async { [weak self] in
-      self?.audioBuffer.append(contentsOf: samples)
+      guard let self else { return }
+      self.audioBuffer.append(contentsOf: samples)
+      self.delegate?.audioCaptureManager(self, didCaptureSamples: samples)
     }
   }
 

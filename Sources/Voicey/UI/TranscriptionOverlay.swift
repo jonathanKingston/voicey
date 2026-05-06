@@ -331,6 +331,10 @@ struct TranscriptionOverlayView: View {
   }
 
   private var statusText: String {
+    if appState.transcriptionState.isRecording && appState.isCatchingUpTranscription {
+      return L10n.State.transcribing
+    }
+
     appState.transcriptionState.displayText
   }
 
