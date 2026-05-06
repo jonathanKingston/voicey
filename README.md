@@ -107,8 +107,8 @@ Voicey includes intelligent post-processing:
 
 - **Noise filtering**: Removes Whisper artifacts like `[music]`, `*click*`, breathing sounds, etc.
 - **Intelligent punctuation**: Adds periods, commas, and question marks based on speech timing and patterns
-- **Text expansions**: Converts common phrases (e.g., "etcetera" → "etc.", "mister" → "Mr.")
-- **Voice commands** (optional): "new line", "new paragraph", "scratch that"
+- **Text normalization**: Cleans up low-risk transcription artifacts (e.g., "o k" → "OK")
+- **Voice commands** (optional): "new line", "new paragraph", "scratch that", plus editable text expansions
 
 ## Architecture
 
