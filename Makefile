@@ -13,7 +13,7 @@ MLX_METALLIB_RELEASE = $(BUILD_DIR)/release/mlx.metallib
 VOICEY_LOG_PREDICATE = subsystem == "work.voicey.Voicey" || subsystem == "work.voicey.VoiceyDirect"
 RUN_WITH_LOG_STREAM = LOG_PID=""; trap 'if [ -n "$$LOG_PID" ]; then kill $$LOG_PID 2>/dev/null || true; wait $$LOG_PID 2>/dev/null || true; fi' EXIT INT TERM; echo "Streaming Voicey logs. Press Ctrl-C to stop."; log stream --style compact --predicate '$(VOICEY_LOG_PREDICATE)' --level debug & LOG_PID=$$!; sleep 1; open -n $(APP_BUNDLE); wait $$LOG_PID
 
-.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
+.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
 
 all: build
 
@@ -396,6 +396,15 @@ xcode-package:
 format:
 	swift-format -i -r Sources/
 
+# Run the command-driven Common Voice benchmark harness.
+# Usage: make benchmark-common-voice ARGS='--tsv ... --clips-dir ... --model-command "name=cmd {audio}"'
+benchmark-common-voice:
+	python3 scripts/benchmark_common_voice.py $(ARGS)
+
+# Validate the benchmark harness without requiring a real Common Voice download.
+test-common-voice-benchmark:
+	python3 scripts/test_common_voice_benchmark.py
+
 # Stream debug logs (run in separate terminal)
 logs:
 	log stream --style compact --predicate 'subsystem == "work.voicey.Voicey"' --level debug
@@ -580,6 +589,8 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  test-sparkle-linking - Verify Sparkle is only linked in direct builds"
+	@echo "  benchmark-common-voice - Run Common Voice benchmark harness (pass ARGS='...')"
+	@echo "  test-common-voice-benchmark - Test benchmark harness fixtures"
 
 # Full release process
 # Usage: make ship-release VERSION=1.2.0

@@ -47,6 +47,13 @@ playground.xcworkspace
 # Models (large files, download at runtime)
 Models/
 
+# Local benchmark data and outputs
+benchmark-data/
+benchmark-results/
+
+# Python tooling caches
+__pycache__/
+
 # Crash logs
 *.crash
 *.ips
