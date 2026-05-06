@@ -198,8 +198,13 @@ struct ModelRevisionMetadata: Codable, Equatable {
 }
 
 private struct RemoteModelRevision {
-  let sourceIdentifier: String
+  let source: ModelRevisionSource
   let fingerprint: String
+  let files: [HuggingFaceTreeItem]
+
+  var sourceIdentifier: String {
+    source.sourceIdentifier
+  }
 }
 
 private struct ModelRevisionSource {
@@ -224,6 +229,14 @@ private struct HuggingFaceTreeItem: Decodable {
   let size: Int64?
   let path: String
   let lfs: LFSInfo?
+
+  var isFile: Bool {
+    type == "file"
+  }
+
+  var remoteFingerprintPart: String {
+    "\(path):\(oid):\(lfs?.oid ?? ""):\(size ?? 0)"
+  }
 }
 /// Manages downloading, storing, and selecting speech models
 final class ModelManager: ObservableObject, @unchecked Sendable {
@@ -452,10 +465,6 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
   func checkForUpdatesForDownloadedModels() {
     for model in downloadedModels {
-      guard modelRevisionMetadata[model] != nil else {
-        modelUpdateStatus[model] = .updateAvailable
-        continue
-      }
       checkForModelUpdate(model)
     }
   }
@@ -463,23 +472,26 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   func checkForModelUpdate(_ model: SpeechModel) {
     guard isDownloaded(model), isUpdating[model, default: false] == false else { return }
 
-    guard let storedMetadata = modelRevisionMetadata[model] else {
-      modelUpdateStatus[model] = .updateAvailable
-      return
-    }
-
     modelUpdateStatus[model] = .checking
 
     Task {
       do {
         let remoteRevision = try await fetchRemoteRevision(for: model)
         await MainActor.run {
-          guard self.modelRevisionMetadata[model] == storedMetadata else { return }
-          self.modelUpdateStatus[model] =
-            remoteRevision.sourceIdentifier == storedMetadata.sourceIdentifier
-              && remoteRevision.fingerprint == storedMetadata.fingerprint
-            ? .upToDate
-            : .updateAvailable
+          guard self.isDownloaded(model) else {
+            self.modelUpdateStatus[model] = nil
+            return
+          }
+
+          if let storedMetadata = self.modelRevisionMetadata[model] {
+            self.modelUpdateStatus[model] =
+              self.statusForKnownRevision(storedMetadata, remoteRevision: remoteRevision)
+          } else if self.localFilesMatchRemoteRevision(remoteRevision, for: model) {
+            self.recordRevision(remoteRevision, for: model)
+            self.modelUpdateStatus[model] = .upToDate
+          } else {
+            self.modelUpdateStatus[model] = .updateAvailable
+          }
         }
       } catch {
         await MainActor.run {
@@ -500,6 +512,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     isUpdating[model] = true
     modelUpdateStatus[model] = .checking
     downloadError = nil
+    let hasStoredRevision = modelRevisionMetadata[model] != nil
 
     let existingURL = URL(fileURLWithPath: existingPath)
     let backupURL =
@@ -510,6 +523,18 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     Task {
       do {
+        if !hasStoredRevision {
+          let remoteRevision = try await fetchRemoteRevision(for: model)
+          if localFilesMatchRemoteRevision(remoteRevision, for: model) {
+            await MainActor.run {
+              self.recordRevision(remoteRevision, for: model)
+              self.modelUpdateStatus[model] = .upToDate
+              self.isUpdating[model] = false
+            }
+            return
+          }
+        }
+
         try fileManager.moveItem(at: existingURL, to: backupURL)
 
         await MainActor.run {
@@ -1180,10 +1205,8 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     let treeItems = try JSONDecoder().decode([HuggingFaceTreeItem].self, from: data)
     let fileFingerprints =
       treeItems
-      .filter { $0.type == "file" }
-      .map { item in
-        "\(item.path):\(item.oid):\(item.lfs?.oid ?? ""):\(item.size ?? 0)"
-      }
+      .filter(\.isFile)
+      .map(\.remoteFingerprintPart)
       .sorted()
 
     guard !fileFingerprints.isEmpty else {
@@ -1191,9 +1214,84 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     }
 
     return RemoteModelRevision(
-      sourceIdentifier: source.sourceIdentifier,
-      fingerprint: Self.stableFingerprint(for: fileFingerprints)
+      source: source,
+      fingerprint: Self.stableFingerprint(for: fileFingerprints),
+      files: treeItems.filter(\.isFile)
     )
+  }
+
+  private func statusForKnownRevision(
+    _ storedMetadata: ModelRevisionMetadata,
+    remoteRevision: RemoteModelRevision
+  ) -> ModelUpdateStatus {
+    remoteRevision.sourceIdentifier == storedMetadata.sourceIdentifier
+      && remoteRevision.fingerprint == storedMetadata.fingerprint
+      ? .upToDate
+      : .updateAvailable
+  }
+
+  private func recordRevision(_ remoteRevision: RemoteModelRevision, for model: SpeechModel) {
+    modelRevisionMetadata[model] = ModelRevisionMetadata(
+      sourceIdentifier: remoteRevision.sourceIdentifier,
+      fingerprint: remoteRevision.fingerprint,
+      recordedAt: Date()
+    )
+    saveRevisionMetadata()
+  }
+
+  private func localFilesMatchRemoteRevision(
+    _ remoteRevision: RemoteModelRevision,
+    for model: SpeechModel
+  ) -> Bool {
+    guard let modelPath = modelPath(for: model) else { return false }
+
+    let modelURL = URL(fileURLWithPath: modelPath)
+    guard !remoteRevision.files.isEmpty else { return false }
+
+    for item in remoteRevision.files {
+      guard
+        let relativePath = localRelativePath(
+          forRemotePath: item.path,
+          source: remoteRevision.source
+        )
+      else {
+        return false
+      }
+
+      let localURL = modelURL.appendingPathComponent(relativePath)
+      guard let expectedSize = item.size,
+        localFileSize(at: localURL) == expectedSize
+      else {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  private func localRelativePath(
+    forRemotePath remotePath: String,
+    source: ModelRevisionSource
+  ) -> String? {
+    guard let pathPrefix = source.pathPrefix else {
+      return remotePath
+    }
+
+    let prefixWithSeparator = "\(pathPrefix)/"
+    if remotePath.hasPrefix(prefixWithSeparator) {
+      return String(remotePath.dropFirst(prefixWithSeparator.count))
+    }
+
+    return remotePath == pathPrefix ? "" : nil
+  }
+
+  private func localFileSize(at url: URL) -> Int64? {
+    guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+      let size = attrs[.size] as? Int64
+    else {
+      return nil
+    }
+    return size
   }
 
   private func revisionSource(for model: SpeechModel) throws -> ModelRevisionSource {
