@@ -288,6 +288,13 @@ enum L10n {
         static var recommended: String { L10n.string("model.recommended") }
         static var download: String { L10n.string("model.download") }
         static var delete: String { L10n.string("model.delete") }
+        static var checkForUpdates: String { L10n.string("model.checkForUpdates") }
+        static var checkingForUpdates: String { L10n.string("model.checkingForUpdates") }
+        static var update: String { L10n.string("model.update") }
+        static var updating: String { L10n.string("model.updating") }
+        static var updateAvailable: String { L10n.string("model.updateAvailable") }
+        static var upToDate: String { L10n.string("model.upToDate") }
+        static var revisionUnknown: String { L10n.string("model.revisionUnknown") }
         static var failedToDelete: String { L10n.string("model.failedToDelete") }
         static var ok: String { L10n.string("model.ok") }
         static var unknownError: String { L10n.string("model.unknownError") }

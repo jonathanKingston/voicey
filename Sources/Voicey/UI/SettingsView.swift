@@ -556,6 +556,7 @@ struct ModelSettingsView: View {
       if !SpeechModel.userFacingModels.contains(where: { $0.rawValue == selectedModel }) {
         selectedModel = ModelManager.defaultModel.rawValue
       }
+      modelManager.checkForUpdatesForDownloadedModels()
       if let model = SpeechModel(rawValue: selectedModel) {
         appState.currentModel = model
       }
@@ -679,11 +680,26 @@ struct ModelRowView: View {
         Text(ModelManager.formatSize(model.diskSize))
           .font(.caption)
           .foregroundStyle(.secondary)
+
+        if let updateStatusText {
+          Text(updateStatusText)
+            .font(.caption2)
+            .foregroundStyle(updateStatusColor)
+        }
       }
 
       Spacer()
 
-      if modelManager.isDownloading[model, default: false] {
+      if modelManager.isUpdating[model, default: false] {
+        HStack(spacing: 8) {
+          ProgressView()
+            .controlSize(.small)
+
+          Text(L10n.Model.updating)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      } else if modelManager.isDownloading[model, default: false] {
         HStack(spacing: 8) {
           ProgressView()
             .controlSize(.small)
@@ -699,6 +715,8 @@ struct ModelRowView: View {
         HStack(spacing: 8) {
           Image(systemName: "checkmark.circle.fill")
             .foregroundStyle(.green)
+
+          updateActionButton
 
           Button(L10n.Model.delete) {
             do {
@@ -723,6 +741,68 @@ struct ModelRowView: View {
       Button(L10n.Model.ok, role: .cancel) {}
     } message: {
       Text(deleteError ?? L10n.Model.unknownError)
+    }
+  }
+
+  @ViewBuilder
+  private var updateActionButton: some View {
+    if modelUpdateStatus == .checking {
+      ProgressView()
+        .controlSize(.small)
+    } else if shouldOfferUpdate {
+      Button(L10n.Model.update) {
+        modelManager.updateDownloadedModel(model)
+      }
+      .buttonStyle(.borderless)
+    } else {
+      Button(L10n.Model.checkForUpdates) {
+        modelManager.checkForModelUpdate(model)
+      }
+      .buttonStyle(.borderless)
+    }
+  }
+
+  private var modelUpdateStatus: ModelUpdateStatus? {
+    modelManager.modelUpdateStatus[model]
+  }
+
+  private var shouldOfferUpdate: Bool {
+    !modelManager.hasKnownRevision(for: model) || modelUpdateStatus == .updateAvailable
+  }
+
+  private var updateStatusText: String? {
+    guard modelManager.isDownloaded(model) else { return nil }
+
+    if !modelManager.hasKnownRevision(for: model) {
+      return L10n.Model.revisionUnknown
+    }
+
+    switch modelUpdateStatus {
+    case .checking:
+      return L10n.Model.checkingForModelUpdates
+    case .upToDate:
+      return L10n.Model.upToDate
+    case .updateAvailable:
+      return L10n.Model.updateAvailable
+    case .failed(let message):
+      return message
+    case nil:
+      return nil
+    }
+  }
+
+  private var updateStatusColor: Color {
+    if !modelManager.hasKnownRevision(for: model) {
+      return .orange
+    }
+
+    switch modelUpdateStatus {
+    case .updateAvailable:
+      return .orange
+    case .failed:
+      return .red
+    default:
+      return .secondary
     }
   }
 }
