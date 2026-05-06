@@ -660,7 +660,9 @@ struct VoiceCommandsSettingsView: View {
       if voiceCommandsEnabled {
         Section(L10n.VoiceCommands.commands) {
           ForEach($commands) { $command in
-            VoiceCommandRow(command: $command)
+            VoiceCommandRow(command: $command) {
+              deleteCommand(id: command.id)
+            }
           }
           .onDelete { indexSet in
             commands.remove(atOffsets: indexSet)
@@ -683,6 +685,9 @@ struct VoiceCommandsSettingsView: View {
     }
     .formStyle(.grouped)
     .padding()
+    .onChange(of: commands) {
+      saveCommands()
+    }
     .sheet(isPresented: $showAddCommand) {
       AddVoiceCommandView { newCommand in
         commands.append(newCommand)
@@ -694,25 +699,42 @@ struct VoiceCommandsSettingsView: View {
   private func saveCommands() {
     SettingsManager.shared.voiceCommands = commands
   }
+
+  private func deleteCommand(id: UUID) {
+    commands.removeAll { $0.id == id }
+    saveCommands()
+  }
 }
 
 struct VoiceCommandRow: View {
   @Binding var command: VoiceCommand
+  var onDelete: () -> Void
 
   var body: some View {
-    HStack {
+    HStack(alignment: .center, spacing: 12) {
       Toggle("", isOn: $command.enabled)
         .labelsHidden()
+        .frame(width: 44, alignment: .leading)
 
       VStack(alignment: .leading, spacing: 2) {
-        TextField(L10n.VoiceCommands.phrase, text: $command.phrase)
+        TextField("", text: $command.phrase, prompt: Text(L10n.VoiceCommands.phrase))
           .textFieldStyle(.plain)
           .font(.headline)
+          .labelsHidden()
 
         Text(actionDescription)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
+
+      Button(role: .destructive, action: onDelete) {
+        Image(systemName: "trash")
+      }
+      .buttonStyle(.borderless)
+      .foregroundStyle(.red)
+      .frame(width: 24, alignment: .trailing)
+      .accessibilityLabel(L10n.Model.delete)
     }
   }
 

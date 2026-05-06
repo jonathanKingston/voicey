@@ -2,17 +2,8 @@ import Foundation
 
 /// Utilities for text cleanup and formatting in transcription output
 enum TextCleanup {
-  /// Default text expansions for common spoken phrases
+  /// Default text normalizations for low-risk transcription artifacts.
   static let defaultTextExpansions: [String: String] = [
-    "etcetera": "etc.",
-    "et cetera": "etc.",
-    "for example": "e.g.",
-    "that is": "i.e.",
-    "versus": "vs.",
-    "mister": "Mr.",
-    "missus": "Mrs.",
-    "doctor": "Dr.",
-    "okay": "OK",
     "o k": "OK"
   ]
 
