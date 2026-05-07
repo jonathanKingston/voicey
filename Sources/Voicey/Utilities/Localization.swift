@@ -6,20 +6,25 @@ private enum LocalizationBundleResolver {
     private static let tableName = "Localizable"
     private static let tableExtension = "strings"
     private static let validationKey = "state.listening"
+    private static let resourceBundleBaseName = "Voicey_Voicey"
+    private static let resourceBundleExtensions = ["bundle", "resources"]
+
+    private final class BundleMarker {}
 
     static func resolve() -> Bundle {
-        #if SWIFT_PACKAGE
-        if bundleContainsLocalizationTable(.module) {
-            return .module
-        }
-        #endif
-
+        // Avoid Bundle.module here because SwiftPM's generated accessor fatalErrors
+        // when the sidecar resource bundle is absent or packaged unexpectedly.
         if bundleContainsLocalizationTable(.main) {
             return .main
         }
 
+        let markerBundle = Bundle(for: BundleMarker.self)
+        if bundleContainsLocalizationTable(markerBundle) {
+            return markerBundle
+        }
+
         for directory in searchDirectories {
-            if let bundle = firstLocalizationBundle(in: directory) {
+            if let bundle = preferredLocalizationBundle(in: directory) {
                 return bundle
             }
         }
@@ -33,15 +38,35 @@ private enum LocalizationBundleResolver {
     private static var searchDirectories: [URL] {
         var directories = [URL]()
 
-        if let resourceURL = Bundle.main.resourceURL {
-            directories.append(resourceURL)
+        for bundle in [Bundle.main, Bundle(for: BundleMarker.self)] {
+            if let resourceURL = bundle.resourceURL {
+                directories.append(resourceURL)
+            }
+
+            directories.append(bundle.bundleURL)
+            directories.append(bundle.bundleURL.deletingLastPathComponent())
         }
 
-        directories.append(Bundle.main.bundleURL.deletingLastPathComponent())
         directories.append(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
 
         var seenPaths = Set<String>()
         return directories.filter { seenPaths.insert($0.path).inserted }
+    }
+
+    private static func preferredLocalizationBundle(in directory: URL) -> Bundle? {
+        for resourceBundleExtension in resourceBundleExtensions {
+            let bundleURL = directory
+                .appendingPathComponent(resourceBundleBaseName)
+                .appendingPathExtension(resourceBundleExtension)
+
+            guard let bundle = Bundle(url: bundleURL), bundleContainsLocalizationTable(bundle) else {
+                continue
+            }
+
+            return bundle
+        }
+
+        return firstLocalizationBundle(in: directory)
     }
 
     private static func firstLocalizationBundle(in directory: URL) -> Bundle? {
@@ -53,7 +78,7 @@ private enum LocalizationBundleResolver {
             return nil
         }
 
-        for url in urls where url.pathExtension == "bundle" {
+        for url in urls where resourceBundleExtensions.contains(url.pathExtension) {
             guard let bundle = Bundle(url: url), bundleContainsLocalizationTable(bundle) else {
                 continue
             }
