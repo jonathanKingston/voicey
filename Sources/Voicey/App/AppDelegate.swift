@@ -1076,7 +1076,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let window = NSWindow(contentViewController: hostingController)
     window.title = "Voicey Settings"
     window.styleMask = [.titled, .closable]
-    window.setContentSize(NSSize(width: 500, height: 550))
+    window.titlebarAppearsTransparent = true
+    window.toolbarStyle = .unified
+    window.setContentSize(SettingsView.windowSize)
     if !window.setFrameUsingName(Self.settingsWindowAutosaveName) {
       positionWindow(window, centeredOn: screenWithMouse() ?? NSScreen.main)
     }
