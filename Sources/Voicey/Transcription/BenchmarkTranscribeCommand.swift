@@ -336,6 +336,7 @@ enum BenchmarkTranscribeError: LocalizedError {
   case invalidModel(String)
   case invalidRuntime(String)
   case invalidWarmupCount(String)
+  case invalidPositiveNumber(String, String)
   case missingValue(String)
   case requiredColumn(String)
   case requiredArgument(String)
@@ -363,6 +364,8 @@ enum BenchmarkTranscribeError: LocalizedError {
       return "Unknown runtime: \(runtime). Use in-process or multiprocess."
     case .invalidWarmupCount(let value):
       return "Invalid warmup count: \(value)"
+    case .invalidPositiveNumber(let argument, let value):
+      return "Expected \(argument) to be a positive number, got: \(value)"
     case .missingValue(let argument):
       return "Missing value for \(argument)"
     case .requiredColumn(let column):

@@ -50,4 +50,23 @@ struct IncrementalTranscriptionConfiguration {
   var minimumTrailingTrimSampleCount: Int {
     Int(minimumTrailingTrimDuration * sampleRate)
   }
+
+  func overriding(
+    pauseDuration: TimeInterval? = nil,
+    safetyTailDuration: TimeInterval? = nil,
+    minimumChunkDuration: TimeInterval? = nil,
+    speechRMSThreshold: Float? = nil
+  ) -> IncrementalTranscriptionConfiguration {
+    IncrementalTranscriptionConfiguration(
+      sampleRate: sampleRate,
+      pauseDuration: pauseDuration ?? self.pauseDuration,
+      safetyTailDuration: safetyTailDuration ?? self.safetyTailDuration,
+      minimumChunkDuration: minimumChunkDuration ?? self.minimumChunkDuration,
+      speechRMSThreshold: speechRMSThreshold ?? self.speechRMSThreshold,
+      trailingTrimDuration: trailingTrimDuration,
+      trailingTrimWindowDuration: trailingTrimWindowDuration,
+      trailingTrimHopDuration: trailingTrimHopDuration,
+      minimumTrailingTrimDuration: minimumTrailingTrimDuration
+    )
+  }
 }

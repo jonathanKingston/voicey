@@ -21,7 +21,7 @@ enum BenchmarkIncrementalBatchCommand {
         tsvURL: options.tsvURL,
         clipsDirectory: options.clipsDirectory
       )
-      try await transcribe(samples: samples, model: options.model)
+      try await transcribe(samples: samples, options: options)
       return 0
     } catch {
       fputs("error: \(error.localizedDescription)\n", stderr)
@@ -29,7 +29,8 @@ enum BenchmarkIncrementalBatchCommand {
     }
   }
 
-  private static func transcribe(samples: [BenchmarkBatchSample], model: SpeechModel) async throws {
+  private static func transcribe(samples: [BenchmarkBatchSample], options: Options) async throws {
+    let model = options.model
     SettingsManager.shared.selectedModel = model
 
     switch model.backendKind {
@@ -38,7 +39,7 @@ enum BenchmarkIncrementalBatchCommand {
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await engine.loadModel(variant: model.rawValue)
       }
-      try await transcribe(samples: samples, model: model) { audioBuffer in
+      try await transcribe(samples: samples, options: options) { audioBuffer in
         try await engine.transcribe(audioBuffer: audioBuffer)
       }
     case .qwenMLX:
@@ -46,7 +47,7 @@ enum BenchmarkIncrementalBatchCommand {
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await engine.loadModel(variant: model.rawValue)
       }
-      try await transcribe(samples: samples, model: model) { audioBuffer in
+      try await transcribe(samples: samples, options: options) { audioBuffer in
         try await engine.transcribe(audioBuffer: audioBuffer)
       }
     case .granitePython:
@@ -54,7 +55,7 @@ enum BenchmarkIncrementalBatchCommand {
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await engine.loadModel(variant: model.rawValue)
       }
-      try await transcribe(samples: samples, model: model) { audioBuffer in
+      try await transcribe(samples: samples, options: options) { audioBuffer in
         try await engine.transcribe(audioBuffer: audioBuffer)
       }
     }
@@ -62,18 +63,19 @@ enum BenchmarkIncrementalBatchCommand {
 
   private static func transcribe(
     samples: [BenchmarkBatchSample],
-    model: SpeechModel,
+    options: Options,
     transcribeChunk: @escaping ([Float]) async throws -> TranscriptionResult
   ) async throws {
     for sample in samples {
       let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await BenchmarkIncrementalTranscription.transcribe(
           samples: sample.audioSamples(),
-          applyTrailingTrimHeuristic: !model.isGraniteModel,
+          configuration: options.configuration,
+          applyTrailingTrimHeuristic: options.applyTrailingTrimHeuristic,
           transcribeChunk: transcribeChunk
         )
       }
-      try printBatchJSON(result: result, sample: sample, model: model)
+      try printBatchJSON(result: result, sample: sample, model: options.model)
     }
   }
 
@@ -103,22 +105,40 @@ enum BenchmarkIncrementalBatchCommand {
 private struct Options {
   static let helpText = """
     Usage:
-      Voicey benchmark-transcribe-incremental-batch --model MODEL --tsv PATH --clips-dir DIR
+      Voicey benchmark-transcribe-incremental-batch --model MODEL --tsv PATH --clips-dir DIR [options]
 
     Loads one Voicey model once, then simulates Voicey's pause-based piecemeal
     transcription over every row in the TSV.
+
+    Options:
+      --pause-duration SECONDS
+      --safety-tail-duration SECONDS
+      --minimum-chunk-duration SECONDS
+      --speech-rms-threshold VALUE
+      --disable-trailing-trim
     """
 
   let model: SpeechModel
   let tsvURL: URL
   let clipsDirectory: URL
+  let configuration: IncrementalTranscriptionConfiguration
+  let disableTrailingTrim: Bool
   let showHelp: Bool
+
+  var applyTrailingTrimHeuristic: Bool {
+    !disableTrailingTrim && !model.isGraniteModel
+  }
 
   init(arguments: [String]) throws {
     var model: SpeechModel?
     var tsvURL: URL?
     var clipsDirectory: URL?
     var showHelp = false
+    var pauseDuration: TimeInterval?
+    var safetyTailDuration: TimeInterval?
+    var minimumChunkDuration: TimeInterval?
+    var speechRMSThreshold: Float?
+    var disableTrailingTrim = false
 
     var index = 0
     while index < arguments.count {
@@ -130,6 +150,17 @@ private struct Options {
         tsvURL = URL(fileURLWithPath: try Self.value(after: argument, arguments: arguments, index: &index))
       case "--clips-dir":
         clipsDirectory = URL(fileURLWithPath: try Self.value(after: argument, arguments: arguments, index: &index))
+      case "--pause-duration":
+        pauseDuration = try Self.positiveDouble(after: argument, arguments: arguments, index: &index)
+      case "--safety-tail-duration":
+        safetyTailDuration = try Self.positiveDouble(after: argument, arguments: arguments, index: &index)
+      case "--minimum-chunk-duration":
+        minimumChunkDuration = try Self.positiveDouble(after: argument, arguments: arguments, index: &index)
+      case "--speech-rms-threshold":
+        speechRMSThreshold = Float(
+          try Self.positiveDouble(after: argument, arguments: arguments, index: &index))
+      case "--disable-trailing-trim":
+        disableTrailingTrim = true
       case "--help", "-h":
         showHelp = true
       default:
@@ -143,6 +174,8 @@ private struct Options {
       self.model = ModelManager.defaultModel
       self.tsvURL = URL(fileURLWithPath: "/dev/null")
       self.clipsDirectory = URL(fileURLWithPath: "/dev/null")
+      self.configuration = .default
+      self.disableTrailingTrim = false
       return
     }
 
@@ -152,6 +185,13 @@ private struct Options {
     self.model = model
     self.tsvURL = tsvURL
     self.clipsDirectory = clipsDirectory
+    self.configuration = IncrementalTranscriptionConfiguration.default.overriding(
+      pauseDuration: pauseDuration,
+      safetyTailDuration: safetyTailDuration,
+      minimumChunkDuration: minimumChunkDuration,
+      speechRMSThreshold: speechRMSThreshold
+    )
+    self.disableTrailingTrim = disableTrailingTrim
   }
 
   private static func value(
@@ -174,5 +214,17 @@ private struct Options {
       throw BenchmarkTranscribeError.invalidModel(rawModel)
     }
     return model
+  }
+
+  private static func positiveDouble(
+    after argument: String,
+    arguments: [String],
+    index: inout Int
+  ) throws -> Double {
+    let rawValue = try value(after: argument, arguments: arguments, index: &index)
+    guard let value = Double(rawValue), value > 0 else {
+      throw BenchmarkTranscribeError.invalidPositiveNumber(argument, rawValue)
+    }
+    return value
   }
 }

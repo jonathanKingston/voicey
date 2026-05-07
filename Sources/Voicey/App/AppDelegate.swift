@@ -447,9 +447,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return try await self.transcribeWithSelectedEngine(audioBuffer: audioBuffer)
       },
       onUpdate: { [weak self] snapshot in
+        guard let self else { return }
         await MainActor.run {
-          self?.appState.partialTranscription = snapshot.partialText
-          self?.appState.isCatchingUpTranscription = snapshot.isCatchingUp
+          self.appState.partialTranscription = snapshot.partialText
+          self.appState.isCatchingUpTranscription = snapshot.isCatchingUp
         }
       }
     )

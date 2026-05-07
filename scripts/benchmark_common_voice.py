@@ -146,6 +146,16 @@ def build_parser() -> argparse.ArgumentParser:
     ),
   )
   parser.add_argument(
+    "--voicey-incremental-arg",
+    action="append",
+    default=[],
+    metavar="ARG",
+    help=(
+      "Extra argument passed only to `benchmark-transcribe-incremental-batch`. "
+      "Repeat for each flag/value."
+    ),
+  )
+  parser.add_argument(
     "--voicey-binary",
     type=Path,
     default=Path(".build/debug/Voicey"),
@@ -776,7 +786,11 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
   examples_path = args.output_dir / f"{args.suite_name}_{timestamp}_examples.md"
 
   write_batch_sample_tsv(sample_tsv_path, samples)
-  batch_runs = voicey_batch_runs(args.voicey_model, args.voicey_incremental_model)
+  batch_runs = voicey_batch_runs(
+    args.voicey_model,
+    args.voicey_incremental_model,
+    args.voicey_incremental_arg,
+  )
 
   print(
     f"Benchmarking {len(batch_runs)} Voicey model run(s) on {len(samples)} of "
@@ -793,6 +807,7 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
         binary=args.voicey_binary,
         command_name=run.command_name,
         model=run.model,
+        extra_args=run.extra_args,
         tsv_path=sample_tsv_path,
         clips_dir=args.clips_dir,
         timeout_seconds=args.timeout * len(samples),
@@ -857,11 +872,13 @@ class VoiceyBatchRun:
   label: str
   model: str
   command_name: str
+  extra_args: Sequence[str]
 
 
 def voicey_batch_runs(
   batch_models: Sequence[str],
   incremental_models: Sequence[str],
+  incremental_args: Sequence[str],
 ) -> list[VoiceyBatchRun]:
   runs: list[VoiceyBatchRun] = []
   for model in batch_models:
@@ -871,6 +888,7 @@ def voicey_batch_runs(
         label=label,
         model=model,
         command_name="benchmark-transcribe-batch",
+        extra_args=[],
       )
     )
   for model in incremental_models:
@@ -879,6 +897,7 @@ def voicey_batch_runs(
         label=f"{model}:incremental",
         model=model,
         command_name="benchmark-transcribe-incremental-batch",
+        extra_args=incremental_args,
       )
     )
   return runs
@@ -896,6 +915,7 @@ def run_voicey_batch(
   binary: Path,
   command_name: str,
   model: str,
+  extra_args: Sequence[str],
   tsv_path: Path,
   clips_dir: Path,
   timeout_seconds: float,
@@ -910,6 +930,7 @@ def run_voicey_batch(
     "--clips-dir",
     str(clips_dir),
   ]
+  command.extend(extra_args)
   completed = subprocess.run(
     command,
     check=False,

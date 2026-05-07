@@ -335,7 +335,7 @@ struct TranscriptionOverlayView: View {
       return L10n.State.transcribing
     }
 
-    appState.transcriptionState.displayText
+    return appState.transcriptionState.displayText
   }
 
   private var iconName: String {
