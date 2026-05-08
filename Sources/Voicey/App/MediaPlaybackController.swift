@@ -49,8 +49,9 @@ final class MediaPlaybackController: MediaPlaybackControlling {
     AppLogger.general.info("Requested media resume after transcription")
   }
 
-  /// Best-effort snapshot for common desktop players. Other apps (browser tabs, etc.) are not detected.
+  /// Direct builds probe MediaRemote (system Now Playing). App Store builds use scriptable players only.
   private static func isLikelySystemMediaPlaying() -> Bool {
+    if MediaRemotePlaybackProbe.isMediaPlaying() { return true }
     if isAppleMusicPlaying() { return true }
     if isSpotifyPlaying() { return true }
     return false
