@@ -917,6 +917,8 @@ struct AdvancedSettingsView: View {
   @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
   @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
   @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste: Bool = true
+  @AppStorage("pauseMediaDuringTranscription", store: defaults)
+  private var pauseMediaDuringTranscription: Bool = true
   @State private var accessibilityGranted = false
   @State private var clearError: String?
   @State private var showClearError = false
@@ -926,6 +928,14 @@ struct AdvancedSettingsView: View {
 
   var body: some View {
     Form {
+      Section(L10n.Advanced.mediaPlayback) {
+        Toggle(L10n.Advanced.pauseMediaDuringTranscription, isOn: $pauseMediaDuringTranscription)
+
+        Text(L10n.Advanced.pauseMediaDuringTranscriptionDesc)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
       Section(L10n.Advanced.autoInsert) {
         Toggle(L10n.Advanced.autoInsertToggle, isOn: $autoPasteEnabled)
           .onChange(of: autoPasteEnabled) {

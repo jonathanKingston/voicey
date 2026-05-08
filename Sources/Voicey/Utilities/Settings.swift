@@ -10,9 +10,9 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   /// process has no bundle identifier (for example, a raw SwiftPM binary).
   private let defaults: UserDefaults
   #if VOICEY_DIRECT_DISTRIBUTION
-  private static let fallbackSuiteName = "work.voicey.VoiceyDirect"
+    private static let fallbackSuiteName = "work.voicey.VoiceyDirect"
   #else
-  private static let fallbackSuiteName = "work.voicey.Voicey"
+    private static let fallbackSuiteName = "work.voicey.Voicey"
   #endif
 
   static var defaultsStore: UserDefaults {
@@ -35,6 +35,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.showDockIcon: false,
       Keys.autoPasteEnabled: false,  // Disabled by default - advanced feature requiring Accessibility
       Keys.restoreClipboardAfterPaste: true,  // Restore original clipboard after paste
+      Keys.pauseMediaDuringTranscription: true,
       Keys.voiceCommandsEnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
@@ -51,6 +52,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let showDockIcon = "showDockIcon"
     static let autoPasteEnabled = "autoPasteEnabled"
     static let restoreClipboardAfterPaste = "restoreClipboardAfterPaste"
+    static let pauseMediaDuringTranscription = "pauseMediaDuringTranscription"
     static let voiceCommandsEnabled = "voiceCommandsEnabled"
     static let voiceCommands = "voiceCommands"
     static let enableDetailedLogging = "enableDetailedLogging"
@@ -106,6 +108,12 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var restoreClipboardAfterPaste: Bool {
     get { defaults.bool(forKey: Keys.restoreClipboardAfterPaste) }
     set { defaults.set(newValue, forKey: Keys.restoreClipboardAfterPaste) }
+  }
+
+  /// Whether to pause system media playback while Voicey is recording/transcribing.
+  var pauseMediaDuringTranscription: Bool {
+    get { defaults.bool(forKey: Keys.pauseMediaDuringTranscription) }
+    set { defaults.set(newValue, forKey: Keys.pauseMediaDuringTranscription) }
   }
 
   func configureLaunchAtLogin(enabled: Bool) {

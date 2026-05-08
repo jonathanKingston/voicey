@@ -307,6 +307,11 @@ enum L10n {
     // MARK: - Advanced Settings
 
     enum Advanced {
+        static var mediaPlayback: String { L10n.string("advanced.mediaPlayback") }
+        static var pauseMediaDuringTranscription: String { L10n.string("advanced.pauseMediaDuringTranscription") }
+        static var pauseMediaDuringTranscriptionDesc: String {
+            L10n.string("advanced.pauseMediaDuringTranscriptionDesc")
+        }
         static var autoInsert: String { L10n.string("advanced.autoInsert") }
         static var autoInsertToggle: String { L10n.string("advanced.autoInsertToggle") }
         static var autoInsertEnabledDesc: String { L10n.string("advanced.autoInsertEnabledDesc") }

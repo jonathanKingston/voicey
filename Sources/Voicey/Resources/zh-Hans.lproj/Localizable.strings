@@ -126,6 +126,9 @@
 "voiceCommands.add" = "添加";
 
 /* Advanced Settings */
+"advanced.mediaPlayback" = "媒体播放";
+"advanced.pauseMediaDuringTranscription" = "转录期间暂停媒体";
+"advanced.pauseMediaDuringTranscriptionDesc" = "启用后，Voicey 会在录音和转录期间暂停正在播放的媒体，并在完成后恢复播放。";
 "advanced.autoInsert" = "自动插入";
 "advanced.autoInsertToggle" = "转录后自动插入";
 "advanced.autoInsertEnabledDesc" = "Voicey 将尝试直接将文本插入到焦点文本框中。";

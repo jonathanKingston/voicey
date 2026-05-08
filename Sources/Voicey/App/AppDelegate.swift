@@ -8,6 +8,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"
   private static let settingsWindowAutosaveName = "VoiceySettingsWindow"
 
+  private enum TranscriptionTriggerSource: String {
+    case keyboardShortcut = "keyboard shortcut"
+    case mediaKey = "media key"
+  }
+
   var statusBarController: StatusBarController?
   let appState = AppState()
   var transcriptionOverlay: TranscriptionOverlayController?
@@ -151,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     mediaKeyMonitor?.stop()
     mediaKeyMonitor = nil
+    dependencies.mediaPlayback.resumeAfterTranscription()
 
     // Clean up
     transcriptionOverlay = nil
@@ -398,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func setupHotkey() {
     KeyboardShortcuts.onKeyDown(for: .toggleTranscription) { [weak self] in
       Task { @MainActor in
-        self?.handleTranscriptionTrigger(source: "keyboard shortcut")
+        self?.handleTranscriptionTrigger(source: .keyboardShortcut)
       }
     }
   }
@@ -411,15 +417,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     mediaKeyMonitor = MediaKeyMonitor { [weak self] in
-      self?.handleTranscriptionTrigger(source: "media key")
+      self?.handleTranscriptionTrigger(source: .mediaKey)
     }
     mediaKeyMonitor?.start()
   }
 
   @MainActor
-  private func handleTranscriptionTrigger(source: String) {
-    AppLogger.general.info("Received transcription trigger from \(source)")
-    toggleTranscription()
+  private func handleTranscriptionTrigger(source: TranscriptionTriggerSource) {
+    AppLogger.general.info("Received transcription trigger from \(source.rawValue)")
+    toggleTranscription(triggerSource: source)
   }
 
   private func setupEscapeKeyMonitor() {
@@ -745,14 +751,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Transcription Control
 
   func toggleTranscription() {
+    toggleTranscription(triggerSource: .keyboardShortcut)
+  }
+
+  private func toggleTranscription(triggerSource: TranscriptionTriggerSource) {
     if appState.isRecording {
-      stopRecording()
+      stopRecording(triggerSource: triggerSource)
     } else {
-      startRecording()
+      startRecording(triggerSource: triggerSource)
     }
   }
 
-  func startRecording() {
+  private func startRecording(triggerSource: TranscriptionTriggerSource) {
     // Refresh model status before recording
     ModelManager.shared.loadDownloadedModels()
 
@@ -797,7 +807,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await MainActor.run {
           if preloadSucceeded && self.isActiveEngineLoaded {
             self.appState.modelStatus = .ready
-            self.beginRecordingAfterModelReady()
+            self.beginRecordingAfterModelReady(triggerSource: triggerSource)
           } else {
             self.hideOverlay()
             self.appState.modelStatus = .failed("Failed to load model")
@@ -827,7 +837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await MainActor.run {
           if appState.modelStatus.isReady {
             // Model is ready, now start recording
-            self.beginRecordingAfterModelReady()
+            self.beginRecordingAfterModelReady(triggerSource: triggerSource)
           } else {
             // Model failed to load or timed out
             self.hideOverlay()
@@ -841,10 +851,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // Model is ready, start recording immediately
-    beginRecordingAfterModelReady()
+    beginRecordingAfterModelReady(triggerSource: triggerSource)
   }
 
-  private func beginRecordingAfterModelReady() {
+  private func beginRecordingAfterModelReady(triggerSource: TranscriptionTriggerSource) {
     debugPrint("🎙️ Starting recording...", category: "RECORD")
     AppLogger.audio.info("Starting recording...")
 
@@ -859,6 +869,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       recordingTargetScreen = nil
     }
 
+    if dependencies.settings.pauseMediaDuringTranscription {
+      switch triggerSource {
+      case .keyboardShortcut:
+        dependencies.mediaPlayback.pauseForTranscription()
+      case .mediaKey:
+        dependencies.mediaPlayback.noteExternalPauseForTranscription()
+      }
+    }
     appState.transcriptionState = .recording(startTime: Date())
 
     // Show overlay on the screen where the user was last interacting
@@ -918,7 +936,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  func stopRecording() {
+  private func stopRecording(triggerSource: TranscriptionTriggerSource) {
     debugPrint("⏹️ Stopping recording...", category: "RECORD")
     AppLogger.audio.info("Stopping recording...")
 
@@ -928,6 +946,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     appState.transcriptionState = .processing
+    if triggerSource == .mediaKey && dependencies.settings.pauseMediaDuringTranscription {
+      dependencies.mediaPlayback.reassertPauseDuringTranscription()
+    }
 
     // Granite does better without additional end-of-audio trimming.
     let selectedModel = SettingsManager.shared.selectedModel
@@ -942,6 +963,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.audio.error("No audio buffer!")
       hideOverlay()
       appState.transcriptionState = .error(message: "No audio captured")
+      dependencies.mediaPlayback.resumeAfterTranscription()
       return
     }
 
@@ -961,6 +983,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "Audio too short (\(String(format: "%.2f", durationSec))s), skipping transcription")
       hideOverlay()
       appState.transcriptionState = .idle
+      dependencies.mediaPlayback.resumeAfterTranscription()
       // Check for pending model upgrade now that we're idle
       tryPerformPendingUpgrade()
       return
@@ -985,6 +1008,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Update menubar
     statusBarController?.updateIcon(recording: false)
+
+    dependencies.mediaPlayback.resumeAfterTranscription()
 
     // Check for pending model upgrade now that we're idle
     tryPerformPendingUpgrade()
@@ -1043,6 +1068,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "processTranscription: No text to deliver (empty/whitespace after processing)")
           self.hideOverlay()
           self.appState.transcriptionState = .idle
+          self.dependencies.mediaPlayback.resumeAfterTranscription()
           // Check for pending model upgrade now that we're idle
           self.tryPerformPendingUpgrade()
           return
@@ -1051,13 +1077,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
         // Deliver text to clipboard and optionally auto-paste
-        outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) {
-          [weak self] in
-          debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
-          self?.hideOverlay()
-          self?.appState.transcriptionState = .idle
-          self?.tryPerformPendingUpgrade()
-        }
+        outputManager?.deliver(
+          text: processedText,
+          targetPID: self.recordingTargetPID,
+          completion: { [weak self] in
+            debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
+            self?.hideOverlay()
+            self?.appState.transcriptionState = .idle
+            self?.dependencies.mediaPlayback.resumeAfterTranscription()
+            self?.tryPerformPendingUpgrade()
+          }
+        )
 
         // Clear targets after attempting output
         self.recordingTargetPID = nil
@@ -1070,6 +1100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.hideOverlay()
         self?.appState.transcriptionState = .error(message: error.localizedDescription)
         self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+        self?.dependencies.mediaPlayback.resumeAfterTranscription()
         self?.tryPerformPendingUpgrade()
       }
     }

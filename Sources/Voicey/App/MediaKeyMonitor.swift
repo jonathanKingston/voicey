@@ -3,15 +3,6 @@ import CoreGraphics
 import Foundation
 
 final class MediaKeyMonitor {
-  private enum Constants {
-    // AppKit exposes the event type but not a semantic name for auxiliary media-key subtypes.
-    static let auxiliaryControlButtonSubtype = Int16(8)  // NX_SUBTYPE_AUX_CONTROL_BUTTONS
-    static let playPauseKeyCode = Int32(16)  // NX_KEYTYPE_PLAY
-    static let keyDownState = UInt32(0xA)
-    static let systemDefinedEventMask =
-      CGEventMask(1) << UInt64(NSEvent.EventType.systemDefined.rawValue)
-  }
-
   private struct MediaKeyEvent {
     let keyCode: Int32
     let isKeyDown: Bool
@@ -38,7 +29,7 @@ final class MediaKeyMonitor {
         tap: .cgSessionEventTap,
         place: .headInsertEventTap,
         options: .listenOnly,
-        eventsOfInterest: Constants.systemDefinedEventMask,
+        eventsOfInterest: SystemMediaKeyConstants.systemDefinedEventMask,
         callback: Self.handleEventTap,
         userInfo: userInfo
       )
@@ -91,9 +82,16 @@ final class MediaKeyMonitor {
       return Unmanaged.passUnretained(event)
     }
 
+    let isVoiceySyntheticEvent =
+      event.getIntegerValueField(CGEventField.eventSourceUserData)
+      == SystemMediaKeyConstants.voiceySyntheticEventUserData
+    if isVoiceySyntheticEvent {
+      return Unmanaged.passUnretained(event)
+    }
+
     guard let nsEvent = NSEvent(cgEvent: event),
       let mediaKeyEvent = Self.mediaKeyEvent(from: nsEvent),
-      mediaKeyEvent.keyCode == Constants.playPauseKeyCode,
+      mediaKeyEvent.keyCode == SystemMediaKeyConstants.playPauseKeyCode,
       mediaKeyEvent.isKeyDown
     else {
       return Unmanaged.passUnretained(event)
@@ -110,7 +108,7 @@ final class MediaKeyMonitor {
 
   private static func mediaKeyEvent(from event: NSEvent) -> MediaKeyEvent? {
     guard event.type == .systemDefined,
-      event.subtype.rawValue == Constants.auxiliaryControlButtonSubtype
+      event.subtype.rawValue == SystemMediaKeyConstants.auxiliaryControlButtonSubtype
     else {
       return nil
     }
@@ -121,7 +119,7 @@ final class MediaKeyMonitor {
 
     return MediaKeyEvent(
       keyCode: keyCode,
-      isKeyDown: keyState == Constants.keyDownState
+      isKeyDown: keyState == SystemMediaKeyConstants.keyDownState
     )
   }
 

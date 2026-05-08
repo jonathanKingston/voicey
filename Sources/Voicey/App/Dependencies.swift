@@ -11,6 +11,7 @@ protocol SettingsProviding: AnyObject {
   var showDockIcon: Bool { get }
   var autoPasteEnabled: Bool { get set }
   var restoreClipboardAfterPaste: Bool { get set }
+  var pauseMediaDuringTranscription: Bool { get set }
   var voiceCommandsEnabled: Bool { get set }
   var voiceCommands: [VoiceCommand] { get set }
   var enableDetailedLogging: Bool { get set }
@@ -58,6 +59,14 @@ protocol NotificationProviding {
   func showPerformanceWarning(_ message: String)
 }
 
+/// Protocol for temporarily pausing system media during transcription.
+protocol MediaPlaybackControlling: AnyObject {
+  func pauseForTranscription()
+  func noteExternalPauseForTranscription()
+  func reassertPauseDuringTranscription()
+  func resumeAfterTranscription()
+}
+
 // MARK: - Dependencies Container
 
 /// Container for all injectable dependencies
@@ -68,22 +77,26 @@ final class Dependencies: @unchecked Sendable {
   let settings: SettingsProviding
   let permissions: PermissionsProviding
   let notifications: NotificationProviding
+  let mediaPlayback: MediaPlaybackControlling
 
   /// Production initializer using real implementations
   private init() {
     self.settings = SettingsManager.shared
     self.permissions = PermissionsManager.shared
     self.notifications = NotificationManager.shared
+    self.mediaPlayback = MediaPlaybackController.shared
   }
 
   /// Testing initializer allowing mock implementations
   init(
     settings: SettingsProviding,
     permissions: PermissionsProviding,
-    notifications: NotificationProviding
+    notifications: NotificationProviding,
+    mediaPlayback: MediaPlaybackControlling = MediaPlaybackController.shared
   ) {
     self.settings = settings
     self.permissions = permissions
     self.notifications = notifications
+    self.mediaPlayback = mediaPlayback
   }
 }
