@@ -7,6 +7,10 @@ APP_BUNDLE = $(APP_NAME).app
 CONTENTS_DIR = $(APP_BUNDLE)/Contents
 MACOS_DIR = $(CONTENTS_DIR)/MacOS
 RESOURCES_DIR = $(CONTENTS_DIR)/Resources
+# SwiftPM resource containers can be emitted as either `.bundle` or `.resources`
+# depending on how the app was built/packaged.
+SWIFTPM_RESOURCES_DEBUG = $(wildcard $(BUILD_DIR)/debug/*.bundle) $(wildcard $(BUILD_DIR)/debug/*.resources)
+SWIFTPM_RESOURCES_RELEASE = $(wildcard $(RELEASE_DIR)/*.bundle) $(wildcard $(RELEASE_DIR)/*.resources)
 SPEECH_SWIFT_METALLIB_SCRIPT = $(BUILD_DIR)/checkouts/speech-swift/scripts/build_mlx_metallib.sh
 MLX_METALLIB_DEBUG = $(BUILD_DIR)/debug/mlx.metallib
 MLX_METALLIB_RELEASE = $(BUILD_DIR)/release/mlx.metallib
@@ -62,7 +66,11 @@ bundle: build-release
 	@cp Info.plist $(CONTENTS_DIR)/
 	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
-	@cp -R $(RELEASE_DIR)/Voicey_Voicey.bundle $(RESOURCES_DIR)/
+	@if [ -z "$(strip $(SWIFTPM_RESOURCES_RELEASE))" ]; then \
+		echo "Error: No SwiftPM resource containers found in $(RELEASE_DIR)"; \
+		exit 1; \
+	fi
+	@cp -R $(SWIFTPM_RESOURCES_RELEASE) $(RESOURCES_DIR)/
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "App bundle created: $(APP_BUNDLE)"
@@ -78,7 +86,11 @@ bundle-debug: build
 	@cp Info.plist $(CONTENTS_DIR)/
 	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
-	@cp -R $(BUILD_DIR)/debug/Voicey_Voicey.bundle $(RESOURCES_DIR)/
+	@if [ -z "$(strip $(SWIFTPM_RESOURCES_DEBUG))" ]; then \
+		echo "Error: No SwiftPM resource containers found in $(BUILD_DIR)/debug"; \
+		exit 1; \
+	fi
+	@cp -R $(SWIFTPM_RESOURCES_DEBUG) $(RESOURCES_DIR)/
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "Debug app bundle created: $(APP_BUNDLE)"
@@ -94,7 +106,11 @@ bundle-debug-direct: build-direct
 	@cp $(MLX_METALLIB_DEBUG) $(MACOS_DIR)/mlx.metallib
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
-	@cp -R $(BUILD_DIR)/debug/Voicey_Voicey.bundle $(RESOURCES_DIR)/
+	@if [ -z "$(strip $(SWIFTPM_RESOURCES_DEBUG))" ]; then \
+		echo "Error: No SwiftPM resource containers found in $(BUILD_DIR)/debug"; \
+		exit 1; \
+	fi
+	@cp -R $(SWIFTPM_RESOURCES_DEBUG) $(RESOURCES_DIR)/
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@# Copy Sparkle.framework for auto-updates
@@ -124,7 +140,11 @@ bundle-direct: release-direct
 	@cp $(MLX_METALLIB_RELEASE) $(MACOS_DIR)/mlx.metallib
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
-	@cp -R $(RELEASE_DIR)/Voicey_Voicey.bundle $(RESOURCES_DIR)/
+	@if [ -z "$(strip $(SWIFTPM_RESOURCES_RELEASE))" ]; then \
+		echo "Error: No SwiftPM resource containers found in $(RELEASE_DIR)"; \
+		exit 1; \
+	fi
+	@cp -R $(SWIFTPM_RESOURCES_RELEASE) $(RESOURCES_DIR)/
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@# Copy Sparkle.framework for auto-updates
