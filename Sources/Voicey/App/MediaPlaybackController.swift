@@ -1,6 +1,5 @@
 import AppKit
 import CoreGraphics
-import MediaPlayer
 
 final class MediaPlaybackController: MediaPlaybackControlling {
   static let shared = MediaPlaybackController()
@@ -58,16 +57,26 @@ final class MediaPlaybackController: MediaPlaybackControlling {
   }
 
   private static func isAppleMusicPlaying() -> Bool {
-    MPMusicPlayerController.systemMusicPlayer.playbackState == .playing
+    isScriptableAppReportingPlaying(
+      bundleID: "com.apple.Music",
+      scriptApplicationName: "Music"
+    )
   }
 
   private static func isSpotifyPlaying() -> Bool {
-    let bundleID = "com.spotify.client"
+    isScriptableAppReportingPlaying(
+      bundleID: "com.spotify.client",
+      scriptApplicationName: "Spotify"
+    )
+  }
+
+  /// `MPMusicPlayerController` is unavailable on macOS; use AppleScript when the app is running.
+  private static func isScriptableAppReportingPlaying(bundleID: String, scriptApplicationName: String) -> Bool {
     guard NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first != nil else {
       return false
     }
     let source = """
-    tell application "Spotify" to return player state as string
+    tell application "\(scriptApplicationName)" to return player state as string
     """
     guard let script = NSAppleScript(source: source) else { return false }
     return script.executeAndReturnError(nil).stringValue == "playing"
