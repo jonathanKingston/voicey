@@ -1,0 +1,29 @@
+# Runs SwiftPM unit tests for the Foundation-only VoiceyCore module on Ubuntu.
+# The full Voicey app is not built here (Apple frameworks); see build.yml on macOS.
+name: Linux core tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: linux-core-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  voicey-core-tests:
+    name: VoiceyCore (SwiftPM / Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift toolchain
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.10"
+
+      - name: Run VoiceyCore tests
+        run: swift test --filter VoiceyCoreTests
