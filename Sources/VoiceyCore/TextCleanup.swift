@@ -1,20 +1,20 @@
 import Foundation
 
 /// Utilities for text cleanup and formatting in transcription output
-enum TextCleanup {
+public enum TextCleanup {
   /// Default text normalizations for low-risk transcription artifacts.
-  static let defaultTextExpansions: [String: String] = [
+  public static let defaultTextExpansions: [String: String] = [
     "o k": "OK"
   ]
 
   /// Capitalize the first character of a string
-  static func capitalizeFirst(_ text: String) -> String {
+  public static func capitalizeFirst(_ text: String) -> String {
     guard let first = text.first else { return text }
     return first.uppercased() + text.dropFirst()
   }
 
   /// Check if text starts with a conjunction
-  static func isConjunction(_ text: String) -> Bool {
+  public static func isConjunction(_ text: String) -> Bool {
     let conjunctions = [
       "and", "but", "or", "so", "yet", "for", "nor",
       "because", "although", "while", "if", "when"
@@ -24,7 +24,7 @@ enum TextCleanup {
   }
 
   /// Apply text expansions to convert spoken phrases to written form
-  static func applyExpansions(_ text: String, expansions: [String: String]) -> String {
+  public static func applyExpansions(_ text: String, expansions: [String: String]) -> String {
     var result = text
 
     for (spoken, written) in expansions {
@@ -44,7 +44,7 @@ enum TextCleanup {
   }
 
   /// Ensure "I" is always capitalized
-  static func capitalizeI(_ text: String) -> String {
+  public static func capitalizeI(_ text: String) -> String {
     var result = text
     result = result.replacingOccurrences(of: " i ", with: " I ")
     result = result.replacingOccurrences(of: " i'", with: " I'")
@@ -55,7 +55,7 @@ enum TextCleanup {
   }
 
   /// Clean up spacing and punctuation issues
-  static func cleanupSpacingAndPunctuation(_ text: String) -> String {
+  public static func cleanupSpacingAndPunctuation(_ text: String) -> String {
     var result = text
 
     // Fix multiple spaces

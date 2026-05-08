@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import KeyboardShortcuts
 import SwiftUI
+import VoiceyCore
 
 /// Main settings view with sidebar navigation
 struct SettingsView: View {

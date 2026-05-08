@@ -1,5 +1,6 @@
 import XCTest
-@testable import Voicey
+
+@testable import VoiceyCore
 
 final class TextCleanupTests: XCTestCase {
   func testDefaultTextCleanupDoesNotRewriteVoiceCommandDefaults() {
