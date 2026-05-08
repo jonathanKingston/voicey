@@ -22,25 +22,6 @@ final class MediaPlaybackController: MediaPlaybackControlling {
     AppLogger.general.info("Requested media pause for transcription")
   }
 
-  func noteExternalPauseForTranscription() {
-    guard !expectsSyntheticResumeToggle else { return }
-
-    expectsSyntheticResumeToggle = true
-    AppLogger.general.info("Tracking media pause from transcription trigger")
-  }
-
-  func reassertPauseDuringTranscription() {
-    guard expectsSyntheticResumeToggle else { return }
-
-    guard Self.isLikelySystemMediaPlaying() else {
-      AppLogger.general.info("Skipping media pause reassert; no known playback source is playing")
-      return
-    }
-
-    postPlayPauseKey()
-    AppLogger.general.info("Reasserted media pause during transcription")
-  }
-
   func resumeAfterTranscription() {
     guard expectsSyntheticResumeToggle else { return }
 
@@ -49,7 +30,8 @@ final class MediaPlaybackController: MediaPlaybackControlling {
     AppLogger.general.info("Requested media resume after transcription")
   }
 
-  /// Direct builds probe MediaRemote (system Now Playing). App Store builds use scriptable players only.
+  /// Direct builds probe MediaRemote (system Now Playing); App Store builds use scriptable players.
+  /// Hardware play/pause taps are not used here: each press is a toggle edge, not a trustworthy “is playing” signal.
   private static func isLikelySystemMediaPlaying() -> Bool {
     if MediaRemotePlaybackProbe.isMediaPlaying() { return true }
     if isAppleMusicPlaying() { return true }
