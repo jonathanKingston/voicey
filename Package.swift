@@ -85,7 +85,8 @@ let package = Package(
         .linkedFramework("CoreAudio"),
         .linkedFramework("Accelerate"),
         .linkedFramework("Metal"),
-        .linkedFramework("CoreML")
+        .linkedFramework("CoreML"),
+        .linkedFramework("MediaPlayer")
       ]
     ),
     .testTarget(

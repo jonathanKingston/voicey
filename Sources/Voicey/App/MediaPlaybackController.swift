@@ -1,41 +1,76 @@
 import AppKit
 import CoreGraphics
+import MediaPlayer
 
 final class MediaPlaybackController: MediaPlaybackControlling {
   static let shared = MediaPlaybackController()
 
-  private var didPauseForTranscription = false
+  /// True when transcription should be followed by a synthetic play/pause toggle to restore media.
+  private var expectsSyntheticResumeToggle = false
 
   private init() {}
 
   func pauseForTranscription() {
-    guard !didPauseForTranscription else { return }
+    guard !expectsSyntheticResumeToggle else { return }
 
-    didPauseForTranscription = true
+    guard Self.isLikelySystemMediaPlaying() else {
+      AppLogger.general.info("Skipping media pause; no known playback source is playing")
+      return
+    }
+
+    expectsSyntheticResumeToggle = true
     postPlayPauseKey()
     AppLogger.general.info("Requested media pause for transcription")
   }
 
   func noteExternalPauseForTranscription() {
-    guard !didPauseForTranscription else { return }
+    guard !expectsSyntheticResumeToggle else { return }
 
-    didPauseForTranscription = true
+    expectsSyntheticResumeToggle = true
     AppLogger.general.info("Tracking media pause from transcription trigger")
   }
 
   func reassertPauseDuringTranscription() {
-    guard didPauseForTranscription else { return }
+    guard expectsSyntheticResumeToggle else { return }
+
+    guard Self.isLikelySystemMediaPlaying() else {
+      AppLogger.general.info("Skipping media pause reassert; no known playback source is playing")
+      return
+    }
 
     postPlayPauseKey()
     AppLogger.general.info("Reasserted media pause during transcription")
   }
 
   func resumeAfterTranscription() {
-    guard didPauseForTranscription else { return }
+    guard expectsSyntheticResumeToggle else { return }
 
-    didPauseForTranscription = false
+    expectsSyntheticResumeToggle = false
     postPlayPauseKey()
     AppLogger.general.info("Requested media resume after transcription")
+  }
+
+  /// Best-effort snapshot for common desktop players. Other apps (browser tabs, etc.) are not detected.
+  private static func isLikelySystemMediaPlaying() -> Bool {
+    if isAppleMusicPlaying() { return true }
+    if isSpotifyPlaying() { return true }
+    return false
+  }
+
+  private static func isAppleMusicPlaying() -> Bool {
+    MPMusicPlayerController.systemMusicPlayer.playbackState == .playing
+  }
+
+  private static func isSpotifyPlaying() -> Bool {
+    let bundleID = "com.spotify.client"
+    guard NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first != nil else {
+      return false
+    }
+    let source = """
+    tell application "Spotify" to return player state as string
+    """
+    guard let script = NSAppleScript(source: source) else { return false }
+    return script.executeAndReturnError(nil).stringValue == "playing"
   }
 
   private func postPlayPauseKey() {
