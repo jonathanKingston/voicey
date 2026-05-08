@@ -1,13 +1,9 @@
-// swiftlint:disable file_length
 import AppKit
 import Carbon.HIToolbox
 import KeyboardShortcuts
 import SwiftUI
 import os
 
-// AppDelegate is the legacy lifecycle coordinator. Keep size warnings disabled
-// here until the existing recording/model/output responsibilities are split.
-// swiftlint:disable type_body_length
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"
   private static let settingsWindowAutosaveName = "VoiceySettingsWindow"
@@ -1194,7 +1190,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.terminate(nil)
   }
 }
-// swiftlint:enable type_body_length
 
 // MARK: - AudioCaptureManagerDelegate
 
