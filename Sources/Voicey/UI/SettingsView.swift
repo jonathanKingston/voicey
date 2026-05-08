@@ -3,13 +3,59 @@ import AVFoundation
 import KeyboardShortcuts
 import SwiftUI
 
-/// Main settings view with tabbed interface
+/// Main settings view with sidebar navigation
 struct SettingsView: View {
-  enum Tab: Hashable {
+  static let windowSize = CGSize(width: 760, height: 580)
+
+  private static let sidebarMinWidth: CGFloat = 190
+  private static let sidebarIdealWidth: CGFloat = 210
+  private static let sidebarMaxWidth: CGFloat = 240
+
+  enum Tab: String, CaseIterable, Hashable, Identifiable {
     case setup, general, hotkey, audio, model, voiceCommands, advanced
+
+    var id: Self { self }
+
+    var title: String {
+      switch self {
+      case .setup:
+        return L10n.Settings.setup
+      case .general:
+        return L10n.Settings.general
+      case .hotkey:
+        return L10n.Settings.hotkey
+      case .audio:
+        return L10n.Settings.audio
+      case .model:
+        return L10n.Settings.model
+      case .voiceCommands:
+        return L10n.Settings.voiceCommands
+      case .advanced:
+        return L10n.Settings.advanced
+      }
+    }
+
+    var iconName: String {
+      switch self {
+      case .setup:
+        return "sparkles"
+      case .general:
+        return "slider.horizontal.3"
+      case .hotkey:
+        return "command"
+      case .audio:
+        return "mic.fill"
+      case .model:
+        return "waveform"
+      case .voiceCommands:
+        return "text.bubble.fill"
+      case .advanced:
+        return "gearshape.2.fill"
+      }
+    }
   }
 
-  @State private var selectedTab: Tab = .setup
+  @State private var selectedTab: Tab? = .setup
   @ObservedObject private var modelManager = ModelManager.shared
   @State private var microphoneGranted = false
 
@@ -18,57 +64,98 @@ struct SettingsView: View {
     microphoneGranted && modelManager.hasDownloadedModel
   }
 
+  private var defaultTab: Tab {
+    isSetupComplete ? .general : .setup
+  }
+
   var body: some View {
-    TabView(selection: $selectedTab) {
-      SetupSettingsView()
-        .tabItem {
-          Text(L10n.Settings.setup)
+    NavigationSplitView {
+      List(selection: $selectedTab) {
+        if !isSetupComplete {
+          sidebarSection(tabs: [.setup])
+          sidebarSection(tabs: Tab.allCases.filter { $0 != .setup })
+        } else {
+          sidebarSection(tabs: Tab.allCases)
         }
-        .tag(Tab.setup)
-
-      GeneralSettingsView()
-        .tabItem {
-          Text(L10n.Settings.general)
-        }
-        .tag(Tab.general)
-
-      HotkeySettingsView()
-        .tabItem {
-          Text(L10n.Settings.hotkey)
-        }
-        .tag(Tab.hotkey)
-
-      AudioSettingsView()
-        .tabItem {
-          Text(L10n.Settings.audio)
-        }
-        .tag(Tab.audio)
-
-      ModelSettingsView()
-        .tabItem {
-          Text(L10n.Settings.model)
-        }
-        .tag(Tab.model)
-
-      VoiceCommandsSettingsView()
-        .tabItem {
-          Text(L10n.Settings.voiceCommands)
-        }
-        .tag(Tab.voiceCommands)
-
-      AdvancedSettingsView()
-        .tabItem {
-          Text(L10n.Settings.advanced)
-        }
-        .tag(Tab.advanced)
+      }
+      .listStyle(.sidebar)
+      .navigationSplitViewColumnWidth(
+        min: Self.sidebarMinWidth,
+        ideal: Self.sidebarIdealWidth,
+        max: Self.sidebarMaxWidth
+      )
+      .scrollContentBackground(.hidden)
+      .background(.ultraThinMaterial)
+    } detail: {
+      settingsDetail(for: selectedTab ?? defaultTab)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.regularMaterial)
     }
-    .frame(width: 500, height: 550)
+    .frame(width: Self.windowSize.width, height: Self.windowSize.height)
+    .background(.thinMaterial)
     .task {
       microphoneGranted = await PermissionsManager.shared.checkMicrophonePermission()
-      if isSetupComplete {
-        selectedTab = .general
+      if selectedTab == nil || (selectedTab == .setup && isSetupComplete) {
+        selectedTab = defaultTab
       }
     }
+  }
+
+  @ViewBuilder
+  private func sidebarSection(tabs: [Tab]) -> some View {
+    Section {
+      ForEach(tabs) { tab in
+        SettingsSidebarRow(tab: tab, isSelected: selectedTab == tab)
+          .tag(tab)
+          .listRowBackground(Color.clear)
+          .listRowSeparator(.hidden)
+          .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func settingsDetail(for tab: Tab) -> some View {
+    switch tab {
+    case .setup:
+      SetupSettingsView()
+    case .general:
+      GeneralSettingsView()
+    case .hotkey:
+      HotkeySettingsView()
+    case .audio:
+      AudioSettingsView()
+    case .model:
+      ModelSettingsView()
+    case .voiceCommands:
+      VoiceCommandsSettingsView()
+    case .advanced:
+      AdvancedSettingsView()
+    }
+  }
+}
+
+private struct SettingsSidebarRow: View {
+  let tab: SettingsView.Tab
+  let isSelected: Bool
+
+  private var foregroundColor: Color {
+    isSelected ? .primary : .secondary
+  }
+
+  var body: some View {
+    Label {
+      Text(tab.title)
+        .font(.system(size: 13, weight: .regular))
+        .lineLimit(1)
+    } icon: {
+      Image(systemName: tab.iconName)
+        .frame(width: 16)
+    }
+    .foregroundStyle(foregroundColor)
+    .padding(.vertical, 8)
+    .padding(.horizontal, 10)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
