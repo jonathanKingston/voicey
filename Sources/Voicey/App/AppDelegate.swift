@@ -1,9 +1,13 @@
+// swiftlint:disable file_length
 import AppKit
 import Carbon.HIToolbox
 import KeyboardShortcuts
 import SwiftUI
 import os
 
+// AppDelegate is the legacy lifecycle coordinator. Keep size warnings disabled
+// here until the existing recording/model/output responsibilities are split.
+// swiftlint:disable type_body_length
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"
   private static let settingsWindowAutosaveName = "VoiceySettingsWindow"
@@ -190,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let baseOrder: [SpeechModel] = [
       ModelManager.defaultModel,
       .qwen3Large, .qwen3Small, .graniteSpeech,
-      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn,
+      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn
     ]
 
     var ordered: [SpeechModel] = []
@@ -785,8 +789,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if !ModelManager.shared.isDownloaded(selectedModel),
       let fallbackModel = fallbackOrder(preferredBackend: selectedModel.backendKind).first(where: {
         downloadedModels.contains($0)
-      })
-    {
+      }) {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
       SettingsManager.shared.selectedModel = fallbackModel
@@ -1241,6 +1244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.terminate(nil)
   }
 }
+// swiftlint:enable type_body_length
 
 // MARK: - AudioCaptureManagerDelegate
 
