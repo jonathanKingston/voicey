@@ -1,0 +1,27 @@
+# Compiles the macOS app on a macOS runner (SwiftPM + MLX Metal library via Makefile).
+# Linux CI cannot build Apple-only targets; this workflow is the source of truth for compile health.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: macOS build
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift toolchain
+        run: swift --version
+
+      - name: Build (SwiftPM + MLX Metal library)
+        run: make build
