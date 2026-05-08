@@ -9,7 +9,7 @@ let isDirectDistribution = ProcessInfo.processInfo.environment["VOICEY_DIRECT"] 
 // Base dependencies (always included)
 var packageDependencies: [Package.Dependency] = [
     .package(url: "https://github.com/sindresorhus/KeyboardShortcuts.git", from: "2.0.0"),
-    .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
+    .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
     .package(url: "https://github.com/soniqo/speech-swift", branch: "main")
 ]
 
