@@ -405,10 +405,8 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   func loadDownloadedModels() {
     downloadedModels.removeAll()
 
-    for model in SpeechModel.allCases {
-      if modelPath(for: model) != nil {
-        downloadedModels.insert(model)
-      }
+    for model in SpeechModel.allCases where modelPath(for: model) != nil {
+      downloadedModels.insert(model)
     }
   }
 
@@ -673,13 +671,11 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
           errorPipe.fileHandleForReading.readabilityHandler = nil
 
           if let finalStdout = String(
-            data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-          {
+            data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
             await outputBuffer.appendStdout(finalStdout)
           }
           if let finalStderr = String(
-            data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-          {
+            data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
             await outputBuffer.appendStderr(finalStderr)
           }
 

@@ -1,0 +1,44 @@
+# SwiftLint — Voicey first-party code only (SPM checkouts live under .build).
+included:
+  - Sources
+  - Tests
+  - Package.swift
+
+excluded:
+  - .build
+  - DerivedData
+
+# Metrics thresholds are above current hotspots so CI guards against runaway growth.
+# Prefer tightening after splitting large types/files.
+file_length:
+  warning: 1250
+  error: 1500
+
+type_body_length:
+  warning: 880
+  error: 950
+
+function_body_length:
+  warning: 135
+  error: 160
+
+cyclomatic_complexity:
+  warning: 18
+  error: 25
+
+large_tuple:
+  warning: 3
+  error: 5
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 40
+    error: 50
+
+line_length:
+  warning: 200
+  error: 240
+  ignores_urls: true

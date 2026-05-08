@@ -185,10 +185,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let prioritized = preferredBackend == nil ? baseOrder : baseOrder.filter { $0.backendKind == preferredBackend }
     let remainder = preferredBackend == nil ? [] : baseOrder.filter { $0.backendKind != preferredBackend }
 
-    for model in prioritized + remainder {
-      if !ordered.contains(model) {
-        ordered.append(model)
-      }
+    for model in prioritized + remainder where !ordered.contains(model) {
+      ordered.append(model)
     }
     return ordered
   }
