@@ -126,9 +126,6 @@
 "voiceCommands.add" = "Añadir";
 
 /* Advanced Settings */
-"advanced.mediaPlayback" = "Reproducción multimedia";
-"advanced.pauseMediaDuringTranscription" = "Pausar multimedia durante la transcripción";
-"advanced.pauseMediaDuringTranscriptionDesc" = "Cuando está activado, Voicey pausa la multimedia mientras graba y transcribe, y la reanuda al terminar.";
 "advanced.autoInsert" = "Inserción automática";
 "advanced.autoInsertToggle" = "Insertar automáticamente después de transcribir";
 "advanced.autoInsertEnabledDesc" = "Voicey intentará insertar texto directamente en el campo de texto enfocado.";
