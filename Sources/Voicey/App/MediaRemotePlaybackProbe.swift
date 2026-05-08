@@ -12,6 +12,12 @@ import Foundation
       @convention(block) (CFDictionary?) -> Void
     ) -> Void
 
+    /// Prefer this over dictionary scraping when available: one boolean from MediaRemote.
+    private typealias MRGetNowPlayingApplicationIsPlaying = @convention(c) (
+      DispatchQueue,
+      @convention(block) (Bool) -> Void
+    ) -> Void
+
     private static let handles: ProbeHandles? = {
       guard
         let handle = dlopen(
@@ -21,35 +27,77 @@ import Foundation
       else {
         return nil
       }
-      guard let symbol = dlsym(handle, "MRMediaRemoteGetNowPlayingInfo") else {
-        return ProbeHandles(dlHandle: handle, getNowPlaying: nil)
+      let getNowPlaying: MRGetNowPlaying?
+      if let sym = dlsym(handle, "MRMediaRemoteGetNowPlayingInfo") {
+        getNowPlaying = unsafeBitCast(sym, to: MRGetNowPlaying.self)
+      } else {
+        getNowPlaying = nil
       }
-      let fn = unsafeBitCast(symbol, to: MRGetNowPlaying.self)
-      return ProbeHandles(dlHandle: handle, getNowPlaying: fn)
+
+      let getApplicationIsPlaying: MRGetNowPlayingApplicationIsPlaying?
+      if let sym = dlsym(handle, "MRMediaRemoteGetNowPlayingApplicationIsPlaying") {
+        getApplicationIsPlaying = unsafeBitCast(sym, to: MRGetNowPlayingApplicationIsPlaying.self)
+      } else {
+        getApplicationIsPlaying = nil
+      }
+
+      guard getNowPlaying != nil || getApplicationIsPlaying != nil else {
+        return nil
+      }
+      return ProbeHandles(
+        dlHandle: handle,
+        getNowPlaying: getNowPlaying,
+        getApplicationIsPlaying: getApplicationIsPlaying
+      )
     }()
 
     private struct ProbeHandles {
       let dlHandle: UnsafeMutableRawPointer
       let getNowPlaying: MRGetNowPlaying?
+      let getApplicationIsPlaying: MRGetNowPlayingApplicationIsPlaying?
     }
 
-    /// Whether the system Now Playing session reports active playback (`playbackRate` > 0).
-    /// Runs the MediaRemote callback wait on a background queue so the caller is not blocked
-    /// for the full timeout when the callback never fires.
+    /// Whether the system Now Playing session reports active playback.
+    /// Prefers `MRMediaRemoteGetNowPlayingApplicationIsPlaying` when linked; falls back to Now Playing dictionary keys.
     static func isMediaPlaying() -> Bool {
-      guard let getNowPlaying = handles?.getNowPlaying else { return false }
+      guard let handles else { return false }
       return DispatchQueue.global(qos: .userInitiated).sync {
-        var playing = false
+        Self.queryIsPlaying(handles: handles)
+      }
+    }
+
+    private static func queryIsPlaying(handles: ProbeHandles) -> Bool {
+      let callbackQueue = DispatchQueue(label: "work.voicey.mediaremote-callback", qos: .userInitiated)
+
+      var fromApplicationCallback: Bool?
+      if let getApplicationIsPlaying = handles.getApplicationIsPlaying {
         let semaphore = DispatchSemaphore(value: 0)
-        let callbackQueue = DispatchQueue(label: "work.voicey.mediaremote-callback", qos: .userInitiated)
+        getApplicationIsPlaying(callbackQueue) { isPlaying in
+          defer { semaphore.signal() }
+          fromApplicationCallback = isPlaying
+        }
+        _ = semaphore.wait(timeout: .now() + 0.15)
+      }
+
+      if fromApplicationCallback == true {
+        return true
+      }
+
+      var fromDictionary = false
+      if let getNowPlaying = handles.getNowPlaying {
+        let semaphore = DispatchSemaphore(value: 0)
         getNowPlaying(callbackQueue) { raw in
           defer { semaphore.signal() }
           guard let raw else { return }
-          playing = Self.isPlaying(nowPlayingInfo: raw)
+          fromDictionary = Self.isPlaying(nowPlayingInfo: raw)
         }
         _ = semaphore.wait(timeout: .now() + 0.15)
-        return playing
       }
+
+      if let applicationAnswer = fromApplicationCallback {
+        return applicationAnswer || fromDictionary
+      }
+      return fromDictionary
     }
 
     private static func isPlaying(nowPlayingInfo: CFDictionary) -> Bool {

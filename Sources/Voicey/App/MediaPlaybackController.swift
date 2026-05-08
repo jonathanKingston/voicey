@@ -12,13 +12,14 @@ final class MediaPlaybackController: MediaPlaybackControlling {
   func pauseForTranscription() {
     guard !expectsSyntheticResumeToggle else { return }
 
-    // Always send the system play/pause toggle. Probes often miss real playback (browser tabs,
-    // sandboxed AppleScript, or MediaRemote layout), and skipping here meant music never paused.
-    // We still arm resume so transcription end can undo the pause; idle false-positives are the
-    // trade-off until detection is reliable enough to gate resume alone.
-    postPlayPauseKey()
+    guard Self.isLikelySystemMediaPlaying() else {
+      AppLogger.general.info("Skipping media pause; no known playback source is playing")
+      return
+    }
+
     expectsSyntheticResumeToggle = true
-    AppLogger.general.info("Posted media pause for transcription; armed matching resume toggle")
+    postPlayPauseKey()
+    AppLogger.general.info("Requested media pause for transcription")
   }
 
   func resumeAfterTranscription() {
