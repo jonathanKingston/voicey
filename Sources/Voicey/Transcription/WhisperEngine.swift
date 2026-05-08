@@ -177,11 +177,9 @@ final class WhisperEngine: @unchecked Sendable {
     let smallFirst: [SpeechModel] = [
       .tinyEn, .baseEn, .smallEn, .tiny, .base, .small, .distilLarge, .large, .largeTurbo
     ]
-    for model in smallFirst {
-      if models.contains(model) {
-        debugPrint("📦 No compiled models found, using fastest to compile: \(model.rawValue)", category: "MODEL")
-        return model
-      }
+    for model in smallFirst where models.contains(model) {
+      debugPrint("📦 No compiled models found, using fastest to compile: \(model.rawValue)", category: "MODEL")
+      return model
     }
 
     // Fallback to any available model

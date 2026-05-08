@@ -269,7 +269,7 @@ final class GraniteEngine: @unchecked Sendable {
       "/usr/local/bin",
       "\(NSHomeDirectory())/.local/bin",
       "\(NSHomeDirectory())/Library/Python/3.11/bin",
-      "\(NSHomeDirectory())/Library/Python/3.12/bin",
+      "\(NSHomeDirectory())/Library/Python/3.12/bin"
     ]
     if let existingPath = env["PATH"] {
       env["PATH"] = extraPaths.joined(separator: ":") + ":" + existingPath
@@ -479,8 +479,7 @@ private actor GranitePythonWorker {
   }
 
   func transcribe(audioPath: String, sampleRate: Int, maxTokens: Int, timeout: TimeInterval) async throws
-    -> String
-  {
+    -> String {
     guard let process, process.isRunning, let stdinHandle else {
       throw GraniteError.pythonError("Granite worker not running")
     }
@@ -492,7 +491,7 @@ private actor GranitePythonWorker {
       "audio_path": audioPath,
       "sample_rate": sampleRate,
       "max_tokens": maxTokens,
-      "language": "en",
+      "language": "en"
     ]
 
     let requestData = try JSONSerialization.data(withJSONObject: request)
