@@ -2,10 +2,16 @@ import Dispatch
 import Foundation
 
 #if VOICEY_DIRECT_DISTRIBUTION
+  import CoreFoundation
   import Darwin
 
   /// Uses the private MediaRemote framework, opened with `dlopen` (no link-time dependency on the framework).
   /// Direct-distribution only; App Store builds must not ship this path.
+  ///
+  /// Control Center’s “Now Playing” tile reads the same underlying session this code queries: apps publish
+  /// metadata and playback state to MediaRemote; `GetNowPlayingInfo` / `GetNowPlayingApplicationIsPlaying`
+  /// mirror that. If the tile shows a Play (not Pause) control, the session is paused—sending a global
+  /// play/pause toggle would *start* audio, so Voicey intentionally skips arming resume in that case.
   enum MediaRemotePlaybackProbe {
     private typealias MRGetNowPlaying = @convention(c) (
       DispatchQueue,
@@ -13,9 +19,10 @@ import Foundation
     ) -> Void
 
     /// Prefer this over dictionary scraping when available: one boolean from MediaRemote.
+    /// Uses `ObjCBool` because the C API exposes `BOOL` in the block signature.
     private typealias MRGetNowPlayingApplicationIsPlaying = @convention(c) (
       DispatchQueue,
-      @convention(block) (Bool) -> Void
+      @convention(block) (ObjCBool) -> Void
     ) -> Void
 
     private static let handles: ProbeHandles? = {
@@ -74,7 +81,7 @@ import Foundation
         let semaphore = DispatchSemaphore(value: 0)
         getApplicationIsPlaying(callbackQueue) { isPlaying in
           defer { semaphore.signal() }
-          fromApplicationCallback = isPlaying
+          fromApplicationCallback = isPlaying.boolValue
         }
         _ = semaphore.wait(timeout: .now() + 0.15)
       }
@@ -111,16 +118,57 @@ import Foundation
         } else {
           continue
         }
-        if keyString == "PlaybackRate" || keyString == "playbackRate",
-          let number = value as? NSNumber, number.doubleValue > 0.001 {
+        let keyLower = keyString.lowercased()
+
+        if keyLower == "playbackrate" || keyLower.hasSuffix("playbackrate") || keyLower.contains("playbackrate"),
+          let rate = numericDouble(value), rate > 0.001 {
           return true
         }
-        // Some clients only publish playback state (1 ≈ playing).
-        if keyString == "PlaybackState", let number = value as? NSNumber, number.intValue == 1 {
-          return true
+
+        // `MPNowPlayingPlaybackState.playing` raw value is 1; some publishers use the prefixed key.
+        if keyLower == "playbackstate" || keyLower.hasSuffix("playbackstate")
+          || keyLower == "mpnowplayingplaybackstate" {
+          if let state = numericInt(value), state == 1 {
+            return true
+          }
         }
       }
       return false
+    }
+
+    private static func numericDouble(_ value: Any?) -> Double? {
+      guard let value else { return nil }
+      if let number = value as? NSNumber { return number.doubleValue }
+      if let double = value as? Double { return double }
+      if let float = value as? Float { return Double(float) }
+      if let int = value as? Int { return Double(int) }
+
+      let cf = value as AnyObject
+      let typeId = CFGetTypeID(cf)
+      if typeId == CFNumberGetTypeID() {
+        // swiftlint:disable:next force_cast
+        let number = cf as! CFNumber
+        var doubleValue = 0.0
+        if CFNumberGetValue(number, .doubleType, &doubleValue) { return doubleValue }
+        var intValue = 0
+        if CFNumberGetValue(number, .intType, &intValue) { return Double(intValue) }
+      }
+      return nil
+    }
+
+    private static func numericInt(_ value: Any?) -> Int? {
+      guard let value else { return nil }
+      if let number = value as? NSNumber { return number.intValue }
+      if let int = value as? Int { return int }
+
+      let cf = value as AnyObject
+      if CFGetTypeID(cf) == CFNumberGetTypeID() {
+        // swiftlint:disable:next force_cast
+        let number = cf as! CFNumber
+        var intValue = 0
+        if CFNumberGetValue(number, .intType, &intValue) { return intValue }
+      }
+      return nil
     }
   }
 
