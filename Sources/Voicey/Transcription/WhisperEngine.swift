@@ -346,7 +346,6 @@ final class WhisperEngine: @unchecked Sendable {
       temperatureFallbackCount: 1,  // Reduced for speed
       sampleLength: 224,
       usePrefillPrompt: true,
-      usePrefillCache: true,
       skipSpecialTokens: true,
       withoutTimestamps: false,
       wordTimestamps: false  // Disabled for speed, we don't really need word-level timing

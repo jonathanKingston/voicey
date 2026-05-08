@@ -12,7 +12,7 @@ settings:
     PRODUCT_NAME: Voicey
     MARKETING_VERSION: "1.4.2"
     CURRENT_PROJECT_VERSION: "1"
-    SWIFT_VERSION: "5.9"
+    SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     COMBINE_HIDPI_IMAGES: YES
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -23,7 +23,7 @@ packages:
     from: "2.0.0"
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit.git
-    from: "0.9.0"
+    from: "1.0.0"
 
 targets:
   # App Store / TestFlight target
