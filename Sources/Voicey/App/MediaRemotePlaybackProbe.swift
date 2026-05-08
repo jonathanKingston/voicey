@@ -54,15 +54,23 @@ import Foundation
 
     private static func isPlaying(nowPlayingInfo: CFDictionary) -> Bool {
       let dict = nowPlayingInfo as NSDictionary
-      let rateKeys = ["PlaybackRate", "playbackRate"]
-      for key in rateKeys {
-        if let number = dict[key] as? NSNumber, number.doubleValue > 0.001 {
+      for (key, value) in dict {
+        let keyString: String
+        if let str = key as? String {
+          keyString = str
+        } else if let str = key as? NSString {
+          keyString = str as String
+        } else {
+          continue
+        }
+        if keyString == "PlaybackRate" || keyString == "playbackRate",
+          let number = value as? NSNumber, number.doubleValue > 0.001 {
           return true
         }
-      }
-      // Some clients only publish playback state (1 ≈ playing).
-      if let state = dict["PlaybackState"] as? NSNumber, state.intValue == 1 {
-        return true
+        // Some clients only publish playback state (1 ≈ playing).
+        if keyString == "PlaybackState", let number = value as? NSNumber, number.intValue == 1 {
+          return true
+        }
       }
       return false
     }
