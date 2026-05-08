@@ -10,33 +10,63 @@ final class MediaPlaybackController: MediaPlaybackControlling {
   private init() {}
 
   func pauseForTranscription() {
-    guard !expectsSyntheticResumeToggle else { return }
+    guard !expectsSyntheticResumeToggle else {
+      AppLogger.general.info("pauseForTranscription: skipped (already expects resume toggle)")
+      debugPrint("pauseForTranscription: skipped (already expects resume toggle)", category: "MEDIA")
+      return
+    }
 
-    guard Self.isLikelySystemMediaPlaying() else {
-      AppLogger.general.info("Skipping media pause; no known playback source is playing")
+    let playing = Self.logPlaybackProbeContext(label: "pauseForTranscription")
+    guard playing else {
+      AppLogger.general.info("Skipping media pause; probes report nothing playing")
+      debugPrint("Skipping media pause; probes report nothing playing", category: "MEDIA")
       return
     }
 
     expectsSyntheticResumeToggle = true
+    AppLogger.general.info("pauseForTranscription: posting synthetic play/pause HID")
+    debugPrint("pauseForTranscription: posting synthetic play/pause HID", category: "MEDIA")
     postPlayPauseKey()
-    AppLogger.general.info("Requested media pause for transcription")
+    AppLogger.general.info("pauseForTranscription: finished posting HID; resume is armed")
   }
 
   func resumeAfterTranscription() {
-    guard expectsSyntheticResumeToggle else { return }
+    guard expectsSyntheticResumeToggle else {
+      AppLogger.general.info("resumeAfterTranscription: skipped (resume not armed)")
+      debugPrint("resumeAfterTranscription: skipped (resume not armed)", category: "MEDIA")
+      return
+    }
 
     expectsSyntheticResumeToggle = false
+    AppLogger.general.info("resumeAfterTranscription: posting synthetic play/pause HID to restore")
+    debugPrint("resumeAfterTranscription: posting synthetic play/pause HID to restore", category: "MEDIA")
     postPlayPauseKey()
-    AppLogger.general.info("Requested media resume after transcription")
+    AppLogger.general.info("resumeAfterTranscription: finished posting HID")
   }
 
-  /// Direct builds probe MediaRemote (system Now Playing); App Store builds use scriptable players.
-  /// Hardware play/pause taps are not used here: each press is a toggle edge, not a trustworthy “is playing” signal.
-  private static func isLikelySystemMediaPlaying() -> Bool {
-    if MediaRemotePlaybackProbe.isMediaPlaying() { return true }
-    if isAppleMusicPlaying() { return true }
-    if isSpotifyPlaying() { return true }
-    return false
+  /// Logs probe breakdown (MediaRemote on direct builds; Music/Spotify AppleScript) and returns combined playing.
+  @discardableResult
+  private static func logPlaybackProbeContext(label: String) -> Bool {
+    let mediaRemote = MediaRemotePlaybackProbe.isMediaPlaying()
+    let music = isAppleMusicPlaying()
+    let spotify = isSpotifyPlaying()
+    let combined = mediaRemote || music || spotify
+
+    #if !VOICEY_DIRECT_DISTRIBUTION
+      let buildNote =
+        " MediaRemote API is not compiled into this binary; build with VOICEY_DIRECT=1 for system Now Playing (Firefox, etc.)."
+    #else
+      let buildNote = ""
+    #endif
+
+    AppLogger.general.info(
+      "[\(label)] playback probes — MediaRemote: \(mediaRemote), Music.app: \(music), Spotify: \(spotify) → combined: \(combined).\(buildNote)"
+    )
+    debugPrint(
+      "[\(label)] MR=\(mediaRemote) Music=\(music) Spotify=\(spotify) → \(combined)\(buildNote)",
+      category: "MEDIA"
+    )
+    return combined
   }
 
   private static func isAppleMusicPlaying() -> Bool {
@@ -62,7 +92,15 @@ final class MediaPlaybackController: MediaPlaybackControlling {
     tell application "\(scriptApplicationName)" to return player state as string
     """
     guard let script = NSAppleScript(source: source) else { return false }
-    return script.executeAndReturnError(nil).stringValue == "playing"
+    let state = script.executeAndReturnError(nil).stringValue ?? "(nil)"
+    let playing = state == "playing"
+    if SettingsManager.shared.enableDetailedLogging {
+      AppLogger.general.info(
+        "AppleScript \(scriptApplicationName): player state=\"\(state, privacy: .public)\" playing=\(playing)"
+      )
+      debugPrint("AppleScript \(scriptApplicationName): state=\(state) playing=\(playing)", category: "MEDIA")
+    }
+    return playing
   }
 
   private func postPlayPauseKey() {

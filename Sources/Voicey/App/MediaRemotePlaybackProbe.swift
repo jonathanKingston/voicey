@@ -67,23 +67,57 @@ import Foundation
     /// Whether the system Now Playing session reports active playback.
     /// Prefers `MRMediaRemoteGetNowPlayingApplicationIsPlaying` when linked; falls back to Now Playing dictionary keys.
     static func isMediaPlaying() -> Bool {
-      guard let handles else { return false }
+      guard let handles else {
+        AppLogger.general.warning("MediaRemote: dlopen/symbols unavailable; treating as not playing")
+        debugPrint("MediaRemote: handles nil (dlopen or symbols missing)", category: "MEDIA")
+        return false
+      }
       return DispatchQueue.global(qos: .userInitiated).sync {
-        Self.queryIsPlaying(handles: handles)
+        Self.logCapabilitiesOnce(handles: handles)
+        return Self.queryIsPlaying(handles: handles)
       }
     }
 
+    private static var didLogCapabilities = false
+
+    private static func logCapabilitiesOnce(handles: ProbeHandles) {
+      guard !didLogCapabilities else { return }
+      didLogCapabilities = true
+      AppLogger.general.info(
+        "MediaRemote: capabilities — GetNowPlayingInfo: \(handles.getNowPlaying != nil), GetNowPlayingApplicationIsPlaying: \(handles.getApplicationIsPlaying != nil)"
+      )
+      debugPrint(
+        "MediaRemote: GetNowPlayingInfo=\(handles.getNowPlaying != nil) IsPlayingAPI=\(handles.getApplicationIsPlaying != nil)",
+        category: "MEDIA"
+      )
+    }
+
     private static func queryIsPlaying(handles: ProbeHandles) -> Bool {
+      let verbose = SettingsManager.shared.enableDetailedLogging
       let callbackQueue = DispatchQueue(label: "work.voicey.mediaremote-callback", qos: .userInitiated)
 
       var fromApplicationCallback: Bool?
+      var isPlayingCallbackFired = false
       if let getApplicationIsPlaying = handles.getApplicationIsPlaying {
         let semaphore = DispatchSemaphore(value: 0)
         getApplicationIsPlaying(callbackQueue) { isPlaying in
           defer { semaphore.signal() }
+          isPlayingCallbackFired = true
           fromApplicationCallback = isPlaying.boolValue
         }
-        _ = semaphore.wait(timeout: .now() + 0.15)
+        let wait = semaphore.wait(timeout: .now() + 0.15)
+        if verbose {
+          AppLogger.general.info(
+            "MediaRemote IsPlaying API: fired=\(isPlayingCallbackFired), value=\(String(describing: fromApplicationCallback)), timedOut=\(wait == .timedOut)"
+          )
+          debugPrint(
+            "MediaRemote IsPlaying: fired=\(isPlayingCallbackFired) value=\(String(describing: fromApplicationCallback)) timedOut=\(wait == .timedOut)",
+            category: "MEDIA"
+          )
+        }
+      } else if verbose {
+        AppLogger.general.info("MediaRemote: MRMediaRemoteGetNowPlayingApplicationIsPlaying symbol missing")
+        debugPrint("MediaRemote: IsPlaying symbol missing", category: "MEDIA")
       }
 
       if fromApplicationCallback == true {
@@ -91,20 +125,63 @@ import Foundation
       }
 
       var fromDictionary = false
+      var nowPlayingKeyCount = 0
+      var nowPlayingKeySample = ""
+      var nowPlayingCallbackFired = false
       if let getNowPlaying = handles.getNowPlaying {
         let semaphore = DispatchSemaphore(value: 0)
         getNowPlaying(callbackQueue) { raw in
           defer { semaphore.signal() }
+          nowPlayingCallbackFired = true
           guard let raw else { return }
+          let dict = raw as NSDictionary
+          nowPlayingKeyCount = dict.count
+          if verbose {
+            let names = dict.allKeys.compactMap { key -> String? in
+              if let str = key as? String { return str }
+              if let str = key as? NSString { return str as String }
+              return nil
+            }.sorted()
+            nowPlayingKeySample = names.prefix(24).joined(separator: ", ")
+          }
           fromDictionary = Self.isPlaying(nowPlayingInfo: raw)
         }
-        _ = semaphore.wait(timeout: .now() + 0.15)
+        let wait = semaphore.wait(timeout: .now() + 0.15)
+        if verbose {
+          let timedOut = wait == .timedOut
+          AppLogger.general.info(
+            "MediaRemote GetNowPlayingInfo: fired=\(nowPlayingCallbackFired), keyCount=\(nowPlayingKeyCount), dictSaysPlaying=\(fromDictionary), timedOut=\(timedOut)"
+          )
+          AppLogger.general.info(
+            "MediaRemote GetNowPlayingInfo keysSample=\(nowPlayingKeySample, privacy: .public)"
+          )
+          debugPrint(
+            "MediaRemote NowPlaying: fired=\(nowPlayingCallbackFired) keys=\(nowPlayingKeyCount) playing=\(fromDictionary) timedOut=\(timedOut) sample=[\(nowPlayingKeySample)]",
+            category: "MEDIA"
+          )
+        }
+      } else if verbose {
+        AppLogger.general.info("MediaRemote: MRMediaRemoteGetNowPlayingInfo symbol missing")
+        debugPrint("MediaRemote: GetNowPlayingInfo symbol missing", category: "MEDIA")
       }
 
+      let result: Bool
       if let applicationAnswer = fromApplicationCallback {
-        return applicationAnswer || fromDictionary
+        result = applicationAnswer || fromDictionary
+      } else {
+        result = fromDictionary
       }
-      return fromDictionary
+
+      if !verbose, !result {
+        AppLogger.general.info(
+          "MediaRemote: combined not playing (IsPlaying=\(String(describing: fromApplicationCallback)), dict=\(fromDictionary))"
+        )
+        AppLogger.general.info(
+          "MediaRemote: enable Voicey Settings → Advanced → detailed logging for MR callback diagnostics"
+        )
+      }
+
+      return result
     }
 
     private static func isPlaying(nowPlayingInfo: CFDictionary) -> Bool {
