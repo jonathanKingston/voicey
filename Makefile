@@ -26,7 +26,7 @@ BENCHMARK_COMMON_VOICE_SEED ?= 20260506
 BENCHMARK_COMMON_VOICE_HF_DIR = benchmark-data/common-voice/prepared/$(subst /,__,$(BENCHMARK_COMMON_VOICE_HF_DATASET))/$(BENCHMARK_COMMON_VOICE_HF_CONFIG)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
 BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMARK_COMMON_VOICE_DATASET)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
-BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
+BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 gemma-4-e2b-it granite-4.0-1b-speech small.en base.en
 
 .PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
 

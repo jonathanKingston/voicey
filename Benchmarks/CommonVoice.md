@@ -50,7 +50,7 @@ make benchmark-run-common-voice BENCHMARK_COMMON_VOICE_LIMIT=100
 make benchmark-common-voice ARGS='... --keep-going'
 
 # Choose the compared models
-make benchmark-run-common-voice BENCHMARK_VOICEY_MODELS='large-v3_turbo small.en base.en'
+make benchmark-run-common-voice BENCHMARK_VOICEY_MODELS='gemma-4-e2b-it large-v3_turbo small.en base.en'
 
 # Prepare data only. Add ARGS='--install-sdk' to install the MDC Python SDK.
 make benchmark-prepare-common-voice ARGS='--install-sdk'
@@ -119,7 +119,7 @@ a single machine-readable line. Add `--post-process` to run Voicey's
 Download models without running the benchmark:
 
 ```bash
-.build/debug/Voicey benchmark-download-models large-v3_turbo small.en base.en
+.build/debug/Voicey benchmark-download-models gemma-4-e2b-it large-v3_turbo small.en base.en
 ```
 
 Use `--all` to download every `SpeechModel` case.
@@ -128,6 +128,7 @@ Use `--all` to download every `SpeechModel` case.
 
 - Quick WER/CER comparisons across Voicey's model wrappers
 - Regression checks when model settings change
+- Gemma 4 prototype quality checks using the same 30-second chunking path as the app
 - Accent and speaker diversity from Common Voice
 - Comparing processing time across the same selected clips
 

@@ -188,6 +188,7 @@ struct ModelDownloadRow: View {
 
   private var iconName: String {
     switch model {
+    case .gemma4E2B: return "waveform.badge.magnifyingglass"
     case .graniteSpeech: return "waveform"
     case .qwen3Small: return "globe"
     case .qwen3Large: return "sparkles.rectangle.stack"

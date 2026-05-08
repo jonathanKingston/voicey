@@ -41,6 +41,10 @@ enum BenchmarkTranscribeCommand {
     SettingsManager.shared.selectedModel = model
 
     switch model.backendKind {
+    case .gemmaPython:
+      let engine = GemmaEngine()
+      try await engine.loadModel(variant: model.rawValue)
+      return try await engine.transcribe(audioBuffer: samples)
     case .whisperKit:
       let engine = WhisperEngine()
       try await engine.loadModel(variant: model.rawValue)

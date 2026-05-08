@@ -173,6 +173,8 @@ struct SetupSettingsView: View {
 
   private var defaultModelIcon: String {
     switch defaultModel {
+    case .gemma4E2B:
+      return "waveform.badge.magnifyingglass"
     case .graniteSpeech:
       return "waveform"
     case .qwen3Small:

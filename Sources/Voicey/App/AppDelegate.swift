@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var audioCaptureManager: AudioCaptureManager?
   private var whisperEngine: WhisperEngine?
   private var graniteEngine: GraniteEngine?
+  private var gemmaEngine: GemmaEngine?
   private var qwenEngine: QwenEngine?
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
@@ -181,6 +182,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var isActiveEngineLoaded: Bool {
     let selectedModel = SettingsManager.shared.selectedModel
     switch selectedModel.backendKind {
+    case .gemmaPython:
+      return gemmaEngine?.isModelLoaded == true
     case .granitePython:
       return graniteEngine?.isModelLoaded == true
     case .qwenMLX:
@@ -193,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func fallbackOrder(preferredBackend: SpeechBackendKind? = nil) -> [SpeechModel] {
     let baseOrder: [SpeechModel] = [
       ModelManager.defaultModel,
-      .qwen3Large, .qwen3Small, .graniteSpeech,
+      .qwen3Large, .qwen3Small, .gemma4E2B, .graniteSpeech,
       .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn
     ]
 
@@ -225,6 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let selectedModel = SettingsManager.shared.selectedModel
 
     switch selectedModel.backendKind {
+    case .gemmaPython:
+      await gemmaEngine?.preloadModel()
+      return gemmaEngine?.isModelLoaded == true
     case .granitePython:
       await graniteEngine?.preloadModel()
       return graniteEngine?.isModelLoaded == true
@@ -255,6 +261,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.currentModel = fallback
 
       switch fallback.backendKind {
+      case .gemmaPython:
+        await gemmaEngine?.preloadModel()
+        return gemmaEngine?.isModelLoaded == true
       case .granitePython:
         await graniteEngine?.preloadModel()
         return graniteEngine?.isModelLoaded == true
@@ -310,6 +319,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if backend != .granitePython {
       graniteEngine?.unloadModel()
     }
+    if backend != .gemmaPython {
+      gemmaEngine?.unloadModel()
+    }
     if backend != .qwenMLX {
       qwenEngine?.unloadModel()
     }
@@ -338,6 +350,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     graniteEngine?.onPerformanceIssue = { [weak self] metrics in
+      self?.handlePerformanceIssue(metrics)
+    }
+
+    gemmaEngine = GemmaEngine()
+    gemmaEngine?.onLoadingStateChanged = { [weak self] isLoading in
+      if isLoading {
+        self?.appState.transcriptionState = .loadingModel
+      }
+    }
+    gemmaEngine?.onPerformanceIssue = { [weak self] metrics in
       self?.handlePerformanceIssue(metrics)
     }
 
@@ -620,6 +642,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         switch model.backendKind {
+        case .gemmaPython:
+          await MainActor.run {
+            SettingsManager.shared.selectedModel = model
+            appState.currentModel = model
+          }
+          await gemmaEngine?.preloadModel()
+          guard gemmaEngine?.isModelLoaded == true else {
+            throw GemmaError.modelNotReady
+          }
         case .granitePython:
           // Granite preload checks runtime dependencies and marks model readiness.
           await MainActor.run {
@@ -658,6 +689,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           appState.modelStatus = .ready
           whisperEngine?.resetPerformanceTracking()
           graniteEngine?.resetPerformanceTracking()
+          gemmaEngine?.resetPerformanceTracking()
           qwenEngine?.resetPerformanceTracking()
           debugPrint(
             "✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!",
@@ -1028,6 +1060,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let selectedModel = SettingsManager.shared.selectedModel
       let result: TranscriptionResult
       switch selectedModel.backendKind {
+      case .gemmaPython:
+        guard let gemmaResult = try await gemmaEngine?.transcribe(audioBuffer: audioBuffer)
+        else {
+          throw TranscriptionError.transcriptionFailed("No result from Gemma engine")
+        }
+        result = gemmaResult
       case .granitePython:
         guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer)
         else {
@@ -1204,6 +1242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       Task { [weak self] in
         let selectedModel = SettingsManager.shared.selectedModel
         switch selectedModel.backendKind {
+        case .gemmaPython:
+          await self?.gemmaEngine?.preloadModel()
         case .granitePython:
           await self?.graniteEngine?.preloadModel()
         case .qwenMLX:

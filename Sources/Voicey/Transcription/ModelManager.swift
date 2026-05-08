@@ -6,6 +6,9 @@ import os
 
 /// Available speech model variants
 enum SpeechModel: String, CaseIterable, Identifiable {
+  // Gemma 4 multimodal ASR prototype (Python Transformers)
+  case gemma4E2B = "gemma-4-e2b-it"
+
   // Qwen3 ASR models (native MLX Swift)
   case qwen3Large = "qwen3-asr-1.7b-bf16"
   case qwen3Small = "qwen3-asr-0.6b-6bit"
@@ -30,6 +33,8 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 
   var backendKind: SpeechBackendKind {
     switch self {
+    case .gemma4E2B:
+      return .gemmaPython
     case .graniteSpeech:
       return .granitePython
     case .qwen3Small, .qwen3Large:
@@ -44,6 +49,11 @@ enum SpeechModel: String, CaseIterable, Identifiable {
     backendKind == .granitePython
   }
 
+  /// Whether this model uses Gemma 4 through the Python Transformers prototype.
+  var isGemmaModel: Bool {
+    backendKind == .gemmaPython
+  }
+
   /// Whether this model uses WhisperKit for inference
   var isWhisperModel: Bool {
     backendKind == .whisperKit
@@ -56,6 +66,7 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 
   var displayName: String {
     switch self {
+    case .gemma4E2B: return "Gemma 4 E2B (Prototype)"
     case .graniteSpeech: return "Granite 4.0 1B Speech"
     case .qwen3Small: return "Qwen3 ASR 0.6B (MLX)"
     case .qwen3Large: return "Qwen3 ASR 1.7B (MLX)"
@@ -73,6 +84,8 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 
   var description: String {
     switch self {
+    case .gemma4E2B:
+      return "Prototype Transformers backend with 30-second audio chunking (~5GB)"
     case .graniteSpeech: return "#1 on OpenASR leaderboard, multilingual, ~1GB (requires Python + mlx-audio)"
     case .qwen3Small:
       return "Native Swift MLX, multilingual auto-detect, fast startup (~400MB)"
@@ -114,6 +127,7 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 
   var diskSize: Int64 {
     switch self {
+    case .gemma4E2B: return 5_500_000_000
     case .graniteSpeech: return 1_000_000_000
     case .qwen3Small: return 450_000_000
     case .qwen3Large: return 1_800_000_000
@@ -128,6 +142,7 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 
   var memoryUsage: Int64 {
     switch self {
+    case .gemma4E2B: return 8_000_000_000
     case .graniteSpeech: return 2_000_000_000
     case .qwen3Small: return 1_300_000_000
     case .qwen3Large: return 3_500_000_000
@@ -143,6 +158,7 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   /// HuggingFace model identifier for Granite models
   var huggingFaceModelId: String? {
     switch self {
+    case .gemma4E2B: return "google/gemma-4-E2B-it"
     case .graniteSpeech: return "ibm-granite/granite-4.0-1b-speech"
     case .qwen3Small: return "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
     case .qwen3Large: return "aufklarer/Qwen3-ASR-1.7B-MLX-8bit"
@@ -153,7 +169,7 @@ enum SpeechModel: String, CaseIterable, Identifiable {
   /// WhisperKit model repository identifier (how WhisperKit names folders)
   var whisperKitModelId: String? {
     switch self {
-    case .graniteSpeech, .qwen3Small, .qwen3Large: return nil
+    case .gemma4E2B, .graniteSpeech, .qwen3Small, .qwen3Large: return nil
     case .largeTurbo: return "openai_whisper-large-v3_turbo"
     case .large: return "openai_whisper-large-v3"
     case .distilLarge: return "distil-whisper_distil-large-v3"
@@ -192,9 +208,10 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   var onUpgradeReady: ModelUpgradeCallback?
 
   private let fileManager = FileManager.default
-  private var downloadTasks: [SpeechModel: Task<Void, Never>] = [:]
+  var downloadTasks: [SpeechModel: Task<Void, Never>] = [:]
   private var graniteDownloadProcesses: [SpeechModel: Process] = [:]
-  private var cancelledDownloads: Set<SpeechModel> = []
+  var gemmaDownloadProcesses: [SpeechModel: Process] = [:]
+  var cancelledDownloads: Set<SpeechModel> = []
 
   private init() {
     loadDownloadedModels()
@@ -249,7 +266,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   /// CoreML caches compiled models, so subsequent loads are much faster
   /// Granite models are always considered "compiled" since they don't use CoreML
   func isLikelyCompiled(_ model: SpeechModel) -> Bool {
-    if model.isGraniteModel || model.isQwenModel { return true }
+    if model.isGemmaModel || model.isGraniteModel || model.isQwenModel { return true }
     // Check for CoreML cache - this is where device-specific optimizations are stored
     // The cache location varies but we can check for common indicators
 
@@ -289,6 +306,9 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
   /// Returns the path to a model if it exists and is complete
   func modelPath(for model: SpeechModel) -> String? {
+    if model.isGemmaModel {
+      return gemmaModelPath(for: model)
+    }
     if model.isGraniteModel {
       return graniteModelPath(for: model)
     }
@@ -328,6 +348,23 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
       return granitePath.path
     }
     return nil
+  }
+
+  /// Returns the path for a Gemma model if it has been downloaded.
+  private func gemmaModelPath(for model: SpeechModel) -> String? {
+    guard let hfId = model.huggingFaceModelId else { return nil }
+    let gemmaPath = modelsDirectory.appendingPathComponent("gemma").appendingPathComponent(hfId)
+    let markerPath = gemmaPath.appendingPathComponent(".download_complete")
+    if fileManager.fileExists(atPath: markerPath.path) {
+      return gemmaPath.path
+    }
+    return nil
+  }
+
+  /// Directory for Gemma model storage.
+  func gemmaModelDirectory(for model: SpeechModel) -> URL? {
+    guard let hfId = model.huggingFaceModelId else { return nil }
+    return modelsDirectory.appendingPathComponent("gemma").appendingPathComponent(hfId)
   }
 
   /// Directory for Granite model storage
@@ -437,6 +474,10 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     guard !isDownloading[model, default: false] else { return }
     cancelledDownloads.remove(model)
 
+    if model.isGemmaModel {
+      downloadGemmaModel(model)
+      return
+    }
     if model.isGraniteModel {
       downloadGraniteModel(model)
       return
@@ -811,6 +852,15 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   }
 
   func cancelDownload(_ model: WhisperModel) {
+    if let process = gemmaDownloadProcesses[model], process.isRunning {
+      cancelledDownloads.insert(model)
+      process.terminate()
+      if process.isRunning {
+        process.interrupt()
+      }
+      gemmaDownloadProcesses[model] = nil
+    }
+
     if let process = graniteDownloadProcesses[model], process.isRunning {
       cancelledDownloads.insert(model)
       process.terminate()
@@ -828,6 +878,14 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
   /// Removes any incomplete/corrupted model files to allow a fresh download
   func cleanupIncompleteDownload(_ model: SpeechModel) {
+    if model.isGemmaModel {
+      if let dir = gemmaModelDirectory(for: model),
+         fileManager.fileExists(atPath: dir.path),
+         !fileManager.fileExists(atPath: dir.appendingPathComponent(".download_complete").path) {
+        try? fileManager.removeItem(at: dir)
+      }
+      return
+    }
     if model.isGraniteModel {
       // For Granite models, just remove the directory if marker is missing
       if let dir = graniteModelDirectory(for: model),
@@ -881,6 +939,15 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   // MARK: - Delete
 
   func deleteModel(_ model: SpeechModel) throws {
+    if model.isGemmaModel {
+      if let dir = gemmaModelDirectory(for: model),
+         fileManager.fileExists(atPath: dir.path) {
+        try fileManager.removeItem(at: dir)
+      }
+      downloadedModels.remove(model)
+      downloadProgress[model] = 0
+      return
+    }
     if model.isGraniteModel {
       if let dir = graniteModelDirectory(for: model),
          fileManager.fileExists(atPath: dir.path) {

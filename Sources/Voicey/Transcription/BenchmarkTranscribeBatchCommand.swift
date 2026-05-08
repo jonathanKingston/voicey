@@ -30,6 +30,17 @@ enum BenchmarkTranscribeBatchCommand {
     SettingsManager.shared.selectedModel = model
 
     switch model.backendKind {
+    case .gemmaPython:
+      let engine = GemmaEngine()
+      try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
+        try await engine.loadModel(variant: model.rawValue)
+      }
+      for sample in samples {
+        let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
+          try await engine.transcribe(audioBuffer: sample.audioSamples())
+        }
+        try printBatchJSON(result: result, sample: sample, model: model)
+      }
     case .whisperKit:
       let engine = WhisperEngine()
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
