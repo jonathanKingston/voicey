@@ -146,7 +146,7 @@ private struct SettingsSidebarRow: View {
   var body: some View {
     Label {
       Text(tab.title)
-        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+        .font(.system(size: 13, weight: .regular))
         .lineLimit(1)
     } icon: {
       Image(systemName: tab.iconName)
@@ -156,17 +156,6 @@ private struct SettingsSidebarRow: View {
     .padding(.vertical, 8)
     .padding(.horizontal, 10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background {
-      if isSelected {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(.thinMaterial)
-          .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-              .strokeBorder(.white.opacity(0.16))
-          }
-      }
-    }
-    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
   }
 }
 
