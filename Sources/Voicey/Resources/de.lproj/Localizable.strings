@@ -76,6 +76,8 @@
 /* Hotkey Settings */
 "hotkey.transcriptionHotkey" = "Transkriptions-Tastenkürzel";
 "hotkey.toggleRecording" = "Aufnahme umschalten:";
+"hotkey.recordShortcut" = "Kurzbefehl aufnehmen";
+"hotkey.pressShortcut" = "Kurzbefehl wählen…";
 "hotkey.hotkeyDescription" = "Drücken Sie dieses Tastenkürzel, um die Aufnahme zu starten. Drücken Sie erneut, um zu stoppen und zu transkribieren.";
 "hotkey.resetToDefault" = "Auf Standard zurücksetzen (⌃V)";
 "hotkey.escapeKey" = "Escape-Taste";

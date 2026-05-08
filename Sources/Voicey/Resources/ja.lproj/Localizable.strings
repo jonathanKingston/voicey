@@ -76,6 +76,8 @@
 /* Hotkey Settings */
 "hotkey.transcriptionHotkey" = "文字起こしホットキー";
 "hotkey.toggleRecording" = "録音切り替え:";
+"hotkey.recordShortcut" = "キーを記録";
+"hotkey.pressShortcut" = "キーを押してください";
 "hotkey.hotkeyDescription" = "このホットキーを押して録音を開始します。もう一度押すと停止して文字起こしします。";
 "hotkey.resetToDefault" = "デフォルトにリセット (⌃V)";
 "hotkey.escapeKey" = "Escキー";

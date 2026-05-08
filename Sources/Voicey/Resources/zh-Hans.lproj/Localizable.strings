@@ -76,6 +76,8 @@
 /* Hotkey Settings */
 "hotkey.transcriptionHotkey" = "转录快捷键";
 "hotkey.toggleRecording" = "切换录音：";
+"hotkey.recordShortcut" = "设置快捷键";
+"hotkey.pressShortcut" = "按下快捷键";
 "hotkey.hotkeyDescription" = "按此快捷键开始录音。再次按下停止并转录。";
 "hotkey.resetToDefault" = "重置为默认 (⌃V)";
 "hotkey.escapeKey" = "Escape 键";

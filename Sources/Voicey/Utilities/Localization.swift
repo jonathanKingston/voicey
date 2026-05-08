@@ -245,6 +245,8 @@ enum L10n {
     enum Hotkey {
         static var transcriptionHotkey: String { L10n.string("hotkey.transcriptionHotkey") }
         static var toggleRecording: String { L10n.string("hotkey.toggleRecording") }
+        static var recordShortcut: String { L10n.string("hotkey.recordShortcut") }
+        static var pressShortcut: String { L10n.string("hotkey.pressShortcut") }
         static var hotkeyDescription: String { L10n.string("hotkey.hotkeyDescription") }
         static var resetToDefault: String { L10n.string("hotkey.resetToDefault") }
         static var escapeKey: String { L10n.string("hotkey.escapeKey") }

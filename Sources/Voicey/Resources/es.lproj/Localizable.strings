@@ -76,6 +76,8 @@
 /* Hotkey Settings */
 "hotkey.transcriptionHotkey" = "Atajo de transcripción";
 "hotkey.toggleRecording" = "Alternar grabación:";
+"hotkey.recordShortcut" = "Grabar atajo";
+"hotkey.pressShortcut" = "Pulsar atajo";
 "hotkey.hotkeyDescription" = "Presiona este atajo para comenzar a grabar. Presiónalo de nuevo para detener y transcribir.";
 "hotkey.resetToDefault" = "Restablecer predeterminado (⌃V)";
 "hotkey.escapeKey" = "Tecla Escape";
