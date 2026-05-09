@@ -28,18 +28,9 @@ BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMAR
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 
-.PHONY: all build build-with-mediaremote build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full mediaremote-adapter
+.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
 
 all: build
-
-# Build MediaRemoteAdapter.framework (optional Perl trampoline; not used while Now Playing uses JXA). Requires cmake + git.
-mediaremote-adapter:
-	@chmod +x scripts/build_mediaremote_adapter.sh
-	@./scripts/build_mediaremote_adapter.sh
-
-# Now Playing uses `/usr/bin/osascript` + JXA (`MediaRemoteJXAAdapter`); no bundled `MediaRemoteAdapterBundled/`.
-# Use `make mediaremote-adapter` only if you re-enable the Perl adapter in code and SPM/Xcode resources.
-build-with-mediaremote: build
 
 # Debug build (includes MediaRemote Now Playing probe; no Sparkle — use build-direct for that)
 build:
@@ -610,12 +601,10 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  build             - Build debug version (default)"
-	@echo "  build-with-mediaremote - Same as build (legacy name; JXA Now Playing needs no Perl bundle)"
 	@echo "  release           - Build release version"
 	@echo "  ship-release      - Full signed/notarized release workflow"
 	@echo "  bundle            - Create app bundle from release build"
 	@echo "  sign              - Sign the app bundle (ad-hoc)"
-	@echo "  mediaremote-adapter - Build bundled MediaRemoteAdapter.framework (cmake + git; macOS)"
 	@echo "  clean             - Clean build artifacts"
 	@echo "  run               - Build and run debug app bundle (default)"
 	@echo "  run-binary        - Build and run raw debug binary"

@@ -59,8 +59,8 @@ __pycache__/
 *.crash
 *.ips
 
-# Built locally: `make mediaremote-adapter` (BSD 3-Clause upstream; see MediaRemoteAdapterBundled/LICENSE)
-Sources/Voicey/MediaRemoteAdapterBundled/MediaRemoteAdapter.framework/
+# Legacy Perl adapter path (removed; ignore if recreated locally)
+Sources/Voicey/MediaRemoteAdapterBundled/
 
 # App bundle
 Voicey.app/

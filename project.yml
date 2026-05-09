@@ -34,8 +34,6 @@ targets:
       - path: Sources/Voicey
         excludes:
           - "**/.DS_Store"
-          - "**/MediaRemoteAdapter.framework/**"
-          - "MediaRemoteAdapterBundled/**"
       - path: Resources/Assets.xcassets
         buildPhase: resources
       - path: Resources/AppIcon.icns
@@ -78,8 +76,6 @@ targets:
       - path: Sources/Voicey
         excludes:
           - "**/.DS_Store"
-          - "**/MediaRemoteAdapter.framework/**"
-          - "MediaRemoteAdapterBundled/**"
       - path: Resources/Assets.xcassets
         buildPhase: resources
       - path: Resources/AppIcon.icns

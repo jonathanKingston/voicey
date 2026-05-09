@@ -298,7 +298,7 @@ import Foundation
       return result
     }
 
-    /// In-process MediaRemote APIs only (no JXA / Perl subprocess). Use after `MRMediaRemoteSendCommand` when the
+    /// In-process MediaRemote APIs only (JXA runs separately in `isMediaPlaying()`). Use after `MRMediaRemoteSendCommand` when the
     /// completion timed out or reported failure: the daemon may still have applied the command, and a global HID
     /// play/pause toggle would undo it.
     static func isPlayingEmbeddedMediaRemoteSnapshot() -> Bool {

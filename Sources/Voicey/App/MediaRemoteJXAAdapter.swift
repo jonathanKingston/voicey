@@ -6,7 +6,7 @@ import Foundation
   /// `MediaRemote.framework` (same approach as [media-remote](https://github.com/nohackjustnoobb/media-remote)
   /// `NowPlayingJXA` / `assets/nowPlaying.jxa`, MIT License Copyright (c) 2025 nohackjustnoobb).
   ///
-  /// This avoids bundling Perl + `MediaRemoteAdapter.framework` while still working around strict
+  /// Uses system `/usr/bin/osascript` (no extra bundled binaries) while still working around strict
   /// `mediaremoted` client checks on recent macOS (see that crate’s README “macOS 15.4+”).
   enum MediaRemoteJXAAdapter {
     private static let osascriptPath = "/usr/bin/osascript"
