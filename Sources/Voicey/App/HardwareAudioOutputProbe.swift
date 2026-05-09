@@ -1,12 +1,9 @@
 import CoreAudio
 
-/// HAL-based hint that something is streaming to the default **output** device.
+/// HAL snapshot: whether something is streaming to the default **output** device.
 ///
-/// Prefer the JXA / MediaRemote snapshot when available; this probe is an optional coarse fallback.
-/// MediaRemote often omits browser/tab audio (e.g. Firefox) while Control Center still shows Now Playing.
-/// `kAudioDevicePropertyDeviceIsRunningSomewhere` is true when any client holds active I/O on that device, which
-/// usually includes normal music playback. It can also be true for calls, games, or other output—prefer MediaRemote
-/// when it works, and treat this as a broad fallback for pause-before-transcribe.
+/// Used only for **diagnostics** when Advanced → detailed logging is on (`MediaPlaybackController` logs `raw`).
+/// Pause gating uses Media Remote (JXA / in-process), not this probe.
 enum HardwareAudioOutputProbe {
 
   static func isDefaultOutputDeviceRunningSomewhere() -> Bool {

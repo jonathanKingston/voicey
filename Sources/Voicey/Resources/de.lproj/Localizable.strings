@@ -129,8 +129,6 @@
 "advanced.mediaPlayback" = "Medienwiedergabe";
 "advanced.pauseMediaDuringTranscription" = "Medien während der Transkription pausieren";
 "advanced.pauseMediaDuringTranscriptionDesc" = "Wenn aktiviert, pausiert Voicey wiedergegebene Medien während Aufnahme und Transkription und setzt sie danach fort.";
-"advanced.useOutputDeviceActivityHint" = "Standard-Ausgabegerät-Aktivität einbeziehen";
-"advanced.useOutputDeviceActivityHintDesc" = "Wenn aktiviert, kann Voicey Medien als laufend werten, wenn die Standard-Audioausgabe aktiv ist, auch wenn „Jetzt läuft“ leer ist. Hilft bei Browsern; deaktivieren, um nur Media Remote / „Jetzt läuft“ zu nutzen.";
 "advanced.autoInsert" = "Automatisches Einfügen";
 "advanced.autoInsertToggle" = "Nach Transkription automatisch einfügen";
 "advanced.autoInsertEnabledDesc" = "Voicey versucht, Text direkt in das fokussierte Textfeld einzufügen.";

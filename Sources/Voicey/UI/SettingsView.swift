@@ -920,8 +920,6 @@ struct AdvancedSettingsView: View {
   @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste: Bool = true
   @AppStorage("pauseMediaDuringTranscription", store: defaults)
   private var pauseMediaDuringTranscription: Bool = true
-  @AppStorage("mediaPauseUseOutputDeviceActivityHint", store: defaults)
-  private var mediaPauseUseOutputDeviceActivityHint: Bool = false
   @State private var accessibilityGranted = false
   @State private var clearError: String?
   @State private var showClearError = false
@@ -935,13 +933,6 @@ struct AdvancedSettingsView: View {
         Toggle(L10n.Advanced.pauseMediaDuringTranscription, isOn: $pauseMediaDuringTranscription)
 
         Text(L10n.Advanced.pauseMediaDuringTranscriptionDesc)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-
-        Toggle(L10n.Advanced.useOutputDeviceActivityHint, isOn: $mediaPauseUseOutputDeviceActivityHint)
-          .disabled(!pauseMediaDuringTranscription)
-
-        Text(L10n.Advanced.useOutputDeviceActivityHintDesc)
           .font(.caption)
           .foregroundStyle(.secondary)
       }

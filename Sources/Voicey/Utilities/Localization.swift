@@ -312,10 +312,6 @@ enum L10n {
         static var pauseMediaDuringTranscriptionDesc: String {
             L10n.string("advanced.pauseMediaDuringTranscriptionDesc")
         }
-        static var useOutputDeviceActivityHint: String { L10n.string("advanced.useOutputDeviceActivityHint") }
-        static var useOutputDeviceActivityHintDesc: String {
-            L10n.string("advanced.useOutputDeviceActivityHintDesc")
-        }
         static var autoInsert: String { L10n.string("advanced.autoInsert") }
         static var autoInsertToggle: String { L10n.string("advanced.autoInsertToggle") }
         static var autoInsertEnabledDesc: String { L10n.string("advanced.autoInsertEnabledDesc") }

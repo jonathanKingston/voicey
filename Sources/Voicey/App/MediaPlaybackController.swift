@@ -40,20 +40,19 @@ final class MediaPlaybackController: MediaPlaybackControlling {
     AppLogger.general.info("resumeAfterTranscription: finished media resume request")
   }
 
-  /// Logs probe breakdown (MediaRemote when compiled; optional default output device hint) and returns combined playing.
+  /// Logs probe breakdown (MediaRemote when compiled; optional HAL snapshot when detailed logging is on).
+  /// Gating uses **Media Remote only** (JXA / in-process probe); default output device I/O is never part of `combined`.
   @discardableResult
   private static func logPlaybackProbeContext(label: String) -> Bool {
     let mediaRemote = MediaRemotePlaybackProbe.isMediaPlaying()
-    let useOutputHint = SettingsManager.shared.mediaPauseUseOutputDeviceActivityHint
     let detailed = SettingsManager.shared.enableDetailedLogging
     let outputRaw: Bool
-    if useOutputHint || detailed {
+    if detailed {
       outputRaw = HardwareAudioOutputProbe.isDefaultOutputDeviceRunningSomewhere()
     } else {
       outputRaw = false
     }
-    let outputIO = useOutputHint && outputRaw
-    let combined = mediaRemote || outputIO
+    let combined = mediaRemote
 
     #if !VOICEY_DIRECT_DISTRIBUTION && !VOICEY_MEDIA_REMOTE_PROBE
       let buildNote =
@@ -62,12 +61,12 @@ final class MediaPlaybackController: MediaPlaybackControlling {
       let buildNote = ""
     #endif
 
-    let rawNote = (!useOutputHint && !detailed) ? " (HAL not queried; hint off)" : ""
+    let rawNote = detailed ? "" : " (HAL default output I/O not queried; enable detailed logging for snapshot)"
     AppLogger.general.info(
-      "[\(label)] playback probes — MediaRemote: \(mediaRemote), defaultOutputIO(raw: \(outputRaw), used: \(outputIO))\(rawNote) → combined: \(combined).\(buildNote)"
+      "[\(label)] playback probes — MediaRemote: \(mediaRemote), defaultOutputIO(raw: \(outputRaw), affects gating: false)\(rawNote) → combined: \(combined).\(buildNote)"
     )
     debugPrint(
-      "[\(label)] MR=\(mediaRemote) outIO=\(outputIO) raw=\(outputRaw) hint=\(useOutputHint) → \(combined)\(buildNote)",
+      "[\(label)] MR=\(mediaRemote) outIO=false raw=\(outputRaw) detailed=\(detailed) → \(combined)\(buildNote)",
       category: "MEDIA"
     )
     return combined
