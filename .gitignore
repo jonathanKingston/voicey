@@ -59,6 +59,9 @@ __pycache__/
 *.crash
 *.ips
 
+# Built locally: `make mediaremote-adapter` (BSD 3-Clause upstream; see MediaRemoteAdapterBundled/LICENSE)
+Sources/Voicey/MediaRemoteAdapterBundled/MediaRemoteAdapter.framework/
+
 # App bundle
 Voicey.app/
 
@@ -80,3 +83,4 @@ icon_1024.png
 
 # Local tooling logs
 fast_mcp_server.log
+voicey-debug-session.log

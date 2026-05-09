@@ -28,13 +28,27 @@ BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMAR
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 
-.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
+.PHONY: all build build-with-mediaremote build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full mediaremote-adapter
 
 all: build
 
-# Debug build
+# Build MediaRemoteAdapter.framework (Perl trampoline for Now Playing). Requires cmake + git.
+mediaremote-adapter:
+	@chmod +x scripts/build_mediaremote_adapter.sh
+	@./scripts/build_mediaremote_adapter.sh
+
+# Bundling: `Package.swift` uses `.copy("MediaRemoteAdapterBundled")` and `project.yml` lists the same folder
+# as Copy Bundle Resources, so every `swift build` / Xcode archive copies the *current* contents of
+# `Sources/Voicey/MediaRemoteAdapterBundled/` into the app (e.g. `Voicey_Voicey.bundle/...` or `Voicey.app/.../Resources/`).
+# The Perl script + LICENSE are in git; `MediaRemoteAdapter.framework/` is gitignored and only appears after
+# `make mediaremote-adapter`. That step is not a prerequisite of `make build` because it needs network + cmake,
+# is slow, and would break environments where you only want a quick Swift compile (CI without adapter, etc.).
+# Use `make build-with-mediaremote` when you need the full Perl path in one shot.
+build-with-mediaremote: mediaremote-adapter build
+
+# Debug build (includes MediaRemote Now Playing probe; no Sparkle — use build-direct for that)
 build:
-	swift build
+	swift build -Xswiftc -DVOICEY_MEDIA_REMOTE_PROBE
 	BUILD_DIR="$(CURDIR)/$(BUILD_DIR)" "$(SPEECH_SWIFT_METALLIB_SCRIPT)" debug
 
 # Debug build (direct distribution features enabled, includes Sparkle)
@@ -71,6 +85,9 @@ bundle: build-release
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_RELEASE) $(RESOURCES_DIR)/
+	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
+		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
+	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "App bundle created: $(APP_BUNDLE)"
@@ -91,6 +108,9 @@ bundle-debug: build
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_DEBUG) $(RESOURCES_DIR)/
+	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
+		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
+	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "Debug app bundle created: $(APP_BUNDLE)"
@@ -111,6 +131,9 @@ bundle-debug-direct: build-direct
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_DEBUG) $(RESOURCES_DIR)/
+	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
+		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
+	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@# Copy Sparkle.framework for auto-updates
@@ -145,6 +168,9 @@ bundle-direct: release-direct
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_RELEASE) $(RESOURCES_DIR)/
+	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
+		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
+	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@# Copy Sparkle.framework for auto-updates
@@ -601,10 +627,12 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  build             - Build debug version (default)"
+	@echo "  build-with-mediaremote - Run mediaremote-adapter then build (bundles Perl + native MR helper)"
 	@echo "  release           - Build release version"
 	@echo "  ship-release      - Full signed/notarized release workflow"
 	@echo "  bundle            - Create app bundle from release build"
 	@echo "  sign              - Sign the app bundle (ad-hoc)"
+	@echo "  mediaremote-adapter - Build bundled MediaRemoteAdapter.framework (cmake + git; macOS)"
 	@echo "  clean             - Clean build artifacts"
 	@echo "  run               - Build and run debug app bundle (default)"
 	@echo "  run-binary        - Build and run raw debug binary"

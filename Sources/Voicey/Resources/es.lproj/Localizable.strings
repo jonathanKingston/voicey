@@ -129,6 +129,8 @@
 "advanced.mediaPlayback" = "Reproducción multimedia";
 "advanced.pauseMediaDuringTranscription" = "Pausar multimedia durante la transcripción";
 "advanced.pauseMediaDuringTranscriptionDesc" = "Cuando está activado, Voicey pausa la multimedia mientras graba y transcribe, y la reanuda al terminar.";
+"advanced.useOutputDeviceActivityHint" = "Incluir actividad del dispositivo de salida predeterminado";
+"advanced.useOutputDeviceActivityHintDesc" = "Si está activado, Voicey puede considerar que hay reproducción cuando la salida de audio predeterminada está en uso, aunque “Ahora suena” esté vacío. Útil en navegadores; desactívalo para depender solo de Media Remote / “Ahora suena”.";
 "advanced.autoInsert" = "Inserción automática";
 "advanced.autoInsertToggle" = "Insertar automáticamente después de transcribir";
 "advanced.autoInsertEnabledDesc" = "Voicey intentará insertar texto directamente en el campo de texto enfocado.";

@@ -78,7 +78,8 @@ let package = Package(
       dependencies: targetDependencies,
       path: "Sources/Voicey",
       resources: [
-        .process("Resources")
+        .process("Resources"),
+        .copy("MediaRemoteAdapterBundled")
       ],
       linkerSettings: [
         .linkedFramework("AVFoundation"),

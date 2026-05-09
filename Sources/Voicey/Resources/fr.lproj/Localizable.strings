@@ -129,6 +129,8 @@
 "advanced.mediaPlayback" = "Lecture multimédia";
 "advanced.pauseMediaDuringTranscription" = "Mettre les médias en pause pendant la transcription";
 "advanced.pauseMediaDuringTranscriptionDesc" = "Lorsque activé, Voicey met les médias en pause pendant l'enregistrement et la transcription, puis les reprend une fois terminé.";
+"advanced.useOutputDeviceActivityHint" = "Inclure l’activité du périphérique de sortie par défaut";
+"advanced.useOutputDeviceActivityHintDesc" = "Si activé, Voicey peut considérer qu’un média est en lecture lorsque la sortie audio par défaut est utilisée, même si « En cours de lecture » est vide. Utile pour les navigateurs ; désactivez pour ne vous fier qu’à Media Remote / « En cours de lecture ».";
 "advanced.autoInsert" = "Insertion automatique";
 "advanced.autoInsertToggle" = "Insérer automatiquement après transcription";
 "advanced.autoInsertEnabledDesc" = "Voicey tentera d'insérer le texte directement dans le champ de texte actif.";

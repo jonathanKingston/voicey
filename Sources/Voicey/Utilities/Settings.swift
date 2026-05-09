@@ -37,6 +37,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.autoPasteEnabled: false,  // Disabled by default - advanced feature requiring Accessibility
       Keys.restoreClipboardAfterPaste: true,  // Restore original clipboard after paste
       Keys.pauseMediaDuringTranscription: true,
+      Keys.mediaPauseUseOutputDeviceActivityHint: false,
       Keys.voiceCommandsEnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
@@ -54,6 +55,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let autoPasteEnabled = "autoPasteEnabled"
     static let restoreClipboardAfterPaste = "restoreClipboardAfterPaste"
     static let pauseMediaDuringTranscription = "pauseMediaDuringTranscription"
+    static let mediaPauseUseOutputDeviceActivityHint = "mediaPauseUseOutputDeviceActivityHint"
     static let voiceCommandsEnabled = "voiceCommandsEnabled"
     static let voiceCommands = "voiceCommands"
     static let enableDetailedLogging = "enableDetailedLogging"
@@ -115,6 +117,12 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var pauseMediaDuringTranscription: Bool {
     get { defaults.bool(forKey: Keys.pauseMediaDuringTranscription) }
     set { defaults.set(newValue, forKey: Keys.pauseMediaDuringTranscription) }
+  }
+
+  /// When true, `HardwareAudioOutputProbe` may contribute to “something is playing” alongside Media Remote.
+  var mediaPauseUseOutputDeviceActivityHint: Bool {
+    get { defaults.bool(forKey: Keys.mediaPauseUseOutputDeviceActivityHint) }
+    set { defaults.set(newValue, forKey: Keys.mediaPauseUseOutputDeviceActivityHint) }
   }
 
   func configureLaunchAtLogin(enabled: Bool) {

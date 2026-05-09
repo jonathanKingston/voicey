@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import Darwin
 import KeyboardShortcuts
 import SwiftUI
 import os
@@ -48,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // Model upgrade lock - prevents recording during model swap
   private var isUpgradingModel = false
 
+  /// Held open with `flock(LOCK_NB)` so a second Voicey cannot register the same global shortcut.
+  private var singleInstanceLockFileDescriptor: Int32 = -1
+
   // MARK: - Initialization
 
   override init() {
@@ -62,6 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    guard Self.acquireSingleInstanceLockOrQuit(lockHolder: self) else { return }
+
     // Keep the menubar app alive even when it has no open windows.
     ProcessInfo.processInfo.disableAutomaticTermination(Self.automaticTerminationReason)
 
@@ -72,6 +78,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Initialize components
     setupComponents()
+
+    #if VOICEY_DIRECT_DISTRIBUTION || VOICEY_MEDIA_REMOTE_PROBE
+      // Defer MR registration: avoids re-entrancy during launch and keeps a bad MediaRemote call from
+      // aborting startup before menubar/hotkey wiring runs.
+      DispatchQueue.main.async {
+        MediaRemoteNowPlayingNotifications.startIfNeeded()
+      }
+    #endif
 
     // Setup menubar
     statusBarController = StatusBarController(appState: appState, delegate: self)
@@ -402,6 +416,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.toggleTranscription()
       }
     }
+  }
+
+  // MARK: - Single instance (global hotkey)
+
+  /// Prevents multiple Voicey processes from each registering `KeyboardShortcuts` for the same chord
+  /// (which would multiply recordings on one keypress). Set `VOICEY_ALLOW_MULTIPLE_INSTANCES=1` to disable.
+  private static func singleInstanceLockFileURL() -> URL {
+    let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? URL(fileURLWithPath: NSTemporaryDirectory())
+    let folder = appSupport.appendingPathComponent("Voicey", isDirectory: true)
+    #if VOICEY_DIRECT_DISTRIBUTION
+      return folder.appendingPathComponent("instance-VoiceyDirect.lock", isDirectory: false)
+    #else
+      return folder.appendingPathComponent("instance-Voicey.lock", isDirectory: false)
+    #endif
+  }
+
+  private static func acquireSingleInstanceLockOrQuit(lockHolder: AppDelegate) -> Bool {
+    if ProcessInfo.processInfo.environment["VOICEY_ALLOW_MULTIPLE_INSTANCES"] == "1" {
+      return true
+    }
+
+    let lockURL = singleInstanceLockFileURL()
+    do {
+      try FileManager.default.createDirectory(
+        at: lockURL.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+      )
+    } catch {
+      AppLogger.general.error("Voicey: could not create Application Support folder for instance lock: \(error)")
+      return true
+    }
+
+    let path = lockURL.path
+    let fd = open(path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR)
+    if fd < 0 {
+      AppLogger.general.error("Voicey: could not open instance lock \(path, privacy: .public)")
+      return true
+    }
+
+    if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+      let lockErr = errno
+      if lockErr == EWOULDBLOCK || lockErr == EAGAIN {
+        AppLogger.general.warning(
+          "Voicey: another instance is already running (see Activity Monitor for Voicey). Only one copy can own the global shortcut. Exiting. Lock: \(path, privacy: .public)"
+        )
+        NSApp.terminate(nil)
+        return false
+      }
+      AppLogger.general.error("Voicey: flock instance lock failed errno=\(lockErr)")
+    }
+
+    lockHolder.singleInstanceLockFileDescriptor = fd
+    return true
   }
 
   private func setupEscapeKeyMonitor() {
@@ -950,6 +1018,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // Check for pending model upgrade now that we're idle
       tryPerformPendingUpgrade()
       return
+    }
+
+    // Mic is off; resume system media while the model runs (pause only covered recording).
+    if dependencies.settings.pauseMediaDuringTranscription {
+      dependencies.mediaPlayback.resumeAfterTranscription()
     }
 
     // Process transcription

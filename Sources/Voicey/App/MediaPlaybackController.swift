@@ -23,11 +23,9 @@ final class MediaPlaybackController: MediaPlaybackControlling {
       return
     }
 
+    postMediaRemoteThenHID(context: "pauseForTranscription", resume: false)
     expectsSyntheticResumeToggle = true
-    AppLogger.general.info("pauseForTranscription: posting synthetic play/pause HID")
-    debugPrint("pauseForTranscription: posting synthetic play/pause HID", category: "MEDIA")
-    postPlayPauseKey()
-    AppLogger.general.info("pauseForTranscription: finished posting HID; resume is armed")
+    AppLogger.general.info("pauseForTranscription: finished media pause request; resume is armed")
   }
 
   func resumeAfterTranscription() {
@@ -38,74 +36,85 @@ final class MediaPlaybackController: MediaPlaybackControlling {
     }
 
     expectsSyntheticResumeToggle = false
-    AppLogger.general.info("resumeAfterTranscription: posting synthetic play/pause HID to restore")
-    debugPrint("resumeAfterTranscription: posting synthetic play/pause HID to restore", category: "MEDIA")
-    postPlayPauseKey()
-    AppLogger.general.info("resumeAfterTranscription: finished posting HID")
+    postMediaRemoteThenHID(context: "resumeAfterTranscription", resume: true)
+    AppLogger.general.info("resumeAfterTranscription: finished media resume request")
   }
 
-  /// Logs probe breakdown (MediaRemote on direct builds; Music/Spotify AppleScript) and returns combined playing.
+  /// Logs probe breakdown (MediaRemote when compiled; optional default output device hint) and returns combined playing.
   @discardableResult
   private static func logPlaybackProbeContext(label: String) -> Bool {
     let mediaRemote = MediaRemotePlaybackProbe.isMediaPlaying()
-    let music = isAppleMusicPlaying()
-    let spotify = isSpotifyPlaying()
-    let combined = mediaRemote || music || spotify
+    let useOutputHint = SettingsManager.shared.mediaPauseUseOutputDeviceActivityHint
+    let detailed = SettingsManager.shared.enableDetailedLogging
+    let outputRaw: Bool
+    if useOutputHint || detailed {
+      outputRaw = HardwareAudioOutputProbe.isDefaultOutputDeviceRunningSomewhere()
+    } else {
+      outputRaw = false
+    }
+    let outputIO = useOutputHint && outputRaw
+    let combined = mediaRemote || outputIO
 
-    #if !VOICEY_DIRECT_DISTRIBUTION
+    #if !VOICEY_DIRECT_DISTRIBUTION && !VOICEY_MEDIA_REMOTE_PROBE
       let buildNote =
-        " MediaRemote API is not compiled into this binary; build with VOICEY_DIRECT=1 for system Now Playing (Firefox, etc.)."
+        " MediaRemote probe not compiled in; use `make build` / Xcode Debug with VOICEY_MEDIA_REMOTE_PROBE, or `make build-direct` for full direct build."
     #else
       let buildNote = ""
     #endif
 
+    let rawNote = (!useOutputHint && !detailed) ? " (HAL not queried; hint off)" : ""
     AppLogger.general.info(
-      "[\(label)] playback probes — MediaRemote: \(mediaRemote), Music.app: \(music), Spotify: \(spotify) → combined: \(combined).\(buildNote)"
+      "[\(label)] playback probes — MediaRemote: \(mediaRemote), defaultOutputIO(raw: \(outputRaw), used: \(outputIO))\(rawNote) → combined: \(combined).\(buildNote)"
     )
     debugPrint(
-      "[\(label)] MR=\(mediaRemote) Music=\(music) Spotify=\(spotify) → \(combined)\(buildNote)",
+      "[\(label)] MR=\(mediaRemote) outIO=\(outputIO) raw=\(outputRaw) hint=\(useOutputHint) → \(combined)\(buildNote)",
       category: "MEDIA"
     )
     return combined
   }
 
-  private static func isAppleMusicPlaying() -> Bool {
-    isScriptableAppReportingPlaying(
-      bundleID: "com.apple.Music",
-      scriptApplicationName: "Music"
-    )
+  /// At most **one** `MRMediaRemoteSendCommand` before HID. Chaining pause + toggle (each ~0.35s timeout)
+  /// could still enqueue two daemon actions even when callbacks time out, which stacks with the HID toggle
+  /// and produces pause → immediate resume → pause on the final resume toggle.
+  private func postMediaRemoteThenHID(context: String, resume: Bool) {
+    #if VOICEY_DIRECT_DISTRIBUTION || VOICEY_MEDIA_REMOTE_PROBE
+      if resume {
+        if MediaRemoteCommandSender.sendPlayAndWait() {
+          AppLogger.general.info("\(context): MRMediaRemoteSendCommand(play) reported success")
+          debugPrint("\(context): MR play ok", category: "MEDIA")
+          return
+        }
+      } else {
+        if MediaRemoteCommandSender.sendPauseAndWait() {
+          AppLogger.general.info("\(context): MRMediaRemoteSendCommand(pause) reported success")
+          debugPrint("\(context): MR pause ok", category: "MEDIA")
+          return
+        }
+      }
+      AppLogger.general.info("\(context): MR SendCommand unavailable or failed; posting synthetic play/pause HID")
+      debugPrint("\(context): MR fallback HID", category: "MEDIA")
+    #else
+      AppLogger.general.info("\(context): posting synthetic play/pause HID (MR commands not compiled in)")
+      debugPrint("\(context): HID only (no MR send)", category: "MEDIA")
+    #endif
+    postPlayPauseKey()
   }
 
-  private static func isSpotifyPlaying() -> Bool {
-    isScriptableAppReportingPlaying(
-      bundleID: "com.spotify.client",
-      scriptApplicationName: "Spotify"
-    )
-  }
-
-  /// `MPMusicPlayerController` is unavailable on macOS; use AppleScript when the app is running.
-  private static func isScriptableAppReportingPlaying(bundleID: String, scriptApplicationName: String) -> Bool {
-    guard NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first != nil else {
-      return false
-    }
-    let source = """
-    tell application "\(scriptApplicationName)" to return player state as string
-    """
-    guard let script = NSAppleScript(source: source) else { return false }
-    let state = script.executeAndReturnError(nil).stringValue ?? "(nil)"
-    let playing = state == "playing"
-    if SettingsManager.shared.enableDetailedLogging {
-      AppLogger.general.info(
-        "AppleScript \(scriptApplicationName): player state=\"\(state, privacy: .public)\" playing=\(playing)"
-      )
-      debugPrint("AppleScript \(scriptApplicationName): state=\(state) playing=\(playing)", category: "MEDIA")
-    }
-    return playing
-  }
-
+  /// Synthetic NX play/pause (legacy fallback).
+  /// Runs on the main queue and splits key-down / key-up across run-loop turns.
   private func postPlayPauseKey() {
-    postMediaKey(state: SystemMediaKeyConstants.keyDownState)
-    postMediaKey(state: SystemMediaKeyConstants.keyUpState)
+    let postUp: () -> Void = { [weak self] in
+      self?.postMediaKey(state: SystemMediaKeyConstants.keyUpState)
+    }
+    let postDownAndScheduleUp: () -> Void = { [weak self] in
+      self?.postMediaKey(state: SystemMediaKeyConstants.keyDownState)
+      DispatchQueue.main.async(execute: postUp)
+    }
+    if Thread.isMainThread {
+      postDownAndScheduleUp()
+    } else {
+      DispatchQueue.main.async(execute: postDownAndScheduleUp)
+    }
   }
 
   private func postMediaKey(state: UInt32) {
@@ -131,10 +140,6 @@ final class MediaPlaybackController: MediaPlaybackControlling {
       return
     }
 
-    cgEvent.setIntegerValueField(
-      CGEventField.eventSourceUserData,
-      value: SystemMediaKeyConstants.voiceySyntheticEventUserData
-    )
     cgEvent.post(tap: CGEventTapLocation.cghidEventTap)
   }
 }

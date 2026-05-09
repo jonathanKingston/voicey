@@ -129,6 +129,8 @@
 "advanced.mediaPlayback" = "メディア再生";
 "advanced.pauseMediaDuringTranscription" = "文字起こし中にメディアを一時停止";
 "advanced.pauseMediaDuringTranscriptionDesc" = "有効にすると、Voiceyは録音と文字起こし中に再生中のメディアを一時停止し、完了後に再開します。";
+"advanced.useOutputDeviceActivityHint" = "デフォルト出力デバイスの使用を含める";
+"advanced.useOutputDeviceActivityHintDesc" = "有効にすると、「再生中」が空でもシステムのデフォルト音声出力が使用中なら再生中とみなすことがあります。ブラウザ向け。オフにするとMedia Remote／「再生中」のみを使います。";
 "advanced.autoInsert" = "自動挿入";
 "advanced.autoInsertToggle" = "文字起こし後に自動挿入";
 "advanced.autoInsertEnabledDesc" = "Voiceyはフォーカスされたテキストフィールドに直接テキストを挿入しようとします。";

@@ -13,6 +13,8 @@ protocol SettingsProviding: AnyObject {
   var autoPasteEnabled: Bool { get set }
   var restoreClipboardAfterPaste: Bool { get set }
   var pauseMediaDuringTranscription: Bool { get set }
+  /// When true, default output device activity can count as “playing” alongside Media Remote probes.
+  var mediaPauseUseOutputDeviceActivityHint: Bool { get set }
   var voiceCommandsEnabled: Bool { get set }
   var voiceCommands: [VoiceCommand] { get set }
   var enableDetailedLogging: Bool { get set }
