@@ -59,9 +59,6 @@ __pycache__/
 *.crash
 *.ips
 
-# Legacy Perl adapter path (removed; ignore if recreated locally)
-Sources/Voicey/MediaRemoteAdapterBundled/
-
 # App bundle
 Voicey.app/
 
