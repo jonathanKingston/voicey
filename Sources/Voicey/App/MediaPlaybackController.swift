@@ -4,43 +4,130 @@ import CoreGraphics
 final class MediaPlaybackController: MediaPlaybackControlling {
   static let shared = MediaPlaybackController()
 
-  private var didPauseForTranscription = false
+  /// True when transcription should be followed by a synthetic play/pause toggle to restore media.
+  private var expectsSyntheticResumeToggle = false
 
   private init() {}
 
   func pauseForTranscription() {
-    guard !didPauseForTranscription else { return }
+    guard !expectsSyntheticResumeToggle else {
+      AppLogger.general.info("pauseForTranscription: skipped (already expects resume toggle)")
+      debugPrint("pauseForTranscription: skipped (already expects resume toggle)", category: "MEDIA")
+      return
+    }
 
-    didPauseForTranscription = true
-    postPlayPauseKey()
-    AppLogger.general.info("Requested media pause for transcription")
-  }
+    let playing = Self.logPlaybackProbeContext(label: "pauseForTranscription")
+    guard playing else {
+      AppLogger.general.info("Skipping media pause; probes report nothing playing")
+      debugPrint("Skipping media pause; probes report nothing playing", category: "MEDIA")
+      return
+    }
 
-  func noteExternalPauseForTranscription() {
-    guard !didPauseForTranscription else { return }
-
-    didPauseForTranscription = true
-    AppLogger.general.info("Tracking media pause from transcription trigger")
-  }
-
-  func reassertPauseDuringTranscription() {
-    guard didPauseForTranscription else { return }
-
-    postPlayPauseKey()
-    AppLogger.general.info("Reasserted media pause during transcription")
+    postMediaRemoteThenHID(context: "pauseForTranscription", resume: false)
+    expectsSyntheticResumeToggle = true
+    AppLogger.general.info("pauseForTranscription: finished media pause request; resume is armed")
   }
 
   func resumeAfterTranscription() {
-    guard didPauseForTranscription else { return }
+    guard expectsSyntheticResumeToggle else {
+      AppLogger.general.info("resumeAfterTranscription: skipped (resume not armed)")
+      debugPrint("resumeAfterTranscription: skipped (resume not armed)", category: "MEDIA")
+      return
+    }
 
-    didPauseForTranscription = false
-    postPlayPauseKey()
-    AppLogger.general.info("Requested media resume after transcription")
+    expectsSyntheticResumeToggle = false
+    postMediaRemoteThenHID(context: "resumeAfterTranscription", resume: true)
+    AppLogger.general.info("resumeAfterTranscription: finished media resume request")
   }
 
+  /// Logs probe breakdown (MediaRemote when compiled; optional HAL snapshot when detailed logging is on).
+  /// Gating uses **Media Remote only** (JXA / in-process probe); default output device I/O is never part of `combined`.
+  @discardableResult
+  private static func logPlaybackProbeContext(label: String) -> Bool {
+    let mediaRemote = MediaRemotePlaybackProbe.isMediaPlaying()
+    let detailed = SettingsManager.shared.enableDetailedLogging
+    let outputRaw: Bool
+    if detailed {
+      outputRaw = HardwareAudioOutputProbe.isDefaultOutputDeviceRunningSomewhere()
+    } else {
+      outputRaw = false
+    }
+    let combined = mediaRemote
+
+    #if !VOICEY_DIRECT_DISTRIBUTION && !VOICEY_MEDIA_REMOTE_PROBE
+      let buildNote =
+        " MediaRemote probe not compiled in; use `make build` / Xcode Debug with VOICEY_MEDIA_REMOTE_PROBE, or `make build-direct` for full direct build."
+    #else
+      let buildNote = ""
+    #endif
+
+    let rawNote = detailed ? "" : " (HAL default output I/O not queried; enable detailed logging for snapshot)"
+    AppLogger.general.info(
+      "[\(label)] playback probes — MediaRemote: \(mediaRemote), defaultOutputIO(raw: \(outputRaw), affects gating: false)\(rawNote) → combined: \(combined).\(buildNote)"
+    )
+    debugPrint(
+      "[\(label)] MR=\(mediaRemote) outIO=false raw=\(outputRaw) detailed=\(detailed) → \(combined)\(buildNote)",
+      category: "MEDIA"
+    )
+    return combined
+  }
+
+  /// At most **one** `MRMediaRemoteSendCommand` before HID. Chaining pause + toggle (each ~0.35s timeout)
+  /// could still enqueue two daemon actions even when callbacks time out, which stacks with the HID toggle
+  /// and produces pause → immediate resume → pause on the final resume toggle.
+  private func postMediaRemoteThenHID(context: String, resume: Bool) {
+    #if VOICEY_DIRECT_DISTRIBUTION || VOICEY_MEDIA_REMOTE_PROBE
+      if resume {
+        if MediaRemoteCommandSender.sendPlayAndWait() {
+          AppLogger.general.info("\(context): MRMediaRemoteSendCommand(play) reported success")
+          debugPrint("\(context): MR play ok", category: "MEDIA")
+          return
+        }
+        if MediaRemotePlaybackProbe.isPlayingEmbeddedMediaRemoteSnapshot() {
+          AppLogger.general.info(
+            "\(context): MR play did not report success but embedded MR probe reports playing; skipping HID (avoids pause-toggle stacking)"
+          )
+          debugPrint("\(context): skip HID resume; embedded MR already playing", category: "MEDIA")
+          return
+        }
+      } else {
+        if MediaRemoteCommandSender.sendPauseAndWait() {
+          AppLogger.general.info("\(context): MRMediaRemoteSendCommand(pause) reported success")
+          debugPrint("\(context): MR pause ok", category: "MEDIA")
+          return
+        }
+        if !MediaRemotePlaybackProbe.isPlayingEmbeddedMediaRemoteSnapshot() {
+          AppLogger.general.info(
+            "\(context): MR pause did not report success but embedded MR probe reports not playing; skipping HID (avoids play-toggle stacking)"
+          )
+          debugPrint("\(context): skip HID pause; embedded MR already paused", category: "MEDIA")
+          return
+        }
+      }
+      AppLogger.general.info("\(context): MR SendCommand unavailable or failed; posting synthetic play/pause HID")
+      debugPrint("\(context): MR fallback HID", category: "MEDIA")
+    #else
+      AppLogger.general.info("\(context): posting synthetic play/pause HID (MR commands not compiled in)")
+      debugPrint("\(context): HID only (no MR send)", category: "MEDIA")
+    #endif
+    postPlayPauseKey()
+  }
+
+  /// Synthetic NX play/pause (legacy fallback).
+  /// Runs on the main queue and splits key-down / key-up across run-loop turns.
   private func postPlayPauseKey() {
-    postMediaKey(state: SystemMediaKeyConstants.keyDownState)
-    postMediaKey(state: SystemMediaKeyConstants.keyUpState)
+    let postUp: () -> Void = { [weak self] in
+      self?.postMediaKey(state: SystemMediaKeyConstants.keyUpState)
+    }
+    let postDownAndScheduleUp: () -> Void = { [weak self] in
+      self?.postMediaKey(state: SystemMediaKeyConstants.keyDownState)
+      DispatchQueue.main.async(execute: postUp)
+    }
+    if Thread.isMainThread {
+      postDownAndScheduleUp()
+    } else {
+      DispatchQueue.main.async(execute: postDownAndScheduleUp)
+    }
   }
 
   private func postMediaKey(state: UInt32) {
@@ -66,10 +153,6 @@ final class MediaPlaybackController: MediaPlaybackControlling {
       return
     }
 
-    cgEvent.setIntegerValueField(
-      CGEventField.eventSourceUserData,
-      value: SystemMediaKeyConstants.voiceySyntheticEventUserData
-    )
     cgEvent.post(tap: CGEventTapLocation.cghidEventTap)
   }
 }

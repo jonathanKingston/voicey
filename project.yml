@@ -58,7 +58,7 @@ targets:
         ENABLE_APP_SANDBOX: YES
       configs:
         Debug:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG VOICEY_MEDIA_REMOTE_PROBE
         Release:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
     entitlements:

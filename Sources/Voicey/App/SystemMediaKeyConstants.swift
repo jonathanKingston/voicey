@@ -9,7 +9,4 @@ enum SystemMediaKeyConstants {
   static let keyUpState = UInt32(0xB)
   static let systemDefinedEventMask =
     CGEventMask(1) << UInt64(NSEvent.EventType.systemDefined.rawValue)
-
-  // Used to keep Voicey's own media-key events from retriggering transcription.
-  static let voiceySyntheticEventUserData = Int64(0x566F_6963_6579)
 }

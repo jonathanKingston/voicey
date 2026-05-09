@@ -32,9 +32,9 @@ BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1
 
 all: build
 
-# Debug build
+# Debug build (includes MediaRemote Now Playing probe; no Sparkle — use build-direct for that)
 build:
-	swift build
+	swift build -Xswiftc -DVOICEY_MEDIA_REMOTE_PROBE
 	BUILD_DIR="$(CURDIR)/$(BUILD_DIR)" "$(SPEECH_SWIFT_METALLIB_SCRIPT)" debug
 
 # Debug build (direct distribution features enabled, includes Sparkle)

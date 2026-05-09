@@ -63,8 +63,6 @@ protocol NotificationProviding {
 /// Protocol for temporarily pausing system media during transcription.
 protocol MediaPlaybackControlling: AnyObject {
   func pauseForTranscription()
-  func noteExternalPauseForTranscription()
-  func reassertPauseDuringTranscription()
   func resumeAfterTranscription()
 }
 

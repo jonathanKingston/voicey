@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import AppKit
 import Carbon.HIToolbox
 import KeyboardShortcuts
@@ -11,11 +10,6 @@ import os
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"
   private static let settingsWindowAutosaveName = "VoiceySettingsWindow"
-
-  private enum TranscriptionTriggerSource: String {
-    case keyboardShortcut = "keyboard shortcut"
-    case mediaKey = "media key"
-  }
 
   var statusBarController: StatusBarController?
   let appState = AppState()
@@ -49,11 +43,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // ESC key monitors
   private var localEscKeyMonitor: Any?
-  private var mediaKeyMonitor: MediaKeyMonitor?
   private var selectedModelObserver: Any?
 
   // Model upgrade lock - prevents recording during model swap
   private var isUpgradingModel = false
+
+  /// Held open with `flock(LOCK_NB)` so a second Voicey cannot register the same global shortcut.
+  private var singleInstanceLockFileDescriptor: Int32 = -1
 
   // MARK: - Initialization
 
@@ -69,6 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    guard VoiceySingleInstance.acquireLockOrQuit(applyLockedFileDescriptor: { fd in
+      self.singleInstanceLockFileDescriptor = fd
+    }) else { return }
+
     // Keep the menubar app alive even when it has no open windows.
     ProcessInfo.processInfo.disableAutomaticTermination(Self.automaticTerminationReason)
 
@@ -80,12 +80,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Initialize components
     setupComponents()
 
+    #if VOICEY_DIRECT_DISTRIBUTION || VOICEY_MEDIA_REMOTE_PROBE
+      // Defer MR registration: avoids re-entrancy during launch and keeps a bad MediaRemote call from
+      // aborting startup before menubar/hotkey wiring runs.
+      DispatchQueue.main.async {
+        MediaRemoteNowPlayingNotifications.startIfNeeded()
+      }
+    #endif
+
     // Setup menubar
     statusBarController = StatusBarController(appState: appState, delegate: self)
 
     // Setup global hotkey
     setupHotkey()
-    setupMediaKeyMonitor()
 
     // Keep runtime state in sync when the user changes models from settings.
     setupSelectedModelObserver()
@@ -158,8 +165,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if let monitor = localEscKeyMonitor {
       NSEvent.removeMonitor(monitor)
     }
-    mediaKeyMonitor?.stop()
-    mediaKeyMonitor = nil
     dependencies.mediaPlayback.resumeAfterTranscription()
 
     // Clean up
@@ -408,28 +413,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func setupHotkey() {
     KeyboardShortcuts.onKeyDown(for: .toggleTranscription) { [weak self] in
       Task { @MainActor in
-        self?.handleTranscriptionTrigger(source: .keyboardShortcut)
+        AppLogger.general.info("Received transcription trigger from keyboard shortcut")
+        self?.toggleTranscription()
       }
     }
-  }
-
-  private func setupMediaKeyMonitor() {
-    if !dependencies.permissions.checkAccessibilityPermission() {
-      AppLogger.general.warning(
-        "Accessibility permission not granted; media key monitoring may be unavailable"
-      )
-    }
-
-    mediaKeyMonitor = MediaKeyMonitor { [weak self] in
-      self?.handleTranscriptionTrigger(source: .mediaKey)
-    }
-    mediaKeyMonitor?.start()
-  }
-
-  @MainActor
-  private func handleTranscriptionTrigger(source: TranscriptionTriggerSource) {
-    AppLogger.general.info("Received transcription trigger from \(source.rawValue)")
-    toggleTranscription(triggerSource: source)
   }
 
   private func setupEscapeKeyMonitor() {
@@ -755,18 +742,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Transcription Control
 
   func toggleTranscription() {
-    toggleTranscription(triggerSource: .keyboardShortcut)
-  }
-
-  private func toggleTranscription(triggerSource: TranscriptionTriggerSource) {
     if appState.isRecording {
-      stopRecording(triggerSource: triggerSource)
+      stopRecording()
     } else {
-      startRecording(triggerSource: triggerSource)
+      startRecording()
     }
   }
 
-  private func startRecording(triggerSource: TranscriptionTriggerSource) {
+  private func startRecording() {
     // Refresh model status before recording
     ModelManager.shared.loadDownloadedModels()
 
@@ -810,7 +793,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await MainActor.run {
           if preloadSucceeded && self.isActiveEngineLoaded {
             self.appState.modelStatus = .ready
-            self.beginRecordingAfterModelReady(triggerSource: triggerSource)
+            self.beginRecordingAfterModelReady()
           } else {
             self.hideOverlay()
             self.appState.modelStatus = .failed("Failed to load model")
@@ -840,7 +823,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await MainActor.run {
           if appState.modelStatus.isReady {
             // Model is ready, now start recording
-            self.beginRecordingAfterModelReady(triggerSource: triggerSource)
+            self.beginRecordingAfterModelReady()
           } else {
             // Model failed to load or timed out
             self.hideOverlay()
@@ -854,10 +837,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // Model is ready, start recording immediately
-    beginRecordingAfterModelReady(triggerSource: triggerSource)
+    beginRecordingAfterModelReady()
   }
 
-  private func beginRecordingAfterModelReady(triggerSource: TranscriptionTriggerSource) {
+  private func beginRecordingAfterModelReady() {
     debugPrint("🎙️ Starting recording...", category: "RECORD")
     AppLogger.audio.info("Starting recording...")
 
@@ -873,12 +856,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     if dependencies.settings.pauseMediaDuringTranscription {
-      switch triggerSource {
-      case .keyboardShortcut:
-        dependencies.mediaPlayback.pauseForTranscription()
-      case .mediaKey:
-        dependencies.mediaPlayback.noteExternalPauseForTranscription()
-      }
+      dependencies.mediaPlayback.pauseForTranscription()
     }
     appState.transcriptionState = .recording(startTime: Date())
 
@@ -939,7 +917,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func stopRecording(triggerSource: TranscriptionTriggerSource) {
+  private func stopRecording() {
     debugPrint("⏹️ Stopping recording...", category: "RECORD")
     AppLogger.audio.info("Stopping recording...")
 
@@ -949,9 +927,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     appState.transcriptionState = .processing
-    if triggerSource == .mediaKey && dependencies.settings.pauseMediaDuringTranscription {
-      dependencies.mediaPlayback.reassertPauseDuringTranscription()
-    }
 
     // Granite does better without additional end-of-audio trimming.
     let selectedModel = SettingsManager.shared.selectedModel
@@ -990,6 +965,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // Check for pending model upgrade now that we're idle
       tryPerformPendingUpgrade()
       return
+    }
+
+    // Mic is off; resume system media while the model runs (pause only covered recording).
+    if dependencies.settings.pauseMediaDuringTranscription {
+      dependencies.mediaPlayback.resumeAfterTranscription()
     }
 
     // Process transcription
@@ -1071,7 +1051,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "processTranscription: No text to deliver (empty/whitespace after processing)")
           self.hideOverlay()
           self.appState.transcriptionState = .idle
-          self.dependencies.mediaPlayback.resumeAfterTranscription()
+          // Media resume already ran in stopRecording when the mic stopped.
           // Check for pending model upgrade now that we're idle
           self.tryPerformPendingUpgrade()
           return
@@ -1087,7 +1067,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
             self?.hideOverlay()
             self?.appState.transcriptionState = .idle
-            self?.dependencies.mediaPlayback.resumeAfterTranscription()
+            // Media resume already ran in stopRecording when the mic stopped.
             self?.tryPerformPendingUpgrade()
           }
         )
@@ -1103,7 +1083,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.hideOverlay()
         self?.appState.transcriptionState = .error(message: error.localizedDescription)
         self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-        self?.dependencies.mediaPlayback.resumeAfterTranscription()
+        // Media resume already ran in stopRecording when the mic stopped.
         self?.tryPerformPendingUpgrade()
       }
     }
@@ -1245,39 +1225,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 }
 // swiftlint:enable type_body_length
-
-// MARK: - AudioCaptureManagerDelegate
-
-extension AppDelegate: AudioCaptureManagerDelegate {
-  func audioCaptureManager(_ manager: AudioCaptureManager, didUpdateLevel level: Float) {
-    Task { @MainActor in
-      self.appState.audioLevel = level
-    }
-  }
-}
-
-// MARK: - Keyboard Shortcuts Extension
-
-extension KeyboardShortcuts.Name {
-  static let toggleTranscription = Self(
-    "toggleTranscription", default: .init(.v, modifiers: .control))
-}
-
-// MARK: - Errors
-
-enum TranscriptionError: LocalizedError {
-  case transcriptionFailed(String)
-  case modelNotLoaded
-  case audioCaptureFailed
-
-  var errorDescription: String? {
-    switch self {
-    case .transcriptionFailed(let reason):
-      return "Transcription failed: \(reason)"
-    case .modelNotLoaded:
-      return "No transcription model loaded"
-    case .audioCaptureFailed:
-      return "Failed to capture audio"
-    }
-  }
-}
