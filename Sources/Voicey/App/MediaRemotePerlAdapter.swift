@@ -4,6 +4,9 @@ import Foundation
 
   /// Uses `/usr/bin/perl` plus bundled [ungive/mediaremote-adapter](https://github.com/ungive/mediaremote-adapter)
   /// so MediaRemote runs under a system binary’s entitlements; Voicey reads JSON from stdout.
+  ///
+  /// **Currently unused:** `MediaRemotePlaybackProbe` uses `MediaRemoteJXAAdapter` instead. Kept for optional
+  /// re-enable if JXA proves insufficient on some macOS versions.
   enum MediaRemotePerlAdapter {
     private static let perlPath = "/usr/bin/perl"
     private static let scriptName = "mediaremote-adapter.pl"

@@ -2,7 +2,7 @@ import CoreAudio
 
 /// HAL-based hint that something is streaming to the default **output** device.
 ///
-/// Prefer the Perl `MediaRemoteAdapter` path when bundled; this probe is an optional coarse fallback.
+/// Prefer the JXA / MediaRemote snapshot when available; this probe is an optional coarse fallback.
 /// MediaRemote often omits browser/tab audio (e.g. Firefox) while Control Center still shows Now Playing.
 /// `kAudioDevicePropertyDeviceIsRunningSomewhere` is true when any client holds active I/O on that device, which
 /// usually includes normal music playback. It can also be true for calls, games, or other output—prefer MediaRemote

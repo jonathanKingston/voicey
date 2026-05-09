@@ -87,30 +87,31 @@ import Foundation
     }
 
     /// Whether the system Now Playing session reports active playback.
-    /// When bundled, prefers the Perl + `MediaRemoteAdapter.framework` snapshot (system `perl` entitlement trampoline);
-    /// otherwise uses in-process `dlopen` polling. Supplements with a short-TTL hint from distributed IsPlaying
-    /// notifications when the primary path reports not playing.
+    /// Prefers a **JavaScript for Automation** snapshot via `/usr/bin/osascript` (loads `MediaRemote.framework`
+    /// from the JXA context; see `MediaRemoteJXAAdapter`). Falls back to in-process `dlopen` polling when JXA
+    /// returns `nil`. Supplements with a short-TTL hint from distributed IsPlaying notifications when the
+    /// primary path reports not playing.
     static func isMediaPlaying() -> Bool {
-      if let perlPlaying = MediaRemotePerlAdapter.snapshotPlayingState() {
-        if perlPlaying {
+      if let jxaPlaying = MediaRemoteJXAAdapter.snapshotPlayingState() {
+        if jxaPlaying {
           if SettingsManager.shared.enableDetailedLogging {
-            AppLogger.general.info("MediaRemote: using Perl adapter snapshot (playing)")
-            debugPrint("MediaRemote: perl playing=true", category: "MEDIA")
+            AppLogger.general.info("MediaRemote: using JXA snapshot (playing)")
+            debugPrint("MediaRemote: jxa playing=true", category: "MEDIA")
           }
           return true
         }
         if MediaRemoteNowPlayingNotifications.recentIsPlayingHint(within: 8) == true {
           if SettingsManager.shared.enableDetailedLogging {
             AppLogger.general.info(
-              "MediaRemote: Perl snapshot not playing; treating as playing from recent IsPlaying notification"
+              "MediaRemote: JXA snapshot not playing; treating as playing from recent IsPlaying notification"
             )
-            debugPrint("MediaRemote: perl false + notif hint true", category: "MEDIA")
+            debugPrint("MediaRemote: jxa false + notif hint true", category: "MEDIA")
           }
           return true
         }
         if SettingsManager.shared.enableDetailedLogging {
-          AppLogger.general.info("MediaRemote: using Perl adapter snapshot (not playing)")
-          debugPrint("MediaRemote: perl playing=false", category: "MEDIA")
+          AppLogger.general.info("MediaRemote: using JXA snapshot (not playing)")
+          debugPrint("MediaRemote: jxa playing=false", category: "MEDIA")
         }
         return false
       }
@@ -297,7 +298,7 @@ import Foundation
       return result
     }
 
-    /// In-process MediaRemote APIs only (no Perl subprocess). Use after `MRMediaRemoteSendCommand` when the
+    /// In-process MediaRemote APIs only (no JXA / Perl subprocess). Use after `MRMediaRemoteSendCommand` when the
     /// completion timed out or reported failure: the daemon may still have applied the command, and a global HID
     /// play/pause toggle would undo it.
     static func isPlayingEmbeddedMediaRemoteSnapshot() -> Bool {

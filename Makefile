@@ -32,19 +32,14 @@ BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1
 
 all: build
 
-# Build MediaRemoteAdapter.framework (Perl trampoline for Now Playing). Requires cmake + git.
+# Build MediaRemoteAdapter.framework (optional Perl trampoline; not used while Now Playing uses JXA). Requires cmake + git.
 mediaremote-adapter:
 	@chmod +x scripts/build_mediaremote_adapter.sh
 	@./scripts/build_mediaremote_adapter.sh
 
-# Bundling: `Package.swift` uses `.copy("MediaRemoteAdapterBundled")` and `project.yml` lists the same folder
-# as Copy Bundle Resources, so every `swift build` / Xcode archive copies the *current* contents of
-# `Sources/Voicey/MediaRemoteAdapterBundled/` into the app (e.g. `Voicey_Voicey.bundle/...` or `Voicey.app/.../Resources/`).
-# The Perl script + LICENSE are in git; `MediaRemoteAdapter.framework/` is gitignored and only appears after
-# `make mediaremote-adapter`. That step is not a prerequisite of `make build` because it needs network + cmake,
-# is slow, and would break environments where you only want a quick Swift compile (CI without adapter, etc.).
-# Use `make build-with-mediaremote` when you need the full Perl path in one shot.
-build-with-mediaremote: mediaremote-adapter build
+# Now Playing uses `/usr/bin/osascript` + JXA (`MediaRemoteJXAAdapter`); no bundled `MediaRemoteAdapterBundled/`.
+# Use `make mediaremote-adapter` only if you re-enable the Perl adapter in code and SPM/Xcode resources.
+build-with-mediaremote: build
 
 # Debug build (includes MediaRemote Now Playing probe; no Sparkle — use build-direct for that)
 build:
@@ -85,9 +80,6 @@ bundle: build-release
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_RELEASE) $(RESOURCES_DIR)/
-	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
-		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
-	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "App bundle created: $(APP_BUNDLE)"
@@ -108,9 +100,6 @@ bundle-debug: build
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_DEBUG) $(RESOURCES_DIR)/
-	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
-		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
-	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@echo "Debug app bundle created: $(APP_BUNDLE)"
@@ -131,9 +120,6 @@ bundle-debug-direct: build-direct
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_DEBUG) $(RESOURCES_DIR)/
-	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
-		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
-	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@# Copy Sparkle.framework for auto-updates
@@ -168,9 +154,6 @@ bundle-direct: release-direct
 		exit 1; \
 	fi
 	@cp -R $(SWIFTPM_RESOURCES_RELEASE) $(RESOURCES_DIR)/
-	@if [ -d "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" ]; then \
-		cp -R "$(CURDIR)/Sources/Voicey/MediaRemoteAdapterBundled" "$(RESOURCES_DIR)/"; \
-	fi
 	@echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > $(CONTENTS_DIR)/PkgInfo
 	@echo "APPL????" >> $(CONTENTS_DIR)/PkgInfo
 	@# Copy Sparkle.framework for auto-updates
@@ -627,7 +610,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  build             - Build debug version (default)"
-	@echo "  build-with-mediaremote - Run mediaremote-adapter then build (bundles Perl + native MR helper)"
+	@echo "  build-with-mediaremote - Same as build (legacy name; JXA Now Playing needs no Perl bundle)"
 	@echo "  release           - Build release version"
 	@echo "  ship-release      - Full signed/notarized release workflow"
 	@echo "  bundle            - Create app bundle from release build"

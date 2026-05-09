@@ -36,8 +36,6 @@ targets:
           - "**/.DS_Store"
           - "**/MediaRemoteAdapter.framework/**"
           - "MediaRemoteAdapterBundled/**"
-      - path: Sources/Voicey/MediaRemoteAdapterBundled
-        buildPhase: resources
       - path: Resources/Assets.xcassets
         buildPhase: resources
       - path: Resources/AppIcon.icns
@@ -82,8 +80,6 @@ targets:
           - "**/.DS_Store"
           - "**/MediaRemoteAdapter.framework/**"
           - "MediaRemoteAdapterBundled/**"
-      - path: Sources/Voicey/MediaRemoteAdapterBundled
-        buildPhase: resources
       - path: Resources/Assets.xcassets
         buildPhase: resources
       - path: Resources/AppIcon.icns
