@@ -297,6 +297,16 @@ import Foundation
       return result
     }
 
+    /// In-process MediaRemote APIs only (no Perl subprocess). Use after `MRMediaRemoteSendCommand` when the
+    /// completion timed out or reported failure: the daemon may still have applied the command, and a global HID
+    /// play/pause toggle would undo it.
+    static func isPlayingEmbeddedMediaRemoteSnapshot() -> Bool {
+      guard let handles else { return false }
+      return DispatchQueue.global(qos: .userInitiated).sync {
+        Self.queryIsPlaying(handles: handles)
+      }
+    }
+
     private static func isPlaying(nowPlayingInfo: CFDictionary) -> Bool {
       let dict = nowPlayingInfo as NSDictionary
       for (key, value) in dict {
@@ -373,6 +383,8 @@ import Foundation
   enum MediaRemotePlaybackProbe {
     /// No MediaRemote path: build without `VOICEY_MEDIA_REMOTE_PROBE` / `VOICEY_DIRECT_DISTRIBUTION` (App Store release).
     static func isMediaPlaying() -> Bool { false }
+
+    static func isPlayingEmbeddedMediaRemoteSnapshot() -> Bool { false }
   }
 
 #endif

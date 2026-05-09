@@ -1051,7 +1051,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "processTranscription: No text to deliver (empty/whitespace after processing)")
           self.hideOverlay()
           self.appState.transcriptionState = .idle
-          self.dependencies.mediaPlayback.resumeAfterTranscription()
+          // Media resume already ran in stopRecording when the mic stopped.
           // Check for pending model upgrade now that we're idle
           self.tryPerformPendingUpgrade()
           return
@@ -1067,7 +1067,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
             self?.hideOverlay()
             self?.appState.transcriptionState = .idle
-            self?.dependencies.mediaPlayback.resumeAfterTranscription()
+            // Media resume already ran in stopRecording when the mic stopped.
             self?.tryPerformPendingUpgrade()
           }
         )
@@ -1083,7 +1083,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.hideOverlay()
         self?.appState.transcriptionState = .error(message: error.localizedDescription)
         self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-        self?.dependencies.mediaPlayback.resumeAfterTranscription()
+        // Media resume already ran in stopRecording when the mic stopped.
         self?.tryPerformPendingUpgrade()
       }
     }

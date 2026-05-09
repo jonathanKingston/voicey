@@ -84,10 +84,24 @@ final class MediaPlaybackController: MediaPlaybackControlling {
           debugPrint("\(context): MR play ok", category: "MEDIA")
           return
         }
+        if MediaRemotePlaybackProbe.isPlayingEmbeddedMediaRemoteSnapshot() {
+          AppLogger.general.info(
+            "\(context): MR play did not report success but embedded MR probe reports playing; skipping HID (avoids pause-toggle stacking)"
+          )
+          debugPrint("\(context): skip HID resume; embedded MR already playing", category: "MEDIA")
+          return
+        }
       } else {
         if MediaRemoteCommandSender.sendPauseAndWait() {
           AppLogger.general.info("\(context): MRMediaRemoteSendCommand(pause) reported success")
           debugPrint("\(context): MR pause ok", category: "MEDIA")
+          return
+        }
+        if !MediaRemotePlaybackProbe.isPlayingEmbeddedMediaRemoteSnapshot() {
+          AppLogger.general.info(
+            "\(context): MR pause did not report success but embedded MR probe reports not playing; skipping HID (avoids play-toggle stacking)"
+          )
+          debugPrint("\(context): skip HID pause; embedded MR already paused", category: "MEDIA")
           return
         }
       }
