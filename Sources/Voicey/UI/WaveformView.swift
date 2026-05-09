@@ -47,13 +47,15 @@ struct WaveformView: View {
 
   private func barColor(for index: Int) -> Color {
     let intensity = levels[index]
-    if intensity > 0.7 {
-      return .red
-    } else if intensity > 0.4 {
-      return .orange
-    } else {
-      return .green
+    // Soft tiers so bars read on frosted / material backgrounds (liquid-glass overlay).
+    let base = 0.18 + Double(intensity) * 0.62
+    if intensity > 0.72 {
+      return Color.accentColor.opacity(min(1, base + 0.12))
     }
+    if intensity > 0.42 {
+      return Color.primary.opacity(base)
+    }
+    return Color.primary.opacity(base * 0.85)
   }
 
   private func updateLevels(with newLevel: Float) {
