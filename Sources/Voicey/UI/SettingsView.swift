@@ -507,7 +507,9 @@ struct HotkeySettingsView: View {
   var body: some View {
     Form {
       Section(L10n.Hotkey.transcriptionHotkey) {
-        KeyboardShortcuts.Recorder(L10n.Hotkey.toggleRecording, name: .toggleTranscription)
+        LabeledContent(L10n.Hotkey.toggleRecording) {
+          KeybindingRecorderView(name: .toggleTranscription)
+        }
 
         Text(L10n.Hotkey.hotkeyDescription)
           .font(.caption)

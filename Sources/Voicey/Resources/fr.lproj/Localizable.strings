@@ -76,6 +76,8 @@
 /* Hotkey Settings */
 "hotkey.transcriptionHotkey" = "Raccourci de transcription";
 "hotkey.toggleRecording" = "Basculer l'enregistrement :";
+"hotkey.recordShortcut" = "Enregistrer le raccourci";
+"hotkey.pressShortcut" = "Saisir un raccourci";
 "hotkey.hotkeyDescription" = "Appuyez sur ce raccourci pour commencer l'enregistrement. Appuyez à nouveau pour arrêter et transcrire.";
 "hotkey.resetToDefault" = "Réinitialiser par défaut (⌃V)";
 "hotkey.escapeKey" = "Touche Échap";
