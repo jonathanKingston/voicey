@@ -2,6 +2,43 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
+private enum TranscriptionOverlayMetrics {
+  static let windowSize = NSSize(width: 350, height: 78)
+  static let contentWidth: CGFloat = 344
+  static let horizontalPadding: CGFloat = 18
+  static let verticalPadding: CGFloat = 14
+  static let itemSpacing: CGFloat = 14
+  static let iconSize: CGFloat = 40
+  static let iconGlyphSize: CGFloat = 26
+  static let activitySlotSize = CGSize(width: 108, height: 32)
+  static let waveformSize = CGSize(width: 100, height: 26)
+  static let statusLabelSlotWidth: CGFloat = 90
+  static let closeButtonSize: CGFloat = 28
+}
+
+private struct OverlayGlassMaterial: NSViewRepresentable {
+  let cornerRadius: CGFloat
+
+  func makeNSView(context: Context) -> NSVisualEffectView {
+    let view = NSVisualEffectView()
+    view.material = .underWindowBackground
+    view.blendingMode = .behindWindow
+    view.state = .active
+    view.wantsLayer = true
+    view.layer?.cornerRadius = cornerRadius
+    view.layer?.cornerCurve = .continuous
+    view.layer?.masksToBounds = true
+    return view
+  }
+
+  func updateNSView(_ view: NSVisualEffectView, context: Context) {
+    view.material = .underWindowBackground
+    view.blendingMode = .behindWindow
+    view.state = .active
+    view.layer?.cornerRadius = cornerRadius
+  }
+}
+
 /// Custom panel that can receive key events even when not key window
 @MainActor
 final class KeyablePanel: NSPanel {
@@ -84,8 +121,8 @@ final class TranscriptionOverlayController {
     .environmentObject(appState)
 
     let hostingView = NSHostingView(rootView: contentView)
-    // Room for material-backed overlay + fixed-width slots (avoids post-layout resize jitter).
-    hostingView.frame = NSRect(x: 0, y: 0, width: 460, height: 92)
+    // Keep the panel size in lockstep with the SwiftUI frame to avoid transparent hit-test margins.
+    hostingView.frame = NSRect(origin: .zero, size: TranscriptionOverlayMetrics.windowSize)
 
     // Use custom KeyablePanel that can receive key events
     let panel = KeyablePanel(
@@ -126,11 +163,9 @@ struct TranscriptionOverlayView: View {
   var onCancel: (() -> Void)?
 
   private let cornerRadius: CGFloat = 22
-  /// Keeps status text from resizing the bar between recording, transcribing, and loading copy.
-  private let statusLabelSlotWidth: CGFloat = 200
 
   var body: some View {
-    HStack(alignment: .center, spacing: 14) {
+    HStack(alignment: .center, spacing: TranscriptionOverlayMetrics.itemSpacing) {
       stateIcon
 
       activitySlot
@@ -141,7 +176,7 @@ struct TranscriptionOverlayView: View {
         .lineLimit(1)
         .truncationMode(.tail)
         .minimumScaleFactor(0.88)
-        .frame(width: statusLabelSlotWidth, alignment: .leading)
+        .frame(width: TranscriptionOverlayMetrics.statusLabelSlotWidth, alignment: .leading)
         .multilineTextAlignment(.leading)
 
       Button {
@@ -150,7 +185,10 @@ struct TranscriptionOverlayView: View {
         Image(systemName: "xmark")
           .font(.system(size: 12, weight: .semibold))
           .foregroundStyle(.secondary)
-          .frame(width: 28, height: 28)
+          .frame(
+            width: TranscriptionOverlayMetrics.closeButtonSize,
+            height: TranscriptionOverlayMetrics.closeButtonSize
+          )
           .background {
             Circle()
               .fill(.quaternary.opacity(colorScheme == .dark ? 0.35 : 0.5))
@@ -164,12 +202,12 @@ struct TranscriptionOverlayView: View {
       .focusEffectDisabled()
       .help(L10n.Overlay.cancelHelp)
     }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 14)
-    .frame(width: 454, alignment: .center)
+    .padding(.horizontal, TranscriptionOverlayMetrics.horizontalPadding)
+    .padding(.vertical, TranscriptionOverlayMetrics.verticalPadding)
+    .frame(width: TranscriptionOverlayMetrics.contentWidth, alignment: .center)
     .background { glassBackground }
-    .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0.18), radius: 28, y: 14)
-    .shadow(color: .black.opacity(colorScheme == .dark ? 0.2 : 0.06), radius: 6, y: 2)
+    .shadow(color: .black.opacity(colorScheme == .dark ? 0.16 : 0.08), radius: 18, y: 8)
+    .shadow(color: .black.opacity(colorScheme == .dark ? 0.08 : 0.03), radius: 4, y: 1)
   }
 
   @ViewBuilder
@@ -209,9 +247,15 @@ struct TranscriptionOverlayView: View {
             .symbolRenderingMode(.hierarchical)
         }
       }
-      .frame(width: 26, height: 26)
+      .frame(
+        width: TranscriptionOverlayMetrics.iconGlyphSize,
+        height: TranscriptionOverlayMetrics.iconGlyphSize
+      )
     }
-    .frame(width: 40, height: 40)
+    .frame(
+      width: TranscriptionOverlayMetrics.iconSize,
+      height: TranscriptionOverlayMetrics.iconSize
+    )
     .accessibilityElement(children: .ignore)
   }
 
@@ -219,16 +263,22 @@ struct TranscriptionOverlayView: View {
   private var activitySlot: some View {
     ZStack {
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.05))
+        .fill(Color.white.opacity(colorScheme == .dark ? 0.025 : 0.08))
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.12), lineWidth: 0.5)
+        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.18), lineWidth: 0.5)
 
       if appState.transcriptionState.isRecording {
         WaveformView(level: appState.audioLevel)
-          .frame(width: 100, height: 26)
+          .frame(
+            width: TranscriptionOverlayMetrics.waveformSize.width,
+            height: TranscriptionOverlayMetrics.waveformSize.height
+          )
       }
     }
-    .frame(width: 108, height: 32)
+    .frame(
+      width: TranscriptionOverlayMetrics.activitySlotSize.width,
+      height: TranscriptionOverlayMetrics.activitySlotSize.height
+    )
     .animation(.easeInOut(duration: 0.2), value: appState.transcriptionState.isRecording)
     .clipped()
   }
@@ -240,14 +290,19 @@ struct TranscriptionOverlayView: View {
       if reduceTransparency {
         shape.fill(Color(nsColor: .windowBackgroundColor).opacity(0.96))
       } else {
-        shape.fill(.regularMaterial)
+        OverlayGlassMaterial(cornerRadius: cornerRadius)
+          .opacity(colorScheme == .dark ? 0.62 : 0.72)
+        shape.fill(Color.white.opacity(colorScheme == .dark ? 0.025 : 0.08))
+        shape
+          .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.16 : 0.38), lineWidth: 0.8)
+          .blur(radius: 0.3)
       }
       shape.strokeBorder(
         LinearGradient(
           colors: [
-            Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55),
-            Color.white.opacity(colorScheme == .dark ? 0.06 : 0.12),
-            Color.black.opacity(colorScheme == .dark ? 0.35 : 0.06)
+            Color.white.opacity(colorScheme == .dark ? 0.18 : 0.42),
+            Color.white.opacity(colorScheme == .dark ? 0.08 : 0.16),
+            Color.white.opacity(colorScheme == .dark ? 0.04 : 0.08)
           ],
           startPoint: .topLeading,
           endPoint: .bottomTrailing
