@@ -1,5 +1,5 @@
-import AppKit
 import AVFoundation
+import AppKit
 import KeyboardShortcuts
 import SwiftUI
 import VoiceyCore
@@ -234,7 +234,8 @@ struct SetupSettingsView: View {
           isInProgress: isDefaultModelDownloading,
           progress: defaultDownloadProgress,
           buttonTitle: isDefaultModelReady
-            ? L10n.Setup.ready : (isDefaultModelDownloading ? L10n.Setup.downloading : L10n.Setup.download),
+            ? L10n.Setup.ready
+            : (isDefaultModelDownloading ? L10n.Setup.downloading : L10n.Setup.download),
           action: startDefaultModelDownload
         )
 
@@ -488,7 +489,15 @@ struct ModelSettingsView: View {
   @EnvironmentObject private var appState: AppState
   @ObservedObject var modelManager = ModelManager.shared
   private static let defaults = SettingsManager.defaultsStore
-  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = ModelManager.defaultModel.rawValue
+  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = ModelManager
+    .defaultModel.rawValue
+  @AppStorage("transcriptionGlossaryEnabled", store: defaults) private
+    var transcriptionGlossaryEnabled = false
+  @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+
+  private var selectedSpeechModel: SpeechModel? {
+    SpeechModel(rawValue: selectedModel)
+  }
 
   var body: some View {
     Form {
@@ -520,6 +529,32 @@ struct ModelSettingsView: View {
         }
       }
 
+      if selectedSpeechModel?.isQwenModel == true {
+        Section(L10n.Model.transcriptionGlossary) {
+          Toggle(L10n.Model.transcriptionGlossaryEnable, isOn: $transcriptionGlossaryEnabled)
+
+          Text(L10n.Model.transcriptionGlossaryDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          if transcriptionGlossaryEnabled {
+            TextEditor(text: $transcriptionGlossary)
+              .font(.system(.body, design: .monospaced))
+              .frame(minHeight: 80, maxHeight: 140)
+              .overlay(alignment: .topLeading) {
+                if transcriptionGlossary.isEmpty {
+                  Text(L10n.Model.transcriptionGlossaryPlaceholder)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 8)
+                    .allowsHitTesting(false)
+                }
+              }
+          }
+        }
+      }
+
       Section(L10n.Model.performance) {
         Text(L10n.Model.performanceDescription)
           .font(.caption)
@@ -536,11 +571,18 @@ struct ModelSettingsView: View {
       if let model = SpeechModel(rawValue: selectedModel) {
         appState.currentModel = model
       }
+      transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
     }
     .onChange(of: selectedModel) {
       guard let model = SpeechModel(rawValue: selectedModel) else { return }
       appState.currentModel = model
       NotificationCenter.default.post(name: .voiceySelectedModelDidChange, object: model)
+    }
+    .onChange(of: transcriptionGlossary) {
+      SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
+    }
+    .onDisappear {
+      SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
     }
   }
 }
@@ -624,7 +666,8 @@ struct ModelRowView: View {
 
 struct VoiceCommandsSettingsView: View {
   private static let defaults = SettingsManager.defaultsStore
-  @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool = false
+  @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool =
+    false
   @State private var commands: [VoiceCommand] = SettingsManager.shared.voiceCommands
   @State private var showAddCommand: Bool = false
 
@@ -634,8 +677,8 @@ struct VoiceCommandsSettingsView: View {
         Toggle(L10n.VoiceCommands.enable, isOn: $voiceCommandsEnabled)
 
         Text(L10n.VoiceCommands.description)
-        .font(.caption)
-        .foregroundStyle(.secondary)
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
 
       if voiceCommandsEnabled {
@@ -808,9 +851,11 @@ struct AddVoiceCommandView: View {
 
 struct AdvancedSettingsView: View {
   private static let defaults = SettingsManager.defaultsStore
-  @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
+  @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool =
+    false
   @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
-  @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste: Bool = true
+  @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste:
+    Bool = true
   @AppStorage("pauseMediaDuringTranscription", store: defaults)
   private var pauseMediaDuringTranscription: Bool = true
   @State private var accessibilityGranted = false
@@ -818,7 +863,7 @@ struct AdvancedSettingsView: View {
   @State private var showClearError = false
   @State private var runtimeDiagnosticsCopied = false
   #if VOICEY_DIRECT_DISTRIBUTION
-  @ObservedObject private var sparkleUpdater = SparkleUpdater.shared
+    @ObservedObject private var sparkleUpdater = SparkleUpdater.shared
   #endif
 
   var body: some View {
@@ -916,21 +961,22 @@ struct AdvancedSettingsView: View {
           L10n.Advanced.version,
           value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
         LabeledContent(
-          L10n.Advanced.build, value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
+          L10n.Advanced.build,
+          value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
 
         #if VOICEY_DIRECT_DISTRIBUTION
-        LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.directInstall)
+          LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.directInstall)
 
-        Button(L10n.Advanced.checkForUpdates) {
-          sparkleUpdater.checkForUpdates()
-        }
-        .disabled(!sparkleUpdater.canCheckForUpdates)
+          Button(L10n.Advanced.checkForUpdates) {
+            sparkleUpdater.checkForUpdates()
+          }
+          .disabled(!sparkleUpdater.canCheckForUpdates)
 
-        Text(L10n.Advanced.updatesDeliveredFrom)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+          Text(L10n.Advanced.updatesDeliveredFrom)
+            .font(.caption)
+            .foregroundStyle(.secondary)
         #else
-        LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.appStore)
+          LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.appStore)
         #endif
       }
     }

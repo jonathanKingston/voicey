@@ -105,6 +105,10 @@
 "model.failedToDelete" = "Failed to Delete Model";
 "model.ok" = "OK";
 "model.unknownError" = "Unknown error";
+"model.transcriptionGlossary" = "Transcription Glossary";
+"model.transcriptionGlossaryEnable" = "Bias spelling toward glossary terms";
+"model.transcriptionGlossaryDescription" = "Names and terms listed here are sent to the Qwen model before transcription to improve spelling. Separate entries with commas or new lines.";
+"model.transcriptionGlossaryPlaceholder" = "Metformin, HbA1c, Voicey, QuirkQuid";
 
 /* Voice Commands */
 "voiceCommands.enable" = "Enable Voice Commands";

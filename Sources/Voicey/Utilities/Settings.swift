@@ -38,6 +38,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.restoreClipboardAfterPaste: true,  // Restore original clipboard after paste
       Keys.pauseMediaDuringTranscription: true,
       Keys.voiceCommandsEnabled: false,
+      Keys.transcriptionGlossaryEnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
     ])
@@ -56,6 +57,8 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let pauseMediaDuringTranscription = "pauseMediaDuringTranscription"
     static let voiceCommandsEnabled = "voiceCommandsEnabled"
     static let voiceCommands = "voiceCommands"
+    static let transcriptionGlossaryEnabled = "transcriptionGlossaryEnabled"
+    static let transcriptionGlossary = "transcriptionGlossary"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
   }
@@ -141,6 +144,20 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     } catch {
       AppLogger.general.error("Failed to configure launch at login: \(error)")
     }
+  }
+
+  // MARK: - Transcription Glossary (Qwen)
+
+  /// When enabled, glossary terms are passed to Qwen3 ASR as decoder context before transcription.
+  var transcriptionGlossaryEnabled: Bool {
+    get { defaults.bool(forKey: Keys.transcriptionGlossaryEnabled) }
+    set { defaults.set(newValue, forKey: Keys.transcriptionGlossaryEnabled) }
+  }
+
+  /// Comma- or newline-separated terms and names to bias Qwen transcription spelling.
+  var transcriptionGlossary: String {
+    get { defaults.string(forKey: Keys.transcriptionGlossary) ?? "" }
+    set { defaults.set(newValue, forKey: Keys.transcriptionGlossary) }
   }
 
   // MARK: - Voice Commands

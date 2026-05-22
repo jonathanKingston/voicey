@@ -290,6 +290,14 @@ enum L10n {
         static var failedToDelete: String { L10n.string("model.failedToDelete") }
         static var ok: String { L10n.string("model.ok") }
         static var unknownError: String { L10n.string("model.unknownError") }
+        static var transcriptionGlossary: String { L10n.string("model.transcriptionGlossary") }
+        static var transcriptionGlossaryEnable: String { L10n.string("model.transcriptionGlossaryEnable") }
+        static var transcriptionGlossaryDescription: String {
+            L10n.string("model.transcriptionGlossaryDescription")
+        }
+        static var transcriptionGlossaryPlaceholder: String {
+            L10n.string("model.transcriptionGlossaryPlaceholder")
+        }
     }
 
     // MARK: - Voice Commands

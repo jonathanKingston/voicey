@@ -1,5 +1,6 @@
 import Foundation
 import Qwen3ASR
+import VoiceyCore
 import os
 
 /// Wrapper around native Swift MLX Qwen3-ASR models.
@@ -101,7 +102,8 @@ final class QwenEngine: @unchecked Sendable {
       throw QwenError.invalidModel
     }
     guard ModelManager.shared.modelPath(for: selectedModel) != nil,
-          let modelID = selectedModel.huggingFaceModelId else {
+      let modelID = selectedModel.huggingFaceModelId
+    else {
       throw QwenError.modelNotDownloaded
     }
 
@@ -138,7 +140,24 @@ final class QwenEngine: @unchecked Sendable {
     let thermalStateBefore = ProcessInfo.processInfo.thermalState
     let audioDuration = Double(audioBuffer.count) / 16000.0
     let startTime = CFAbsoluteTimeGetCurrent()
-    let transcribedText = qwenModel.transcribe(audio: audioBuffer, sampleRate: 16000, language: nil)
+
+    let settings = SettingsManager.shared
+    let decodingContext = TranscriptionGlossary.decodingContext(
+      enabled: settings.transcriptionGlossaryEnabled,
+      rawGlossary: settings.transcriptionGlossary
+    )
+    if let decodingContext {
+      AppLogger.transcription.info(
+        "QwenEngine: Using transcription glossary context (\(decodingContext.count) characters)"
+      )
+    }
+
+    let options = Qwen3DecodingOptions(context: decodingContext)
+    let transcribedText = qwenModel.transcribe(
+      audio: audioBuffer,
+      sampleRate: 16000,
+      options: options
+    )
     let processingTime = CFAbsoluteTimeGetCurrent() - startTime
     let rtf = audioDuration > 0 ? processingTime / audioDuration : 0
 
