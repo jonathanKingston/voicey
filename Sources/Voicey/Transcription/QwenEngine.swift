@@ -142,13 +142,21 @@ final class QwenEngine: @unchecked Sendable {
     let startTime = CFAbsoluteTimeGetCurrent()
 
     let settings = SettingsManager.shared
-    let decodingContext = TranscriptionGlossary.decodingContext(
-      enabled: settings.transcriptionGlossaryEnabled,
-      rawGlossary: settings.transcriptionGlossary
-    )
+    var contextTerms: [String] = []
+    if settings.transcriptionGlossaryEnabled {
+      contextTerms.append(contentsOf: TranscriptionGlossary.parseTerms(settings.transcriptionGlossary))
+    }
+    if settings.transcriptionScreenContextEnabled {
+      let screenTerms = ScreenContextStore.shared.consumeScreenTerms(
+        manualGlossaryForQuery: settings.transcriptionGlossary
+      )
+      contextTerms.append(contentsOf: screenTerms)
+    }
+
+    let decodingContext = TranscriptionGlossary.decodingContext(terms: contextTerms)
     if let decodingContext {
       AppLogger.transcription.info(
-        "QwenEngine: Using transcription glossary context (\(decodingContext.count) characters)"
+        "QwenEngine: Using transcription context (\(decodingContext.count) chars, \(contextTerms.count) terms)"
       )
     }
 

@@ -17,7 +17,7 @@ public enum TextCleanup {
   public static func isConjunction(_ text: String) -> Bool {
     let conjunctions = [
       "and", "but", "or", "so", "yet", "for", "nor",
-      "because", "although", "while", "if", "when"
+      "because", "although", "while", "if", "when",
     ]
     let firstWord = text.lowercased().split(separator: " ").first.map(String.init) ?? ""
     return conjunctions.contains(firstWord)
@@ -29,10 +29,12 @@ public enum TextCleanup {
 
     for (spoken, written) in expansions {
       let pattern = "\\b\(NSRegularExpression.escapedPattern(for: spoken))\\b"
-      guard let regex = try? NSRegularExpression(
-        pattern: pattern,
-        options: .caseInsensitive
-      ) else { continue }
+      guard
+        let regex = try? NSRegularExpression(
+          pattern: pattern,
+          options: .caseInsensitive
+        )
+      else { continue }
       result = regex.stringByReplacingMatches(
         in: result,
         range: NSRange(result.startIndex..., in: result),

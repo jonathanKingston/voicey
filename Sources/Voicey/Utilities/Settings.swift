@@ -39,6 +39,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.pauseMediaDuringTranscription: true,
       Keys.voiceCommandsEnabled: false,
       Keys.transcriptionGlossaryEnabled: false,
+      Keys.transcriptionScreenContextEnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
     ])
@@ -59,6 +60,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let voiceCommands = "voiceCommands"
     static let transcriptionGlossaryEnabled = "transcriptionGlossaryEnabled"
     static let transcriptionGlossary = "transcriptionGlossary"
+    static let transcriptionScreenContextEnabled = "transcriptionScreenContextEnabled"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
   }
@@ -158,6 +160,12 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var transcriptionGlossary: String {
     get { defaults.string(forKey: Keys.transcriptionGlossary) ?? "" }
     set { defaults.set(newValue, forKey: Keys.transcriptionGlossary) }
+  }
+
+  /// When enabled, reads the target app's accessibility tree at record start and steers Qwen spelling.
+  var transcriptionScreenContextEnabled: Bool {
+    get { defaults.bool(forKey: Keys.transcriptionScreenContextEnabled) }
+    set { defaults.set(newValue, forKey: Keys.transcriptionScreenContextEnabled) }
   }
 
   // MARK: - Voice Commands

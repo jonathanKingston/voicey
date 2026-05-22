@@ -298,6 +298,12 @@ enum L10n {
         static var transcriptionGlossaryPlaceholder: String {
             L10n.string("model.transcriptionGlossaryPlaceholder")
         }
+        static var transcriptionScreenContextEnable: String {
+            L10n.string("model.transcriptionScreenContextEnable")
+        }
+        static var transcriptionScreenContextDescription: String {
+            L10n.string("model.transcriptionScreenContextDescription")
+        }
     }
 
     // MARK: - Voice Commands

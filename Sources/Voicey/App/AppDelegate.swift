@@ -926,6 +926,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       recordingTargetScreen = nil
     }
 
+    startScreenContextCaptureIfNeeded()
+
     if dependencies.settings.pauseMediaDuringTranscription {
       dependencies.mediaPlayback.pauseForTranscription()
     }
@@ -985,6 +987,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Find screen containing this point
     return NSScreen.screens.first { screen in
       screen.frame.contains(cocoaCenter)
+    }
+  }
+
+  private func startScreenContextCaptureIfNeeded() {
+    ScreenContextStore.shared.clear()
+
+    guard dependencies.settings.transcriptionScreenContextEnabled else { return }
+    guard dependencies.permissions.checkAccessibilityPermission() else {
+      AppLogger.transcription.warning(
+        "Screen context enabled but Accessibility permission is not granted")
+      return
+    }
+    guard let targetPID = recordingTargetPID else { return }
+
+    Task.detached(priority: .utility) {
+      let snapshot = ScreenContextCollector.capture(targetPID: targetPID)
+      ScreenContextStore.shared.set(snapshot)
     }
   }
 

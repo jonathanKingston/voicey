@@ -17,6 +17,7 @@ protocol SettingsProviding: AnyObject {
   var voiceCommands: [VoiceCommand] { get set }
   var transcriptionGlossaryEnabled: Bool { get set }
   var transcriptionGlossary: String { get set }
+  var transcriptionScreenContextEnabled: Bool { get set }
   var enableDetailedLogging: Bool { get set }
 
   func configureLaunchAtLogin(enabled: Bool)

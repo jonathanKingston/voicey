@@ -109,6 +109,8 @@
 "model.transcriptionGlossaryEnable" = "Bias spelling toward glossary terms";
 "model.transcriptionGlossaryDescription" = "Names and terms listed here are sent to the Qwen model before transcription to improve spelling. Separate entries with commas or new lines.";
 "model.transcriptionGlossaryPlaceholder" = "Metformin, HbA1c, Voicey, QuirkQuid";
+"model.transcriptionScreenContextEnable" = "Use accessibility text from target app";
+"model.transcriptionScreenContextDescription" = "When recording starts, Voicey reads the front app's focused field and nearby UI text, ranks terms with BM25, and sends them to Qwen before transcription. Requires Accessibility permission.";
 
 /* Voice Commands */
 "voiceCommands.enable" = "启用语音命令";

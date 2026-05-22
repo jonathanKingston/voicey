@@ -11,6 +11,13 @@ final class TranscriptionGlossaryTests: XCTestCase {
     XCTAssertNil(TranscriptionGlossary.decodingContext(enabled: true, rawGlossary: "  \n  "))
   }
 
+  func testDecodingContextMergesManualAndScreenTerms() {
+    let context = TranscriptionGlossary.decodingContext(
+      terms: ["Voicey", "metformin", "Voicey"]
+    )
+    XCTAssertEqual(context, "Glossary: Voicey, metformin")
+  }
+
   func testFormatCommaSeparatedTerms() {
     XCTAssertEqual(
       TranscriptionGlossary.format("Metformin, HbA1c, nephropathy"),

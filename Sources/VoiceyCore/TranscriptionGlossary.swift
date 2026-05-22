@@ -5,16 +5,29 @@ public enum TranscriptionGlossary {
   /// Upper bound on glossary context length passed to the model.
   public static let maxContextCharacterCount = 2000
 
-  /// Returns decoder context when enabled and the glossary contains terms.
+  /// Returns decoder context for the combined term list, or nil when empty.
+  public static func decodingContext(terms: [String]) -> String? {
+    let unique = ScreenTermSelector.dedupePreservingOrder(
+      terms,
+      maxCount: ScreenTermSelector.defaultMaxTerms
+    )
+    guard !unique.isEmpty else { return nil }
+    return formatTerms(unique)
+  }
+
+  /// Returns decoder context when only a manual glossary is enabled.
   public static func decodingContext(enabled: Bool, rawGlossary: String) -> String? {
     guard enabled else { return nil }
-    let formatted = format(rawGlossary)
-    return formatted.isEmpty ? nil : formatted
+    return decodingContext(terms: parseTerms(rawGlossary))
   }
 
   /// Normalizes user glossary text into a Qwen decoder context prefix.
   public static func format(_ raw: String) -> String {
-    let terms = parseTerms(raw)
+    formatTerms(parseTerms(raw))
+  }
+
+  /// Formats an ordered term list into decoder context.
+  public static func formatTerms(_ terms: [String]) -> String {
     guard !terms.isEmpty else { return "" }
 
     let joined = terms.joined(separator: ", ")

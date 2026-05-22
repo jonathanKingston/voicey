@@ -493,6 +493,8 @@ struct ModelSettingsView: View {
     .defaultModel.rawValue
   @AppStorage("transcriptionGlossaryEnabled", store: defaults) private
     var transcriptionGlossaryEnabled = false
+  @AppStorage("transcriptionScreenContextEnabled", store: defaults) private
+    var transcriptionScreenContextEnabled = false
   @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
 
   private var selectedSpeechModel: SpeechModel? {
@@ -531,6 +533,12 @@ struct ModelSettingsView: View {
 
       if selectedSpeechModel?.isQwenModel == true {
         Section(L10n.Model.transcriptionGlossary) {
+          Toggle(L10n.Model.transcriptionScreenContextEnable, isOn: $transcriptionScreenContextEnabled)
+
+          Text(L10n.Model.transcriptionScreenContextDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
           Toggle(L10n.Model.transcriptionGlossaryEnable, isOn: $transcriptionGlossaryEnabled)
 
           Text(L10n.Model.transcriptionGlossaryDescription)
