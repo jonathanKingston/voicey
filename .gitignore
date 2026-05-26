@@ -17,6 +17,7 @@ xcuserdata/
 .build/
 .swiftpm/
 Package.resolved
+/target/
 
 # macOS
 .DS_Store

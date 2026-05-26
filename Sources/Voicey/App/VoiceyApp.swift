@@ -16,6 +16,11 @@ struct VoiceyApp: App {
 @main
 enum VoiceyMain {
   static func main() async {
+    if InferWorkerCommand.canHandle(CommandLine.arguments) {
+      let exitCode = await InferWorkerCommand.run()
+      exit(Int32(exitCode))
+    }
+
     if BenchmarkTranscribeCommand.canHandle(CommandLine.arguments) {
       let exitCode = await BenchmarkTranscribeCommand.run(arguments: CommandLine.arguments)
       exit(Int32(exitCode))
@@ -28,6 +33,11 @@ enum VoiceyMain {
 
     if BenchmarkModelDownloadCommand.canHandle(CommandLine.arguments) {
       let exitCode = await BenchmarkModelDownloadCommand.run(arguments: CommandLine.arguments)
+      exit(Int32(exitCode))
+    }
+
+    if BenchmarkCaptureCompareCommand.canHandle(CommandLine.arguments) {
+      let exitCode = await BenchmarkCaptureCompareCommand.run(arguments: CommandLine.arguments)
       exit(Int32(exitCode))
     }
 

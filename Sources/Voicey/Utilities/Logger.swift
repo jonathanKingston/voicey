@@ -11,6 +11,7 @@ enum AppLogger {
   static let ui = Logger(subsystem: subsystem, category: "ui")
   static let general = Logger(subsystem: subsystem, category: "general")
   static let model = Logger(subsystem: subsystem, category: "model")
+  static let runtime = Logger(subsystem: subsystem, category: "runtime")
 }
 
 enum RuntimeOutputMode {

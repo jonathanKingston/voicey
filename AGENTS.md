@@ -132,3 +132,7 @@ When making code changes on this codebase from a Cloud Agent:
 4. The Swift toolchain is at `/opt/swift/usr/bin`. It is added to `PATH` via `~/.bashrc`.
 5. SwiftLint is installed at `/usr/local/bin/swiftlint` (v0.58.2, Linux x86_64 binary).
 6. `libstdc++-14-dev` must be installed for SPM dependency resolution to compile C++ dependencies (BoringSSL in swift-crypto).
+
+### Rust sandboxed runtime (macOS)
+
+See [`docs/RUST_RUNTIME.md`](docs/RUST_RUNTIME.md). Build workers with `make build-rust` (requires Rust toolchain on macOS). Qwen uses the infer worker by default; set `VOICEY_RUNTIME=in-process` to force in-app MLX. Runtime parity: `make benchmark-runtime-parity-common-voice`, `make benchmark-measure-runtime-memory`.

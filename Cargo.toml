@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/voicey-protocol",
+  "crates/voicey-supervisor",
+  "crates/voicey-fetch",
+  "crates/voicey-capture",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"

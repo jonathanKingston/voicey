@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // ESC key monitors
   private var localEscKeyMonitor: Any?
   private var selectedModelObserver: Any?
+  private var workspaceWakeObserver: Any?
 
   // Model upgrade lock - prevents recording during model swap
   private var isUpgradingModel = false
@@ -99,6 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Setup ESC key monitor
     setupEscapeKeyMonitor()
+
+    setupWorkspaceWakeObserver()
 
     // Check if setup is complete - show onboarding if anything is missing
     Task {
@@ -157,9 +160,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationWillTerminate(_ notification: Notification) {
     ProcessInfo.processInfo.enableAutomaticTermination(Self.automaticTerminationReason)
 
+    if let observer = workspaceWakeObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(observer)
+      workspaceWakeObserver = nil
+    }
+
     if let observer = selectedModelObserver {
       NotificationCenter.default.removeObserver(observer)
     }
+
+    let shutdownSemaphore = DispatchSemaphore(value: 0)
+    Task {
+      await VoiceyRuntimeSupervisor.shared.shutdownGracefully()
+      shutdownSemaphore.signal()
+    }
+    _ = shutdownSemaphore.wait(timeout: .now() + 6)
 
     // Remove monitors
     if let monitor = localEscKeyMonitor {
@@ -189,11 +204,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     case .granitePython:
       return graniteEngine?.isModelLoaded == true
     case .qwenMLX:
+      if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
+        return multiprocessInferReady
+      }
       return qwenEngine?.isModelLoaded == true
     case .whisperKit:
       return whisperEngine?.isModelLoaded == true
     }
   }
+
+  private var multiprocessInferReady = false
 
   private func fallbackOrder(preferredBackend: SpeechBackendKind? = nil) -> [SpeechModel] {
     let baseOrder: [SpeechModel] = [
@@ -226,6 +246,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @MainActor
+  private func preloadQwen(selectedModel: SpeechModel) async -> Bool {
+    guard VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) else {
+      await qwenEngine?.preloadModel()
+      return qwenEngine?.isModelLoaded == true
+    }
+
+    qwenEngine?.unloadModel()
+    do {
+      try await VoiceyRuntimeSupervisor.shared.prewarmAllWorkers(model: selectedModel)
+      multiprocessInferReady = true
+      AppLogger.model.info(
+        "Qwen infer worker prewarmed for \(selectedModel.rawValue, privacy: .public)"
+      )
+      return true
+    } catch {
+      multiprocessInferReady = false
+      VoiceyRuntimeDiagnostics.recordInferWorkerError(error.localizedDescription)
+      AppLogger.model.error("Infer worker prewarm failed: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  private func modelLoadFailureMessage(for model: SpeechModel) -> String {
+    if model.isQwenModel, VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
+      return VoiceyRuntimeDiagnostics.userFacingLoadFailureMessage()
+    }
+    return L10n.Runtime.genericModelLoadFailed
+  }
+
+  private func setupWorkspaceWakeObserver() {
+    workspaceWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didWakeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        await self?.handleSystemDidWake()
+      }
+    }
+  }
+
+  @MainActor
+  private func handleSystemDidWake() async {
+    let model = SettingsManager.shared.selectedModel
+    guard VoiceyRuntimeConfiguration.usesInferWorker(for: model) else { return }
+
+    let healthy = await VoiceyRuntimeSupervisor.shared.verifyInferWorkerHealth(model: model)
+    guard !healthy else { return }
+
+    multiprocessInferReady = false
+    appState.modelStatus = .loading
+    let preloadSucceeded = await preloadQwen(selectedModel: model)
+    if preloadSucceeded && isActiveEngineLoaded {
+      appState.modelStatus = .ready
+    } else {
+      appState.modelStatus = .failed(modelLoadFailureMessage(for: model))
+    }
+  }
+
+  @MainActor
   private func preloadSelectedModel() async -> Bool {
     let selectedModel = SettingsManager.shared.selectedModel
 
@@ -234,8 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       await graniteEngine?.preloadModel()
       return graniteEngine?.isModelLoaded == true
     case .qwenMLX:
-      await qwenEngine?.preloadModel()
-      return qwenEngine?.isModelLoaded == true
+      return await preloadQwen(selectedModel: selectedModel)
     case .whisperKit:
       await whisperEngine?.preloadModel()
       return whisperEngine?.isModelLoaded == true
@@ -251,6 +330,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return true
     }
 
+    if selectedModel.isQwenModel,
+      VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel),
+      ModelManager.shared.isDownloaded(selectedModel) {
+      return false
+    }
+
     if let fallback = bestAvailableFallback(excluding: selectedModel.backendKind) {
       debugPrint(
         "⚠️ \(selectedModel.displayName) unavailable, falling back to \(fallback.displayName)",
@@ -264,8 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await graniteEngine?.preloadModel()
         return graniteEngine?.isModelLoaded == true
       case .qwenMLX:
-        await qwenEngine?.preloadModel()
-        return qwenEngine?.isModelLoaded == true
+        return await preloadQwen(selectedModel: fallback)
       case .whisperKit:
         await whisperEngine?.preloadModel()
         return whisperEngine?.isModelLoaded == true
@@ -304,7 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if preloadSucceeded && isActiveEngineLoaded {
       appState.modelStatus = .ready
     } else {
-      appState.modelStatus = .failed("Failed to load model")
+      appState.modelStatus = .failed(modelLoadFailureMessage(for: model))
     }
   }
 
@@ -316,6 +400,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       graniteEngine?.unloadModel()
     }
     if backend != .qwenMLX {
+      qwenEngine?.unloadModel()
+      multiprocessInferReady = false
+      Task {
+        await VoiceyRuntimeSupervisor.shared.shutdownGracefully()
+      }
+    } else if VoiceyRuntimeConfiguration.usesInferWorker(
+      for: SettingsManager.shared.selectedModel) {
       qwenEngine?.unloadModel()
     }
   }
@@ -498,7 +589,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.modelStatus = .ready
             debugPrint("✅ Model ready in \(String(format: "%.1f", loadTime))s", category: "MODEL")
           } else {
-            appState.modelStatus = .failed("Failed to load model")
+            let model = SettingsManager.shared.selectedModel
+            appState.modelStatus = .failed(self.modelLoadFailureMessage(for: model))
             debugPrint("❌ Model preload failed", category: "MODEL")
           }
         }
@@ -733,7 +825,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           appState.modelStatus = .ready
           debugPrint("✅ Model ready!", category: "MODEL")
         } else {
-          appState.modelStatus = .failed("Failed to load model")
+          let model = SettingsManager.shared.selectedModel
+          appState.modelStatus = .failed(modelLoadFailureMessage(for: model))
         }
       }
     }
@@ -796,10 +889,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.beginRecordingAfterModelReady()
           } else {
             self.hideOverlay()
-            self.appState.modelStatus = .failed("Failed to load model")
-            self.appState.transcriptionState = .error(message: "Model failed to load")
+            let model = SettingsManager.shared.selectedModel
+            self.appState.modelStatus = .failed(self.modelLoadFailureMessage(for: model))
+            self.appState.transcriptionState = .error(
+              message: self.modelLoadFailureMessage(for: model))
             self.dependencies.notifications.showTranscriptionError(
-              "Model failed to load. Please try again.")
+              self.modelLoadFailureMessage(for: model))
           }
         }
       }
@@ -827,9 +922,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           } else {
             // Model failed to load or timed out
             self.hideOverlay()
-            self.appState.transcriptionState = .error(message: "Model failed to load")
-            self.dependencies.notifications.showTranscriptionError(
-              "Model failed to load. Please try again.")
+            let model = SettingsManager.shared.selectedModel
+            let message = self.modelLoadFailureMessage(for: model)
+            self.appState.transcriptionState = .error(message: message)
+            self.dependencies.notifications.showTranscriptionError(message)
           }
         }
       }
@@ -1015,10 +1111,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         result = graniteResult
       case .qwenMLX:
-        guard let qwenResult = try await qwenEngine?.transcribe(audioBuffer: audioBuffer) else {
-          throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
+        if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
+          result = try await VoiceyRuntimeSupervisor.shared.transcribe(
+            samples: audioBuffer,
+            model: selectedModel,
+            warmupAlreadyDone: multiprocessInferReady
+          )
+        } else {
+          guard let qwenResult = try await qwenEngine?.transcribe(audioBuffer: audioBuffer) else {
+            throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
+          }
+          result = qwenResult
         }
-        result = qwenResult
       case .whisperKit:
         guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer)
         else {
@@ -1182,20 +1286,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       // Preload the model after download
       self?.appState.modelStatus = .loading
       Task { [weak self] in
-        let selectedModel = SettingsManager.shared.selectedModel
-        switch selectedModel.backendKind {
-        case .granitePython:
-          await self?.graniteEngine?.preloadModel()
-        case .qwenMLX:
-          await self?.qwenEngine?.preloadModel()
-        case .whisperKit:
-          await self?.whisperEngine?.preloadModel()
-        }
+        guard let self else { return }
+        let preloadSucceeded = await self.preloadSelectedModel()
         await MainActor.run { [weak self] in
-          if self?.isActiveEngineLoaded == true {
-            self?.appState.modelStatus = .ready
+          guard let self else { return }
+          let model = SettingsManager.shared.selectedModel
+          if preloadSucceeded && self.isActiveEngineLoaded {
+            self.appState.modelStatus = .ready
           } else {
-            self?.appState.modelStatus = .failed("Failed to load model")
+            self.appState.modelStatus = .failed(self.modelLoadFailureMessage(for: model))
           }
         }
       }
