@@ -1,19 +1,30 @@
 mod ipc;
+mod recording;
 mod shm;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use recording::LiveRecorder;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread;
 use std::time::Duration;
 
 const TARGET_SAMPLE_RATE: f64 = 16_000.0;
+
+static LIVE_RECORDER: OnceLock<Mutex<LiveRecorder>> = OnceLock::new();
+
+fn live_recorder() -> &'static Mutex<LiveRecorder> {
+  LIVE_RECORDER.get_or_init(|| Mutex::new(LiveRecorder::new()))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum CaptureRequest {
     Ping { id: String },
     Prewarm { id: String },
+    StartRecording { id: String },
+    StopRecording { id: String },
     RecordFixture { id: String, duration_seconds: f64 },
     Shutdown { id: String },
 }
@@ -88,6 +99,31 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
                 },
             }
         }
+        CaptureRequest::StartRecording { id } => {
+            let mut recorder = live_recorder().lock().expect("recorder lock");
+            match recorder.start() {
+                Ok(()) => CaptureResponse::CaptureReady { id },
+                Err(message) => CaptureResponse::Error { id, message },
+            }
+        }
+        CaptureRequest::StopRecording { id } => match stop_live_recording() {
+            Ok((shm_name, count)) => CaptureResponse::CaptureFixtureResult {
+                id,
+                ok: true,
+                shm_name: Some(shm_name),
+                sample_count: Some(count),
+                sample_rate: Some(TARGET_SAMPLE_RATE as u32),
+                error: None,
+            },
+            Err(message) => CaptureResponse::CaptureFixtureResult {
+                id,
+                ok: false,
+                shm_name: None,
+                sample_count: None,
+                sample_rate: None,
+                error: Some(message),
+            },
+        },
         CaptureRequest::RecordFixture { id, duration_seconds } => {
             if duration_seconds <= 0.0 || duration_seconds > 30.0 {
                 return CaptureResponse::CaptureFixtureResult {
@@ -120,6 +156,13 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
         }
         CaptureRequest::Shutdown { id } => CaptureResponse::Pong { id },
     }
+}
+
+fn stop_live_recording() -> Result<(String, usize), String> {
+    let mut recorder = live_recorder().lock().expect("recorder lock");
+    let samples = recorder.stop()?;
+    let shm_name = shm::write_f32_samples(&samples).map_err(|error| error.to_string())?;
+    Ok((shm_name, samples.len()))
 }
 
 fn prewarm_device() -> std::io::Result<()> {

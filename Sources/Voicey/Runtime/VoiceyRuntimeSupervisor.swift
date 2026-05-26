@@ -56,9 +56,7 @@ actor VoiceyRuntimeSupervisor {
   }
 
   func prewarmCapture() async throws {
-    if VoiceyRuntimeConfiguration.useRustCapture,
-      VoiceyRuntimeConfiguration.captureWorkerPath != nil
-    {
+    if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
       try await VoiceyCaptureWorkerSession.shared.prewarm()
       captureReady = true
       return

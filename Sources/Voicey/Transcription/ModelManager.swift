@@ -536,12 +536,21 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
             ModelManager.shared.downloadProgress[model] = progress
           }
         }
-        try await HuggingFaceDownloader.downloadWeights(
-          modelId: hfId,
-          to: modelDir,
-          additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
-          progressHandler: qwenProgressHandler
-        )
+        if VoiceyRuntimeConfiguration.useRustFetch {
+          try await VoiceyRustQwenDownloader.downloadWeights(
+            modelId: hfId,
+            to: modelDir,
+            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+            progressHandler: qwenProgressHandler
+          )
+        } else {
+          try await HuggingFaceDownloader.downloadWeights(
+            modelId: hfId,
+            to: modelDir,
+            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+            progressHandler: qwenProgressHandler
+          )
+        }
 
         guard modelPath(for: model) != nil else {
           throw ModelDownloadError.verificationFailed

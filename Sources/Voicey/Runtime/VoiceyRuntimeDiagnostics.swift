@@ -64,9 +64,10 @@ enum VoiceyRuntimeDiagnostics {
     lines.append("Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")")
     lines.append("Selected model: \(selectedModel.rawValue)")
     lines.append("VOICEY_RUNTIME: \(envOverride)")
-    lines.append(
-      "Qwen infer worker enabled: \(VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel))"
-    )
+    lines.append("Qwen infer worker: \(VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel))")
+    lines.append("Rust supervisor: \(VoiceyRuntimeConfiguration.useRustSupervisor)")
+    lines.append("Rust fetch (Qwen downloads): \(VoiceyRuntimeConfiguration.useRustFetch)")
+    lines.append("Rust capture (hotkey mic): \(VoiceyRuntimeConfiguration.useRustCaptureHotPath)")
     lines.append("Infer worker ready (app): \(inferReady)")
     if let readyModel {
       lines.append("Infer worker loaded model: \(readyModel)")

@@ -109,7 +109,7 @@ bundle: build-release
 	@echo "App bundle created: $(APP_BUNDLE)"
 
 # Create app bundle from debug build (recommended for testing permissions during development)
-bundle-debug: build
+bundle-debug: build build-rust
 	@echo "Creating debug app bundle..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(MACOS_DIR)
@@ -130,7 +130,7 @@ bundle-debug: build
 	@echo "Debug app bundle created: $(APP_BUNDLE)"
 
 # Create debug app bundle with direct-distribution features
-bundle-debug-direct: build-direct
+bundle-debug-direct: build-direct build-rust
 	@echo "Creating debug app bundle (direct distribution)..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(MACOS_DIR)
@@ -392,7 +392,7 @@ test-sparkle-linking:
 
 # Run debug bundle (Qwen uses infer-worker by default)
 run-multiprocess: bundle-debug sign-local-debug
-	@echo "Launching Voicey.app (Qwen transcription uses infer-worker by default)."
+	@echo "Launching Voicey.app (Rust workers on hot path when bundled; run make build-rust if missing)."
 	@open -n "$(CURDIR)/$(APP_BUNDLE)"
 
 # Run debug bundle with direct-distribution flags (recommended default)
