@@ -1,12 +1,18 @@
 import Foundation
 
-/// Orchestrates prewarmed workers for Qwen multiprocess transcription.
+/// Orchestrates prewarmed workers for Qwen infer-worker transcription.
 actor VoiceyRuntimeSupervisor {
   static let shared = VoiceyRuntimeSupervisor()
 
   private let inferClient = QwenInferWorkerClient()
+  private let rustSupervisor = VoiceyRustSupervisorClient()
   private var inferReadyModel: SpeechModel?
   private var captureReady = false
+
+  private var usesRustSupervisor: Bool {
+    VoiceyRuntimeConfiguration.useRustSupervisor
+      && VoiceyRuntimeConfiguration.rustSupervisorPath != nil
+  }
 
   func prewarmAllWorkers(model: SpeechModel) async throws {
     try await prewarmInfer(model: model)
@@ -18,7 +24,11 @@ actor VoiceyRuntimeSupervisor {
       throw VoiceyRuntimeError.unsupportedModel(model.rawValue)
     }
     if inferReadyModel != model {
-      inferClient.stop()
+      if usesRustSupervisor {
+        rustSupervisor.stop()
+      } else {
+        inferClient.stop()
+      }
     }
     try await prewarmInferWithRetry(model: model)
     inferReadyModel = model
@@ -26,17 +36,40 @@ actor VoiceyRuntimeSupervisor {
 
   private func prewarmInferWithRetry(model: SpeechModel) async throws {
     do {
-      try await inferClient.prewarm(model: model)
+      if usesRustSupervisor {
+        try await rustSupervisor.prewarmInfer(model: model)
+      } else {
+        try await inferClient.prewarm(model: model)
+      }
     } catch {
       AppLogger.runtime.warning(
-        "Infer worker prewarm failed, retrying once: \(error.localizedDescription, privacy: .public)"
+        "Infer prewarm failed, retrying once: \(error.localizedDescription, privacy: .public)"
       )
-      inferClient.stop()
-      try await inferClient.prewarm(model: model)
+      if usesRustSupervisor {
+        rustSupervisor.stop()
+        try await rustSupervisor.prewarmInfer(model: model)
+      } else {
+        inferClient.stop()
+        try await inferClient.prewarm(model: model)
+      }
     }
   }
 
   func prewarmCapture() async throws {
+    if VoiceyRuntimeConfiguration.useRustCapture,
+      VoiceyRuntimeConfiguration.captureWorkerPath != nil
+    {
+      try await VoiceyCaptureWorkerSession.shared.prewarm()
+      captureReady = true
+      return
+    }
+
+    if usesRustSupervisor {
+      try await rustSupervisor.prewarmCapture()
+      captureReady = true
+      return
+    }
+
     guard let path = VoiceyRuntimeConfiguration.captureWorkerPath else {
       captureReady = true
       return
@@ -53,14 +86,24 @@ actor VoiceyRuntimeSupervisor {
       throw VoiceyRuntimeError.unsupportedModel(model.rawValue)
     }
     do {
+      if usesRustSupervisor {
+        return try await rustSupervisor.transcribe(samples: samples, model: model)
+      }
       return try await inferClient.transcribe(samples: samples, model: model)
     } catch {
       AppLogger.runtime.warning(
-        "Infer worker transcribe failed, retrying once: \(error.localizedDescription, privacy: .public)"
+        "Infer transcribe failed, retrying once: \(error.localizedDescription, privacy: .public)"
       )
-      inferClient.stop()
+      if usesRustSupervisor {
+        rustSupervisor.stop()
+      } else {
+        inferClient.stop()
+      }
       inferReadyModel = nil
       try await prewarmInfer(model: model)
+      if usesRustSupervisor {
+        return try await rustSupervisor.transcribe(samples: samples, model: model)
+      }
       return try await inferClient.transcribe(samples: samples, model: model)
     }
   }
@@ -68,24 +111,44 @@ actor VoiceyRuntimeSupervisor {
   func verifyInferWorkerHealth(model: SpeechModel) async -> Bool {
     guard model.isQwenModel, inferReadyModel == model else { return true }
     do {
-      try await inferClient.ping()
+      if usesRustSupervisor {
+        try await rustSupervisor.ping()
+      } else {
+        try await inferClient.ping()
+      }
       return true
     } catch {
       VoiceyRuntimeDiagnostics.recordInferWorkerError(error.localizedDescription)
-      inferClient.stop()
+      if usesRustSupervisor {
+        rustSupervisor.stop()
+      } else {
+        inferClient.stop()
+      }
       inferReadyModel = nil
       return false
     }
   }
 
   func shutdownGracefully() async {
-    await inferClient.gracefulShutdown()
+    if usesRustSupervisor {
+      rustSupervisor.stop()
+    } else {
+      await inferClient.gracefulShutdown()
+    }
+    VoiceyCaptureWorkerSession.shared.stop()
+    VoiceyFetchWorkerSession.shared.stop()
     inferReadyModel = nil
     captureReady = false
   }
 
   func shutdown() {
-    inferClient.stop()
+    if usesRustSupervisor {
+      rustSupervisor.stop()
+    } else {
+      inferClient.stop()
+    }
+    VoiceyCaptureWorkerSession.shared.stop()
+    VoiceyFetchWorkerSession.shared.stop()
     inferReadyModel = nil
     captureReady = false
   }

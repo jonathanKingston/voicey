@@ -36,6 +36,32 @@ enum VoiceyRuntimeConfiguration {
     ProcessInfo.processInfo.environment[useRustSupervisorKey] == "1"
   }
 
+  private static let useRustFetchKey = "VOICEY_USE_RUST_FETCH"
+  private static let useRustCaptureKey = "VOICEY_USE_RUST_CAPTURE"
+
+  /// When set, Qwen downloads preflight the Rust `voicey-fetch` worker (fail fast if missing).
+  static var useRustFetch: Bool {
+    ProcessInfo.processInfo.environment[useRustFetchKey] == "1"
+  }
+
+  /// When set, capture prewarm uses a long-lived `voicey-capture` worker when available.
+  static var useRustCapture: Bool {
+    ProcessInfo.processInfo.environment[useRustCaptureKey] == "1"
+  }
+
+  /// Environment variables for `voicey-supervisor` child worker spawning.
+  static func workerProcessEnvironment() -> [String: String] {
+    var environment = ProcessInfo.processInfo.environment
+    environment["VOICEY_INFER_WORKER"] = voiceyExecutablePath()
+    if let capturePath = captureWorkerPath {
+      environment["VOICEY_CAPTURE_WORKER"] = capturePath
+    }
+    if let fetchPath = fetchWorkerPath {
+      environment["VOICEY_FETCH_WORKER"] = fetchPath
+    }
+    return environment
+  }
+
   static var useXPCServices: Bool {
     ProcessInfo.processInfo.environment[useXPCServicesKey] == "1"
   }

@@ -522,6 +522,10 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     let task = Task {
       do {
+        if VoiceyRuntimeConfiguration.useRustFetch {
+          try await VoiceyFetchWorkerSession.shared.ping()
+        }
+
         guard let modelDir = qwenModelDirectory(for: model) else {
           throw ModelDownloadError.verificationFailed
         }
@@ -562,6 +566,9 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
           cleanupIncompleteDownload(model)
           let errorMessage = Self.classifyDownloadError(error)
           AppLogger.model.error("Qwen model download failed: \(errorMessage) (underlying: \(error))")
+          if VoiceyRuntimeConfiguration.useRustFetch {
+            VoiceyFetchWorkerSession.shared.stop()
+          }
           downloadError = errorMessage
           isDownloading[model] = false
           downloadProgress[model] = 0

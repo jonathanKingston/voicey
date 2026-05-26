@@ -1,50 +1,24 @@
 import Foundation
 
 struct VoiceyFetchWorkerClient {
-  let executablePath: String
-
   init?() {
-    guard let path = VoiceyRuntimeConfiguration.fetchWorkerPath else { return nil }
-    self.executablePath = path
+    guard VoiceyRuntimeConfiguration.fetchWorkerPath != nil else { return nil }
   }
 
-  func ping() throws {
-    _ = try send(request: ["type": "ping", "id": UUID().uuidString])
-  }
-
-  private func send(request: [String: Any]) throws -> [String: Any] {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: executablePath)
-    let inputPipe = Pipe()
-    let outputPipe = Pipe()
-    process.standardInput = inputPipe
-    process.standardOutput = outputPipe
-    try process.run()
-
-    let requestData = try JSONSerialization.data(withJSONObject: request)
-    guard var line = String(data: requestData, encoding: .utf8) else {
-      throw VoiceyFetchWorkerError.serializationFailed
-    }
-    line += "\n"
-    inputPipe.fileHandleForWriting.write(line.data(using: .utf8)!)
-    inputPipe.fileHandleForWriting.closeFile()
-
-    let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-
-    guard let json = try JSONSerialization.jsonObject(with: outputData) as? [String: Any] else {
-      throw VoiceyFetchWorkerError.invalidResponse
-    }
-    return json
+  func ping() async throws {
+    try await VoiceyFetchWorkerSession.shared.ping()
   }
 }
 
 enum VoiceyFetchWorkerError: LocalizedError {
+  case missingBinary
   case serializationFailed
   case invalidResponse
 
   var errorDescription: String? {
     switch self {
+    case .missingBinary:
+      return "voicey-fetch binary not found (run make build-rust)"
     case .serializationFailed:
       return "Unable to serialize fetch worker request"
     case .invalidResponse:

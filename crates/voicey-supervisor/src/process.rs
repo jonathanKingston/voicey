@@ -149,7 +149,7 @@ impl WorkerProcesses {
         model_id: &str,
         destination_root: &str,
     ) -> Result<String, String> {
-        let _worker = self.ensure_fetch()?;
+        self.fetch_ping()?;
         let path = std::path::PathBuf::from(destination_root).join(model_id);
         std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
         Ok(path.display().to_string())
@@ -157,14 +157,16 @@ impl WorkerProcesses {
 
     fn ensure_infer(&mut self) -> Result<&mut ManagedWorker, String> {
         if self.infer.is_none() {
-            self.infer = Some(spawn_worker(env_path("VOICEY_INFER_WORKER")?)?);
+            let path = env_path("VOICEY_INFER_WORKER")?;
+            self.infer = Some(spawn_worker(&path, &["infer-worker"])?);
         }
         self.infer.as_mut().ok_or_else(|| "infer worker missing".to_string())
     }
 
     fn ensure_capture(&mut self) -> Result<&mut ManagedWorker, String> {
         if self.capture.is_none() {
-            self.capture = Some(spawn_worker(env_path("VOICEY_CAPTURE_WORKER")?)?);
+            let path = env_path("VOICEY_CAPTURE_WORKER")?;
+            self.capture = Some(spawn_worker(&path, &[])?);
         }
         self.capture
             .as_mut()
@@ -173,9 +175,55 @@ impl WorkerProcesses {
 
     fn ensure_fetch(&mut self) -> Result<&mut ManagedWorker, String> {
         if self.fetch.is_none() {
-            self.fetch = Some(spawn_worker(env_path("VOICEY_FETCH_WORKER")?)?);
+            let path = env_path("VOICEY_FETCH_WORKER")?;
+            self.fetch = Some(spawn_worker(&path, &[])?);
         }
         self.fetch.as_mut().ok_or_else(|| "fetch worker missing".to_string())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FetchLineResponse {
+    #[serde(rename = "type")]
+    kind: String,
+    id: String,
+    message: Option<String>,
+}
+
+impl WorkerProcesses {
+    pub fn fetch_ping(&mut self) -> Result<(), String> {
+        let worker = self.ensure_fetch()?;
+        let line = serde_json::json!({"type":"ping","id":new_id()}).to_string();
+        let response: FetchLineResponse = write_fetch_json(worker, &line)?;
+        if response.kind == "pong" {
+            Ok(())
+        } else {
+            Err(response.message.unwrap_or_else(|| "fetch ping failed".into()))
+        }
+    }
+
+    pub fn fetch_download_hf_file(
+        &mut self,
+        url: &str,
+        staging_path: &str,
+        expected_sha256: Option<&str>,
+    ) -> Result<(), String> {
+        let worker = self.ensure_fetch()?;
+        let mut payload = serde_json::json!({
+            "type": "download_hf_file",
+            "id": new_id(),
+            "url": url,
+            "staging_path": staging_path,
+        });
+        if let Some(hash) = expected_sha256 {
+            payload["expected_sha256"] = serde_json::Value::String(hash.to_string());
+        }
+        let response: FetchLineResponse = write_fetch_json(worker, &payload.to_string())?;
+        if response.kind == "ok" {
+            Ok(())
+        } else {
+            Err(response.message.unwrap_or_else(|| "fetch download failed".into()))
+        }
     }
 }
 
@@ -186,11 +234,11 @@ struct CaptureLineResponse {
     error: Option<String>,
 }
 
-fn spawn_worker(path: String) -> Result<ManagedWorker, String> {
-    let mut child = Command::new(&path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+fn spawn_worker(path: &str, args: &[&str]) -> Result<ManagedWorker, String> {
+    let mut command = Command::new(path);
+    command.args(args);
+    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
+    let mut child = command
         .spawn()
         .map_err(|e| format!("spawn {path}: {e}"))?;
     let stdin = child.stdin.take().ok_or_else(|| "stdin missing".to_string())?;
@@ -226,6 +274,20 @@ fn write_capture_line(worker: &mut ManagedWorker, line: &str) -> Result<CaptureL
 }
 
 fn write_capture_json<T: for<'de> Deserialize<'de>>(
+    worker: &mut ManagedWorker,
+    line: &str,
+) -> Result<T, String> {
+    writeln!(worker.stdin, "{line}").map_err(|e| e.to_string())?;
+    worker.stdin.flush().map_err(|e| e.to_string())?;
+    let mut response_line = String::new();
+    worker
+        .stdout
+        .read_line(&mut response_line)
+        .map_err(|e| e.to_string())?;
+    serde_json::from_str(response_line.trim()).map_err(|e| e.to_string())
+}
+
+fn write_fetch_json<T: for<'de> Deserialize<'de>>(
     worker: &mut ManagedWorker,
     line: &str,
 ) -> Result<T, String> {

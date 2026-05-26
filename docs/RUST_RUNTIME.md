@@ -11,10 +11,15 @@ Multi-process core for Voicey on macOS:
 
 Qwen models run in a separate **`Voicey infer-worker`** process by default. Mic capture, UI, and paste remain in the main app.
 
-- **Disable worker (in-process Qwen):** `VOICEY_RUNTIME=in-process` (support / benchmarks)
-- **Force worker:** `VOICEY_RUNTIME=multiprocess` (redundant unless overridden)
+| Environment | Effect |
+|-------------|--------|
+| `VOICEY_RUNTIME=in-process` | Force in-app Qwen MLX (support / benchmarks) |
+| `VOICEY_USE_RUST_SUPERVISOR=1` | Route infer/capture prewarm through **`voicey-supervisor`** |
+| `VOICEY_USE_RUST_FETCH=1` | Preflight Qwen downloads with **`voicey-fetch`** (fail fast if worker missing) |
+| `VOICEY_USE_RUST_CAPTURE=1` | Prewarm **`voicey-capture`** via long-lived session |
+| `VOICEY_USE_XPC=1` | XPC entitlement split (stubs under `Resources/XPC/`) |
 
-Workers are **prewarmed** on launch when the selected Qwen model is downloaded (`VoiceyRuntimeSupervisor.prewarmAllWorkers`).
+Worker paths resolve from `Voicey.app/Contents/MacOS/` after `make build-rust`, or `.build/debug/` when developing.
 
 Copy runtime diagnostics from **Settings → Advanced** when reporting issues.
 
