@@ -121,7 +121,10 @@ final class QwenEngine: @unchecked Sendable {
     qwenModel != nil
   }
 
-  func transcribe(audioBuffer: [Float]) async throws -> TranscriptionResult {
+  func transcribe(
+    audioBuffer: [Float],
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
     if qwenModel == nil {
       let selectedModel = SettingsManager.shared.selectedModel
       guard selectedModel.isQwenModel else {
@@ -141,26 +144,13 @@ final class QwenEngine: @unchecked Sendable {
     let audioDuration = Double(audioBuffer.count) / 16000.0
     let startTime = CFAbsoluteTimeGetCurrent()
 
-    let settings = SettingsManager.shared
-    var contextTerms: [String] = []
-    if settings.transcriptionGlossaryEnabled {
-      contextTerms.append(contentsOf: TranscriptionGlossary.parseTerms(settings.transcriptionGlossary))
-    }
-    if settings.transcriptionScreenContextEnabled {
-      let screenTerms = ScreenContextStore.shared.consumeScreenTerms(
-        manualGlossaryForQuery: settings.transcriptionGlossary
-      )
-      contextTerms.append(contentsOf: screenTerms)
-    }
-
-    let decodingContext = TranscriptionGlossary.decodingContext(terms: contextTerms)
-    if let decodingContext {
+    if let decoderContext {
       AppLogger.transcription.info(
-        "QwenEngine: Using transcription context (\(decodingContext.count) chars, \(contextTerms.count) terms)"
+        "QwenEngine: Using transcription context (\(decoderContext.count) characters)"
       )
     }
 
-    let options = Qwen3DecodingOptions(context: decodingContext)
+    let options = Qwen3DecodingOptions(context: decoderContext)
     let transcribedText = qwenModel.transcribe(
       audio: audioBuffer,
       sampleRate: 16000,

@@ -80,7 +80,11 @@ enum InferWorkerCommand {
         try await engine.loadModel(variant: model.rawValue)
       }
       let samples = try SharedMemoryPCM.read(name: shmName, sampleCount: sampleCount)
-      let result = try await engine.transcribe(audioBuffer: samples)
+      let decoderContext = json["decoder_context"] as? String
+      let result = try await engine.transcribe(
+        audioBuffer: samples,
+        decoderContext: decoderContext
+      )
       writeResponse([
         "type": "transcribe_result",
         "id": id,

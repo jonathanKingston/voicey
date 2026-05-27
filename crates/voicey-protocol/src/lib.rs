@@ -25,6 +25,8 @@ pub enum HostRequest {
         sample_rate: u32,
         shm_name: String,
         sample_count: usize,
+        #[serde(default)]
+        decoder_context: Option<String>,
     },
     DownloadModel {
         id: String,
@@ -91,6 +93,8 @@ pub enum InferWorkerRequest {
         sample_rate: u32,
         shm_name: String,
         sample_count: usize,
+        #[serde(default)]
+        decoder_context: Option<String>,
     },
     Shutdown { id: String },
 }
@@ -118,7 +122,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn host_request_roundtrip() {
+    fn host_request_prewarm_roundtrip() {
         let req = HostRequest::PrewarmInfer {
             id: "1".into(),
             model_id: "qwen3-asr-0.6b-6bit".into(),
@@ -126,5 +130,20 @@ mod tests {
         let json = serde_json::to_string(&req).unwrap();
         let back: HostRequest = serde_json::from_str(&json).unwrap();
         assert!(matches!(back, HostRequest::PrewarmInfer { .. }));
+    }
+
+    #[test]
+    fn host_request_transcribe_roundtrip() {
+        let req = HostRequest::Transcribe {
+            id: "1".into(),
+            model_id: "qwen3-asr-0.6b-6bit".into(),
+            sample_rate: 16_000,
+            shm_name: "voicey-pcm-test".into(),
+            sample_count: 1024,
+            decoder_context: Some("Glossary: Voicey".into()),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let back: HostRequest = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back, HostRequest::Transcribe { .. }));
     }
 }

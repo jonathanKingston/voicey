@@ -107,20 +107,29 @@ final class QwenInferWorkerClient: @unchecked Sendable {
     )
   }
 
-  func transcribe(samples: [Float], model: SpeechModel) async throws -> TranscriptionResult {
+  func transcribe(
+    samples: [Float],
+    model: SpeechModel,
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
     try startIfNeeded()
     let shmName = try SharedMemoryPCM.write(samples: samples)
     defer { SharedMemoryPCM.remove(name: shmName) }
 
+    var request: [String: Any] = [
+      "type": "transcribe",
+      "id": UUID().uuidString,
+      "model_id": model.rawValue,
+      "sample_rate": 16_000,
+      "shm_name": shmName,
+      "sample_count": samples.count
+    ]
+    if let decoderContext, !decoderContext.isEmpty {
+      request["decoder_context"] = decoderContext
+    }
+
     let response = try await send(
-      request: [
-        "type": "transcribe",
-        "id": UUID().uuidString,
-        "model_id": model.rawValue,
-        "sample_rate": 16_000,
-        "shm_name": shmName,
-        "sample_count": samples.count
-      ],
+      request: request,
       timeout: Self.defaultRequestTimeoutSeconds
     )
 

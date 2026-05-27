@@ -53,20 +53,27 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
     try VoiceyJSONLResponse.ensureSuccess(response, context: "prewarm_capture")
   }
 
-  func transcribe(samples: [Float], model: SpeechModel) async throws -> TranscriptionResult {
+  func transcribe(
+    samples: [Float],
+    model: SpeechModel,
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
     let shmName = try SharedMemoryPCM.write(samples: samples)
     defer { SharedMemoryPCM.remove(name: shmName) }
 
-    let response = try await client().send(
-      request: [
-        "type": "transcribe",
-        "id": UUID().uuidString,
-        "model_id": model.rawValue,
-        "sample_rate": 16_000,
-        "shm_name": shmName,
-        "sample_count": samples.count
-      ]
-    )
+    var request: [String: Any] = [
+      "type": "transcribe",
+      "id": UUID().uuidString,
+      "model_id": model.rawValue,
+      "sample_rate": 16_000,
+      "shm_name": shmName,
+      "sample_count": samples.count
+    ]
+    if let decoderContext, !decoderContext.isEmpty {
+      request["decoder_context"] = decoderContext
+    }
+
+    let response = try await client().send(request: request)
     try VoiceyJSONLResponse.ensureSuccess(response, context: "transcribe")
 
     let rawText = response["raw_text"] as? String ?? ""

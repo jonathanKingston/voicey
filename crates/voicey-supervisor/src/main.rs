@@ -78,7 +78,14 @@ fn handle_request(line: &str, workers: &mut process::WorkerProcesses) -> HostRes
             sample_rate,
             shm_name,
             sample_count,
-        } => match workers.infer_transcribe(&model_id, sample_rate, &shm_name, sample_count) {
+            decoder_context,
+        } => match workers.infer_transcribe(
+            &model_id,
+            sample_rate,
+            &shm_name,
+            sample_count,
+            decoder_context.as_deref(),
+        ) {
             Ok(result) => HostResponse::TranscribeResult {
                 id,
                 ok: true,

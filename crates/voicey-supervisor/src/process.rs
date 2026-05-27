@@ -77,6 +77,7 @@ impl WorkerProcesses {
         sample_rate: u32,
         shm_name: &str,
         sample_count: usize,
+        decoder_context: Option<&str>,
     ) -> Result<TranscribeResult, String> {
         let worker = self.ensure_infer()?;
         let response = write_infer(
@@ -87,6 +88,7 @@ impl WorkerProcesses {
                 sample_rate,
                 shm_name: shm_name.to_string(),
                 sample_count,
+                decoder_context: decoder_context.map(str::to_string),
             },
         )?;
         match response {

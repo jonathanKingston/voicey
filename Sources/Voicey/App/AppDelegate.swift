@@ -1096,6 +1096,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       // Transcribe audio using the appropriate engine
       let selectedModel = SettingsManager.shared.selectedModel
+      let decoderContext = TranscriptionSteeringContext.make()
       let result: TranscriptionResult
       switch selectedModel.backendKind {
       case .granitePython:
@@ -1109,10 +1110,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           result = try await VoiceyRuntimeSupervisor.shared.transcribe(
             samples: audioBuffer,
             model: selectedModel,
-            warmupAlreadyDone: multiprocessInferReady
+            warmupAlreadyDone: multiprocessInferReady,
+            decoderContext: decoderContext
           )
         } else {
-          guard let qwenResult = try await qwenEngine?.transcribe(audioBuffer: audioBuffer) else {
+          guard let qwenResult = try await qwenEngine?.transcribe(
+            audioBuffer: audioBuffer,
+            decoderContext: decoderContext
+          ) else {
             throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
           }
           result = qwenResult
