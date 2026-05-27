@@ -84,8 +84,10 @@ final class TranscriptionOverlayController {
     .environmentObject(appState)
 
     let hostingView = NSHostingView(rootView: contentView)
-    // Room for material-backed overlay + fixed-width slots (avoids post-layout resize jitter).
-    hostingView.frame = NSRect(x: 0, y: 0, width: 460, height: 92)
+    let windowSize = TranscriptionOverlayView.hostWindowSize
+    hostingView.frame = NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height)
+    hostingView.wantsLayer = true
+    hostingView.layer?.masksToBounds = false
 
     // Use custom KeyablePanel that can receive key events
     let panel = KeyablePanel(
@@ -129,7 +131,25 @@ struct TranscriptionOverlayView: View {
   /// Keeps status text from resizing the bar between recording, transcribing, and loading copy.
   private let statusLabelSlotWidth: CGFloat = 200
 
+  /// Inset around the card so drop shadows are not clipped by the borderless panel bounds.
+  private static let shadowPadding = EdgeInsets(top: 14, leading: 26, bottom: 34, trailing: 26)
+  private static let cardWidth: CGFloat = 454
+  private static let cardHeight: CGFloat = 68
+
+  static var hostWindowSize: CGSize {
+    CGSize(
+      width: cardWidth + shadowPadding.leading + shadowPadding.trailing,
+      height: cardHeight + shadowPadding.top + shadowPadding.bottom
+    )
+  }
+
   var body: some View {
+    cardContent
+      .padding(Self.shadowPadding)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+  }
+
+  private var cardContent: some View {
     HStack(alignment: .center, spacing: 14) {
       stateIcon
 
@@ -166,10 +186,16 @@ struct TranscriptionOverlayView: View {
     }
     .padding(.horizontal, 18)
     .padding(.vertical, 14)
-    .frame(width: 454, alignment: .center)
-    .background { glassBackground }
-    .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0.18), radius: 28, y: 14)
-    .shadow(color: .black.opacity(colorScheme == .dark ? 0.2 : 0.06), radius: 6, y: 2)
+    .frame(width: Self.cardWidth, height: Self.cardHeight, alignment: .center)
+    .background { glassFill }
+    .overlay { glassRim }
+    .compositingGroup()
+    .clipShape(cardShape)
+    .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.12), radius: 16, y: 8)
+  }
+
+  private var cardShape: RoundedRectangle {
+    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
   }
 
   @ViewBuilder
@@ -181,19 +207,13 @@ struct TranscriptionOverlayView: View {
       } else {
         Circle()
           .fill(.ultraThinMaterial)
+        if stateIconTintWashOpacity > 0 {
+          Circle()
+            .fill(iconBackgroundColor.opacity(stateIconTintWashOpacity))
+        }
       }
       Circle()
-        .strokeBorder(
-          LinearGradient(
-            colors: [
-              Color.white.opacity(colorScheme == .dark ? 0.2 : 0.45),
-              Color.white.opacity(0.04)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-          ),
-          lineWidth: 0.75
-        )
+        .strokeBorder(stateIconRimGradient, lineWidth: 0.75)
 
       Group {
         if appState.transcriptionState.isLoadingModel || appState.transcriptionState.isProcessing {
@@ -201,18 +221,56 @@ struct TranscriptionOverlayView: View {
             .controlSize(.small)
             .scaleEffect(0.92)
             .progressViewStyle(.circular)
-            .tint(iconColor)
+            .tint(iconColor.opacity(0.9))
         } else {
           Image(systemName: iconName)
             .font(.system(size: 19, weight: .semibold))
-            .foregroundStyle(iconColor)
             .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(iconForegroundPrimary, iconForegroundSecondary)
         }
       }
       .frame(width: 26, height: 26)
     }
     .frame(width: 40, height: 40)
     .accessibilityElement(children: .ignore)
+  }
+
+  /// Soft semantic wash on the frosted disc (recording reads as live without a flat badge).
+  private var stateIconTintWashOpacity: Double {
+    switch appState.transcriptionState {
+    case .idle:
+      return 0
+    case .recording, .error:
+      return colorScheme == .dark ? 0.22 : 0.16
+    case .processing:
+      return colorScheme == .dark ? 0.18 : 0.12
+    case .loadingModel:
+      return colorScheme == .dark ? 0.16 : 0.1
+    case .completed:
+      return colorScheme == .dark ? 0.14 : 0.1
+    }
+  }
+
+  private var stateIconRimGradient: LinearGradient {
+    let tint = iconBackgroundColor
+    let tintStrength = stateIconTintWashOpacity > 0 ? 1.0 : 0.0
+    return LinearGradient(
+      colors: [
+        Color.white.opacity(colorScheme == .dark ? 0.24 : 0.48),
+        Color.white.opacity(0.06),
+        tint.opacity((colorScheme == .dark ? 0.32 : 0.22) * tintStrength)
+      ],
+      startPoint: .top,
+      endPoint: .bottom
+    )
+  }
+
+  private var iconForegroundPrimary: Color {
+    iconColor.opacity(colorScheme == .dark ? 0.92 : 0.88)
+  }
+
+  private var iconForegroundSecondary: Color {
+    iconColor.opacity(colorScheme == .dark ? 0.52 : 0.58)
   }
 
   /// Shared footprint for recording waveform vs processing / loading activity so the bar does not reflow.
@@ -234,27 +292,26 @@ struct TranscriptionOverlayView: View {
   }
 
   @ViewBuilder
-  private var glassBackground: some View {
-    let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    ZStack {
-      if reduceTransparency {
-        shape.fill(Color(nsColor: .windowBackgroundColor).opacity(0.96))
-      } else {
-        shape.fill(.regularMaterial)
-      }
-      shape.strokeBorder(
-        LinearGradient(
-          colors: [
-            Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55),
-            Color.white.opacity(colorScheme == .dark ? 0.06 : 0.12),
-            Color.black.opacity(colorScheme == .dark ? 0.35 : 0.06)
-          ],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        ),
-        lineWidth: 1
-      )
+  private var glassFill: some View {
+    if reduceTransparency {
+      cardShape.fill(Color(nsColor: .windowBackgroundColor).opacity(0.96))
+    } else {
+      cardShape.fill(.regularMaterial)
     }
+  }
+
+  private var glassRim: some View {
+    cardShape.strokeBorder(
+      LinearGradient(
+        colors: [
+          Color.white.opacity(colorScheme == .dark ? 0.24 : 0.55),
+          Color.white.opacity(colorScheme == .dark ? 0.1 : 0.18)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      ),
+      lineWidth: 0.75
+    )
   }
 
   private var statusText: String {
