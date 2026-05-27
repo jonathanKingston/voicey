@@ -65,10 +65,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var selectedModel: SpeechModel {
     get {
       let storedValue = defaults.string(forKey: Keys.selectedModel) ?? ""
-      guard let model = SpeechModel(rawValue: storedValue), model.isUserFacing else {
-        return ModelManager.defaultModel
-      }
-      return model
+      return SpeechModel(rawValue: storedValue) ?? ModelManager.defaultModel
     }
     set {
       defaults.set(newValue.rawValue, forKey: Keys.selectedModel)
