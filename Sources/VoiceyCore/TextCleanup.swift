@@ -17,7 +17,7 @@ public enum TextCleanup {
   public static func isConjunction(_ text: String) -> Bool {
     let conjunctions = [
       "and", "but", "or", "so", "yet", "for", "nor",
-      "because", "although", "while", "if", "when",
+      "because", "although", "while", "if", "when"
     ]
     let firstWord = text.lowercased().split(separator: " ").first.map(String.init) ?? ""
     return conjunctions.contains(firstWord)

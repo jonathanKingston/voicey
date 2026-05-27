@@ -26,7 +26,9 @@ enum ScreenContextCollector {
     guard AXIsProcessTrusted() else {
       AppLogger.transcription.debug("ScreenContextCollector: Accessibility not trusted")
       let empty = ScreenContextSnapshot.empty
-      return (empty, ScreenContextExposureAssessment.evaluate(targetPID: targetPID, snapshot: empty))
+      return (
+        empty, ScreenContextExposureAssessment.evaluate(targetPID: targetPID, snapshot: empty)
+      )
     }
 
     let appElement = AXUIElementCreateApplication(targetPID)
@@ -38,7 +40,8 @@ enum ScreenContextCollector {
     if let focused = copyFocusedElement(from: appElement) {
       queryParts.append(
         contentsOf: textFromElement(focused, includeValue: true, includeSelected: true))
-      let directQuery = queryParts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+      let directQuery = queryParts.joined(separator: " ").trimmingCharacters(
+        in: .whitespacesAndNewlines)
       if directQuery.isEmpty {
         let harvested = harvestNearbyVisibleText(from: focused)
         harvestedForLog = harvested
@@ -58,7 +61,8 @@ enum ScreenContextCollector {
     }
 
     if let window = copyFocusedWindow(from: appElement) {
-      collectChunks(from: window, depth: 0, maxDepth: maxTreeDepth, visitState: &visitState, chunks: &chunks)
+      collectChunks(
+        from: window, depth: 0, maxDepth: maxTreeDepth, visitState: &visitState, chunks: &chunks)
       collectWebAreaChunks(in: window, visitState: &visitState, chunks: &chunks)
     }
 
@@ -77,7 +81,8 @@ enum ScreenContextCollector {
     }
 
     let snapshot = ScreenContextSnapshot(queryText: queryText, corpusChunks: uniqueChunks)
-    let exposure = ScreenContextExposureAssessment.logIfNeeded(targetPID: targetPID, snapshot: snapshot)
+    let exposure = ScreenContextExposureAssessment.logIfNeeded(
+      targetPID: targetPID, snapshot: snapshot)
     return (snapshot, exposure)
   }
 
@@ -129,7 +134,8 @@ enum ScreenContextCollector {
     if includeValue, let value = copyStringAttribute(element, kAXValueAttribute as CFString) {
       parts.append(value)
     }
-    if includeSelected, let selected = copyStringAttribute(element, kAXSelectedTextAttribute as CFString) {
+    if includeSelected,
+      let selected = copyStringAttribute(element, kAXSelectedTextAttribute as CFString) {
       parts.append(selected)
     }
     if let title = copyStringAttribute(element, kAXTitleAttribute as CFString) {
@@ -237,7 +243,7 @@ enum ScreenContextCollector {
     if let string = value as? String { return string }
     let typeID = CFGetTypeID(value)
     if typeID == CFStringGetTypeID() {
-      return (value as! CFString) as String
+      return unsafeDowncast(value, to: CFString.self) as String
     }
     if let attributed = value as? NSAttributedString { return attributed.string }
     return nil

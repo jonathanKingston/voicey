@@ -128,7 +128,8 @@ public enum ScreenTermHealing {
     return text.range(of: tight, options: .caseInsensitive) != nil
   }
 
-  private static func isMergeableGap(_ text: String, from start: String.Index, to end: String.Index) -> Bool {
+  private static func isMergeableGap(_ text: String, from start: String.Index, to end: String.Index)
+    -> Bool {
     guard start <= end else { return false }
     let gap = text[start..<end]
     guard !gap.contains(where: \.isWhitespace) else { return false }

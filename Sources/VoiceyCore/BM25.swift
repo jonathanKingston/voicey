@@ -36,7 +36,8 @@ public enum BM25 {
         let docLength = Float(tokens.count)
         let numerator = termFrequency * (k1 + 1)
         let denominator =
-          termFrequency + k1 * (1 - lengthNormalization + lengthNormalization * (docLength / max(avgDocLength, 1)))
+          termFrequency + k1
+          * (1 - lengthNormalization + lengthNormalization * (docLength / max(avgDocLength, 1)))
         score += idf * (numerator / denominator)
       }
       if score > 0 {

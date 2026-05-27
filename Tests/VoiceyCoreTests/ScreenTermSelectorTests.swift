@@ -23,7 +23,7 @@ final class ScreenTermSelectorTests: XCTestCase {
       queryText: "metformin dosage",
       corpusChunks: [
         "Patient metformin dosage increased",
-        "File Edit View Help",
+        "File Edit View Help"
       ]
     )
 
