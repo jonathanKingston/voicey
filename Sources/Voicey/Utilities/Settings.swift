@@ -40,6 +40,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.voiceCommandsEnabled: false,
       Keys.transcriptionGlossaryEnabled: false,
       Keys.transcriptionScreenContextEnabled: false,
+      Keys.transcriptionScreenContextOCREnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
     ])
@@ -61,6 +62,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let transcriptionGlossaryEnabled = "transcriptionGlossaryEnabled"
     static let transcriptionGlossary = "transcriptionGlossary"
     static let transcriptionScreenContextEnabled = "transcriptionScreenContextEnabled"
+    static let transcriptionScreenContextOCREnabled = "transcriptionScreenContextOCREnabled"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
   }
@@ -166,6 +168,12 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var transcriptionScreenContextEnabled: Bool {
     get { defaults.bool(forKey: Keys.transcriptionScreenContextEnabled) }
     set { defaults.set(newValue, forKey: Keys.transcriptionScreenContextEnabled) }
+  }
+
+  /// When enabled with screen context, uses on-device OCR on the target window if accessibility text is limited.
+  var transcriptionScreenContextOCREnabled: Bool {
+    get { defaults.bool(forKey: Keys.transcriptionScreenContextOCREnabled) }
+    set { defaults.set(newValue, forKey: Keys.transcriptionScreenContextOCREnabled) }
   }
 
   // MARK: - Voice Commands

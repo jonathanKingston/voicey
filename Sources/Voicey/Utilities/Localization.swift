@@ -304,6 +304,18 @@ enum L10n {
         static var transcriptionScreenContextDescription: String {
             L10n.string("model.transcriptionScreenContextDescription")
         }
+        static var transcriptionScreenContextOCREnable: String {
+            L10n.string("model.transcriptionScreenContextOCREnable")
+        }
+        static var transcriptionScreenContextOCRDescription: String {
+            L10n.string("model.transcriptionScreenContextOCRDescription")
+        }
+        static var transcriptionScreenContextOCRPermission: String {
+            L10n.string("model.transcriptionScreenContextOCRPermission")
+        }
+        static var openScreenCaptureSettings: String {
+            L10n.string("model.openScreenCaptureSettings")
+        }
     }
 
     // MARK: - Voice Commands

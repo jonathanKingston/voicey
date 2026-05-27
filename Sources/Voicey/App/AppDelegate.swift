@@ -2,6 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import KeyboardShortcuts
 import SwiftUI
+import VoiceyCore
 import os
 
 // AppDelegate is the legacy lifecycle coordinator. Keep size warnings disabled
@@ -1002,11 +1003,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard let targetPID = recordingTargetPID else { return }
 
     Task.detached(priority: .utility) {
+      let windowImage = ScreenContextOCR.grabFrontWindowImageSync(targetPID: targetPID)
       let captured = ScreenContextCollector.captureWithExposure(targetPID: targetPID)
-      // Future: if captured.exposure.shouldConsiderOCRFallback && ocrEnabled {
-      //   captured.snapshot = merge(captured.snapshot, ScreenContextOCR.captureWindow(pid: targetPID))
-      // }
-      ScreenContextStore.shared.set(captured.snapshot, exposure: captured.exposure)
+      var snapshot = captured.snapshot
+
+      let ocrEnabled = SettingsManager.shared.transcriptionScreenContextOCREnabled
+      let screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+      if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, screenCaptureGranted,
+        let windowImage
+      {
+        if let ocrSnapshot = await ScreenContextOCR.recognizeText(in: windowImage) {
+          snapshot = ScreenContextSnapshotMerger.merging(snapshot, supplemental: ocrSnapshot)
+        }
+      } else if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, !screenCaptureGranted {
+        AppLogger.transcription.warning(
+          "ScreenContext OCR enabled but Screen Recording permission is not granted")
+      }
+
+      ScreenContextStore.shared.set(snapshot, exposure: captured.exposure)
     }
   }
 

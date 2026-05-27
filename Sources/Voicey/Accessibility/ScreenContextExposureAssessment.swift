@@ -72,11 +72,6 @@ enum ScreenContextExposureAssessment {
       AppLogger.transcription.warning(
         "ScreenContext exposure: limited for \(result.bundleID ?? "pid:\(targetPID)", privacy: .public) — \(guidance(bundleID: result.bundleID), privacy: .public)"
       )
-      if result.shouldConsiderOCRFallback {
-        AppLogger.transcription.info(
-          "ScreenContext: OCR fallback would be considered here when implemented (exposure=limited)."
-        )
-      }
     case .menuDominated:
       AppLogger.transcription.warning(
         "ScreenContext exposure: menu-dominated tree for \(result.bundleID ?? "pid:\(targetPID)", privacy: .public); dismiss menus and focus the editor. \(guidance(bundleID: result.bundleID), privacy: .public)"

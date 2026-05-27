@@ -111,6 +111,10 @@
 "model.transcriptionGlossaryPlaceholder" = "Metformin, HbA1c, Voicey, QuirkQuid";
 "model.transcriptionScreenContextEnable" = "Use accessibility text from target app";
 "model.transcriptionScreenContextDescription" = "When recording starts, Voicey reads the front app's focused field and nearby UI text, ranks terms with BM25, and sends them to Qwen before transcription. Requires Accessibility permission.";
+"model.transcriptionScreenContextOCREnable" = "Use on-device OCR when accessibility text is limited";
+"model.transcriptionScreenContextOCRDescription" = "If the target app (for example Electron) does not expose enough text via Accessibility, Voicey can capture that window and run Apple's on-device Vision OCR. Requires Screen Recording permission and stays local.";
+"model.transcriptionScreenContextOCRPermission" = "Screen Recording permission is required for OCR fallback.";
+"model.openScreenCaptureSettings" = "Open Screen Recording Settings";
 
 /* Voice Commands */
 "voiceCommands.enable" = "音声コマンドを有効にする";

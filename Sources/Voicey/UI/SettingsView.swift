@@ -495,7 +495,10 @@ struct ModelSettingsView: View {
     var transcriptionGlossaryEnabled = false
   @AppStorage("transcriptionScreenContextEnabled", store: defaults) private
     var transcriptionScreenContextEnabled = false
+  @AppStorage("transcriptionScreenContextOCREnabled", store: defaults) private
+    var transcriptionScreenContextOCREnabled = false
   @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+  @State private var screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
 
   private var selectedSpeechModel: SpeechModel? {
     SpeechModel(rawValue: selectedModel)
@@ -539,6 +542,29 @@ struct ModelSettingsView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
+          if transcriptionScreenContextEnabled {
+            Toggle(L10n.Model.transcriptionScreenContextOCREnable, isOn: $transcriptionScreenContextOCREnabled)
+              .onChange(of: transcriptionScreenContextOCREnabled) { _, enabled in
+                if enabled, !PermissionsManager.shared.checkScreenCapturePermission() {
+                  _ = PermissionsManager.shared.requestScreenCapturePermission()
+                }
+                screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+              }
+
+            Text(L10n.Model.transcriptionScreenContextOCRDescription)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+
+            if transcriptionScreenContextOCREnabled, !screenCaptureGranted {
+              Text(L10n.Model.transcriptionScreenContextOCRPermission)
+                .font(.caption)
+                .foregroundStyle(.orange)
+              Button(L10n.Model.openScreenCaptureSettings) {
+                PermissionsManager.shared.openScreenCaptureSettings()
+              }
+            }
+          }
+
           Toggle(L10n.Model.transcriptionGlossaryEnable, isOn: $transcriptionGlossaryEnabled)
 
           Text(L10n.Model.transcriptionGlossaryDescription)
@@ -580,6 +606,7 @@ struct ModelSettingsView: View {
         appState.currentModel = model
       }
       transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+      screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
     }
     .onChange(of: selectedModel) {
       guard let model = SpeechModel(rawValue: selectedModel) else { return }
