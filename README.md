@@ -4,143 +4,198 @@
 
 # Voicey
 
-A macOS menubar application that provides system-wide voice-to-text transcription using on-device Whisper models powered by WhisperKit.
+Voicey is a macOS menubar app for system-wide voice-to-text dictation with fully on-device transcription. Current releases are Qwen-first, with native MLX inference, optional multi-process Rust workers, clipboard-first output, and optional auto-insert into the focused app.
 
 ## Features
 
-- **Privacy-first**: All transcription runs on-device using CoreML; network access only for model downloads
-- **Low friction**: Single hotkey to toggle (default: `Ctrl+V`), minimal UI, instant output
-- **Intelligent output**: Punctuation inferred from speech timing and patterns, noise filtering removes artifacts
-- **Smart model management**: Starts fast with a lightweight model, automatically upgrades to higher quality in the background
-- **Performance monitoring**: Real-time factor tracking with suggestions when system is under load
-- **Unobtrusive**: Small overlay, menubar-only presence, no dock icon
+- **On-device by default**: transcription, glossary steering, and optional OCR all stay on your Mac
+- **Fast capture flow**: press a single hotkey to start/stop dictation (default: `Ctrl+V`)
+- **Qwen3 ASR models**: Voicey ships a Qwen-first user experience with native Swift MLX inference
+- **Smarter spelling**: bias recognition with a custom glossary plus text from the target app
+- **Optional OCR assist**: fall back to on-device Vision OCR when Accessibility text is sparse
+- **Clipboard-first output**: copy to clipboard by default, with optional auto-insert and clipboard restore
+- **Voice commands**: built-in commands for `new line`, `new paragraph`, `scratch that`, and custom insertions
+- **Background runtime helpers**: bundled builds can use Rust capture/fetch/supervisor workers on hot paths
+- **Menubar-native UX**: no dock icon by default, lightweight overlay, launch-at-login support
 
 ## Requirements
 
 - macOS 15.0 or later
-- Apple Silicon (M1+) required for WhisperKit CoreML acceleration
-- Microphone access permission
-- Network access (for downloading AI models on first launch)
-- Optional: Accessibility permission (only if enabling auto-paste)
+- Apple Silicon (M1+) for the MLX / Metal runtime
+- Microphone permission
+- Network access for first-time model downloads
+- Optional Accessibility permission for auto-insert and target-app text steering
+- Optional Screen Recording permission for OCR-based screen context
 
-## Building
+## Build from Source
 
 ### Prerequisites
 
-1. Xcode 15.0 or later
-2. Swift 5.9 or later
+1. Xcode 15 or later
+2. Swift 5.10 or later
+3. macOS for build and runtime validation
 
-### Build from Source
+Voicey is a macOS-only app. On Linux, you can still run package resolution, formatting, and linting, but not the full app build.
+
+### Recommended development flows
 
 ```bash
 cd voicey
 
-# Build debug version
-make build
+# Recommended default: direct-distribution debug bundle
+make run
 
-# Build release version and create app bundle
-make bundle
+# App Store-style debug bundle
+make run-appstore
 
-# Sign and install to /Applications
-make install
+# Debug bundle with bundled Rust workers on the hot path
+make run-multiprocess
 ```
 
-### Alternative: Manual Build
+### Build targets
 
 ```bash
-# Build with Swift Package Manager
-swift build -c release
+# Raw debug build
+make build
 
-# The binary will be in .build/release/Voicey
+# Build Rust worker binaries used by bundled multiprocess flows
+make build-rust
+
+# App Store-style release bundle
+make bundle
+
+# Direct-distribution release bundle (Sparkle-enabled)
+make bundle-direct
+
+# Install the App Store-style bundle into /Applications
+make install
 ```
 
 ### Open in Xcode
 
 ```bash
-# Generate Xcode project
+# Generate an Xcode project
 make xcode
 
-# Open in Xcode
-open Voicey.xcodeproj
+# Or open the package directly
+open Package.swift
+```
+
+### Linux / CI-friendly commands
+
+```bash
+swift package resolve
+swiftlint lint Sources/
+swift-format -i -r Sources/
 ```
 
 ## Usage
 
-### First Launch
+### First launch
 
-1. Launch Voicey from Applications or build output
-2. Grant microphone permission when prompted
-3. Download a transcription model (Large v3 Turbo recommended for best speed/accuracy balance)
+1. Launch Voicey from `Applications` or a built app bundle.
+2. Grant microphone permission.
+3. Download one of the Qwen3 ASR models.
+4. Start dictating from the menubar or the global hotkey.
 
-### Recording
+Voicey defaults to the recommended Qwen model for your machine:
 
-1. Press `Ctrl+V` (or your custom hotkey) to start recording
-2. Speak naturally - the app will detect punctuation from your speech timing
-3. Press the hotkey again to stop and transcribe
-4. Press `ESC` to cancel without transcribing
+- `Qwen3 ASR 0.6B (MLX)` on Macs with less than 16 GB RAM
+- `Qwen3 ASR 1.7B (MLX)` on Macs with 16 GB RAM or more
+
+### Dictation flow
+
+1. Press `Ctrl+V` (or your custom shortcut) to start recording.
+2. Speak naturally.
+3. Press the hotkey again to stop and transcribe.
+4. Press `Esc` to cancel.
 
 ### Settings
 
 Access settings from the menubar icon:
-- **General**: Output (clipboard), launch at login, dock icon visibility
-- **Hotkey**: Customize the recording hotkey
-- **Audio**: Select input device, test microphone
-- **Model**: Download/manage Whisper models
-- **Voice Commands**: Enable optional voice commands (new line, new paragraph, scratch that)
+
+- **General**: clipboard output, launch at login, dock icon visibility
+- **Hotkey**: customize the dictation shortcut
+- **Audio**: inspect the active input and test the microphone
+- **Model**: select and download Qwen3 ASR models
+- **Spelling & Context**: glossary steering, target-app text steering, optional OCR fallback
+- **Voice Commands**: manage built-in and custom spoken editing commands
+- **Advanced**: auto-insert, restore clipboard after paste, pause media during transcription, runtime diagnostics, update checks for direct installs
 
 ## Models
 
+### User-facing models
+
 | Model | Disk Size | Memory | Notes |
 |-------|-----------|--------|-------|
-| Large v3 Turbo | ~1.5GB | ~3GB | **Recommended** - Fast & accurate, 8x faster than Large |
-| Large v3 | ~3GB | ~6GB | Maximum accuracy, slower |
-| Distil Large v3 | ~800MB | ~2GB | Distilled model, good balance |
-| Small (English) | ~250MB | ~600MB | Fast, English-only |
-| Base (English) | ~80MB | ~200MB | Very fast, basic accuracy |
-| Tiny (English) | ~40MB | ~100MB | Fastest, lowest accuracy |
+| Qwen3 ASR 1.7B (MLX) | ~1.8GB | ~3.5GB | Recommended on 16 GB+ Macs; best quality |
+| Qwen3 ASR 0.6B (MLX) | ~450MB | ~1.3GB | Faster startup and lower memory use |
 
-*Note: First load of each model requires CoreML compilation (1-3 minutes). Subsequent loads are instant.*
+### Additional benchmark / parity models in the repo
 
-## Post-Processing
+The codebase still includes WhisperKit and Granite backends for benchmarking, compatibility, and runtime-parity tooling, but the settings UI is intentionally Qwen-only.
 
-Voicey includes intelligent post-processing:
+## Output and post-processing
 
-- **Noise filtering**: Removes Whisper artifacts like `[music]`, `*click*`, breathing sounds, etc.
-- **Intelligent punctuation**: Adds periods, commas, and question marks based on speech timing and patterns
-- **Text normalization**: Cleans up low-risk transcription artifacts (e.g., "o k" → "OK")
-- **Voice commands** (optional): "new line", "new paragraph", "scratch that", plus editable text expansions
+Voicey cleans up and delivers transcriptions with:
+
+- **Noise filtering** for common ASR artifacts
+- **Punctuation and normalization** in the post-processing pipeline
+- **Clipboard delivery** by default
+- **Optional auto-insert** into the focused field using Accessibility
+- **Optional clipboard restoration** after auto-insert
+- **Voice commands** for line breaks, paragraph breaks, deleting the last utterance, and custom text expansions
+
+## Runtime
+
+Voicey supports both in-process and multiprocess transcription flows.
+
+- Bundled builds can auto-enable Rust workers when present
+- The multiprocess path can use `voicey-capture`, `voicey-fetch`, and `voicey-supervisor`
+- Qwen inference can run in-process or through the infer-worker flow, depending on runtime configuration
+
+See [`docs/RUST_RUNTIME.md`](docs/RUST_RUNTIME.md) for environment flags, bundled worker behavior, and runtime diagnostics.
 
 ## Architecture
 
-```
-Voicey/
-├── App/                    # App entry, lifecycle, menubar
-├── Audio/                  # Audio capture and level monitoring
-├── Transcription/          # WhisperKit engine, model management, post-processing
-├── Output/                 # Clipboard output
-├── UI/                     # Overlay, settings, onboarding views
-├── Input/                  # Hotkey management and keybinding recorder
-└── Utilities/              # Permissions, settings, notifications, logging
+```text
+Sources/
+├── Voicey/App             # App lifecycle, menubar, update integration
+├── Voicey/Accessibility   # Accessibility and OCR-based screen context
+├── Voicey/Audio           # Recording, waveform, duration limits
+├── Voicey/Input           # Global hotkey management
+├── Voicey/Output          # Clipboard, auto-insert, keyboard simulation
+├── Voicey/Runtime         # Infer worker, Rust worker, diagnostics, supervisor
+├── Voicey/Transcription   # Qwen, Whisper, Granite engines and model management
+├── Voicey/UI              # Overlay, onboarding, settings
+├── Voicey/Utilities       # Settings, permissions, notifications, localization
+└── VoiceyCore             # Shared text cleanup and voice-command primitives
 ```
 
 ## Dependencies
 
-- [WhisperKit](https://github.com/argmaxinc/WhisperKit) - CoreML-optimized Whisper inference for Apple Silicon
-- [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) - Global hotkey management
+- [speech-swift](https://github.com/soniqo/speech-swift) - native Swift MLX Qwen3 ASR runtime
+- [WhisperKit](https://github.com/argmaxinc/WhisperKit) - Whisper/CoreML backend used for parity and benchmark tooling
+- [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) - global hotkey management
+- [Sparkle](https://sparkle-project.org/) - direct-distribution auto-updates only
 
 ## Permissions
 
 | Permission | Purpose |
 |------------|---------|
-| Microphone | Audio capture for transcription |
-| Network | Model downloads from Hugging Face |
+| Microphone | Capture dictation audio |
+| Network | Download speech models |
+| Accessibility | Auto-insert text and read target-app text context |
+| Screen Recording | OCR fallback for apps that expose little Accessibility text |
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-- OpenAI for the Whisper model
+- Qwen for the ASR model family used in current releases
 - Argmax for WhisperKit
+- Soniqo for `speech-swift`
 - Sindre Sorhus for KeyboardShortcuts
+- Sparkle contributors for direct-distribution update tooling
