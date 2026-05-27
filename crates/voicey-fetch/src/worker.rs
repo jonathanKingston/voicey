@@ -1,5 +1,5 @@
 use crate::manifest::{
-    download_to_staging, promote_staging, FetchRequest, FetchResponse, ManifestFile,
+    download_to_staging, promote_staging, FetchRequest, FetchResponse,
 };
 use std::io::{BufRead, Write};
 

@@ -54,3 +54,18 @@ pub fn remove_shm(name: &str) {
     let path = shm_path(name);
     let _ = fs::remove_file(path);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_read_and_remove_roundtrip() {
+        let samples = vec![0.25_f32, -0.5, 1.0];
+        let name = write_f32_samples(&samples).expect("write samples");
+        let read = read_f32_samples(&name, samples.len()).expect("read samples");
+        assert_eq!(read, samples);
+        remove_shm(&name);
+        assert!(!shm_path(&name).exists());
+    }
+}

@@ -23,9 +23,11 @@ pub struct TranscribeResult {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct CaptureFixtureResponse {
     #[serde(rename = "type")]
     kind: String,
+    #[allow(dead_code)]
     id: String,
     ok: bool,
     shm_name: Option<String>,
@@ -188,6 +190,7 @@ impl WorkerProcesses {
 struct FetchLineResponse {
     #[serde(rename = "type")]
     kind: String,
+    #[allow(dead_code)]
     id: String,
     message: Option<String>,
 }
@@ -204,6 +207,7 @@ impl WorkerProcesses {
         }
     }
 
+    #[allow(dead_code)]
     pub fn fetch_download_hf_file(
         &mut self,
         url: &str,

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
@@ -94,16 +94,13 @@ pub fn download_to_staging(url: &str, staging_path: &Path, expected_sha256: Opti
     let client = reqwest::blocking::Client::builder()
         .user_agent("voicey-fetch/0.1")
         .build()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     let mut response = client
         .get(url)
         .send()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     if !response.status().is_success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("HTTP {}", response.status()),
-        ));
+        return Err(io::Error::other(format!("HTTP {}", response.status())));
     }
     let mut file = fs::File::create(staging_path)?;
     let mut hasher = Sha256::new();
@@ -111,12 +108,12 @@ pub fn download_to_staging(url: &str, staging_path: &Path, expected_sha256: Opti
     loop {
         let read = response
             .read(&mut buffer)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
         if read == 0 {
             break;
         }
         hasher.update(&buffer[..read]);
-        io::Write::write_all(&mut file, &buffer[..read])?;
+        std::io::Write::write_all(&mut file, &buffer[..read])?;
     }
     if let Some(expected) = expected_sha256 {
         let hash = hex::encode(hasher.finalize());
@@ -126,4 +123,68 @@ pub fn download_to_staging(url: &str, staging_path: &Path, expected_sha256: Opti
         }
     }
     Ok(staging_path.to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sha256_file_matches_known_digest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sample.bin");
+        std::fs::write(&path, b"voicey-fetch").expect("write sample");
+
+        let hash = sha256_file(&path).expect("hash file");
+
+        assert_eq!(
+            hash,
+            "06dc703676618466b85dad19d81a125eb73cd9edc3f44117c4f0c53734726447"
+        );
+    }
+
+    #[test]
+    fn verify_manifest_rejects_hash_mismatch() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file_path = dir.path().join("weights.bin");
+        std::fs::write(&file_path, b"abc").expect("write weights");
+
+        let manifest = ManifestFile {
+            version: 1,
+            files: vec![ManifestEntry {
+                path: "weights.bin".into(),
+                sha256: "deadbeef".into(),
+                size: 3,
+            }],
+        };
+
+        let error = verify_manifest(dir.path(), &manifest).expect_err("hash mismatch");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn promote_staging_moves_verified_tree() {
+        let staging = tempfile::tempdir().expect("staging dir");
+        let final_root = tempfile::tempdir().expect("final dir");
+        let model_path = staging.path().join("model.bin");
+        std::fs::write(&model_path, b"model-bytes").expect("write model");
+
+        let hash = sha256_file(&model_path).expect("hash model");
+        let manifest = ManifestFile {
+            version: 1,
+            files: vec![ManifestEntry {
+                path: "model.bin".into(),
+                sha256: hash,
+                size: 11,
+            }],
+        };
+        write_manifest(&staging.path().join("manifest.json"), &manifest).expect("write manifest");
+
+        let destination = final_root.path().join("qwen3-asr-0.6b-6bit");
+        promote_staging(staging.path(), &destination, &manifest).expect("promote staging");
+
+        let promoted = destination.join("model.bin");
+        assert!(promoted.is_file());
+        assert_eq!(std::fs::read(&promoted).expect("read promoted"), b"model-bytes");
+    }
 }

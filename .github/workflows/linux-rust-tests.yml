@@ -1,0 +1,56 @@
+# Rust worker CI on Ubuntu: protocol tests, worker builds, and benchmark script checks.
+# macOS-only paths (Swift infer worker, CoreAudio) stay in build.yml.
+name: Linux Rust tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: linux-rust-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-core:
+    name: Rust core (Tier 1)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Protocol unit tests
+        run: cargo test -p voicey-protocol
+
+      - name: Build supervisor and fetch workers
+        run: cargo build -p voicey-supervisor -p voicey-fetch
+
+      - name: Benchmark harness script tests
+        run: |
+          python3 scripts/test_common_voice_benchmark.py
+          python3 scripts/test_prepare_common_voice.py
+
+  rust-workspace:
+    name: Rust workspace (Tier 2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ALSA build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Workspace unit tests
+        run: cargo test --workspace
+
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --tests -- -D warnings
