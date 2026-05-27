@@ -356,6 +356,12 @@ enum L10n {
         static var updatesDeliveredFrom: String { L10n.string("advanced.updatesDeliveredFrom") }
     }
 
+    // MARK: - Loading Window
+
+    enum LoadingWindow {
+        static var title: String { L10n.string("loadingWindow.title") }
+    }
+
     // MARK: - Model Download Window
 
     enum Download {

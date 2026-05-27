@@ -72,6 +72,20 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     }
   }
 
+  /// Reset a persisted non-Qwen selection to a downloaded Qwen model or the current default.
+  func migrateSelectedModelToUserFacingIfNeeded() {
+    let storedValue = defaults.string(forKey: Keys.selectedModel) ?? ""
+    guard let model = SpeechModel(rawValue: storedValue), !model.isUserFacing else {
+      return
+    }
+
+    ModelManager.shared.loadDownloadedModels()
+    let replacement =
+      SpeechModel.userFacingModels.first(where: { ModelManager.shared.isDownloaded($0) })
+      ?? ModelManager.defaultModel
+    defaults.set(replacement.rawValue, forKey: Keys.selectedModel)
+  }
+
   var lastSeenDefaultModel: String? {
     get { defaults.string(forKey: Keys.lastSeenDefaultModel) }
     set { defaults.set(newValue, forKey: Keys.lastSeenDefaultModel) }

@@ -17,7 +17,7 @@ struct ModelDownloadView: View {
           .font(.system(size: 40))
           .foregroundStyle(.blue)
 
-        Text(L10n.Download.whisperModels)
+        Text(L10n.Download.speechModels)
           .font(.title2)
           .fontWeight(.semibold)
 
@@ -34,9 +34,9 @@ struct ModelDownloadView: View {
       // Model list
       ScrollView {
         VStack(spacing: 0) {
-          ForEach(SpeechModel.allCases) { model in
+          ForEach(SpeechModel.userFacingModels) { model in
             ModelDownloadRow(model: model)
-            if model != SpeechModel.allCases.last {
+            if model != SpeechModel.userFacingModels.last {
               Divider()
                 .padding(.leading, 60)
             }
@@ -188,15 +188,9 @@ struct ModelDownloadRow: View {
 
   private var iconName: String {
     switch model {
-    case .graniteSpeech: return "waveform"
     case .qwen3Small: return "globe"
     case .qwen3Large: return "sparkles.rectangle.stack"
-    case .largeTurbo: return "bolt.fill"
-    case .large: return "star.fill"
-    case .distilLarge: return "brain.head.profile"
-    case .small, .smallEn: return "scalemass"
-    case .base, .baseEn: return "gauge.medium"
-    case .tiny, .tinyEn: return "hare"
+    default: return "cpu"
     }
   }
 

@@ -150,7 +150,7 @@
 "runtime.inferWorkerStartFailed" = "Transcription helper couldn't start. Quit Voicey and try again.";
 "runtime.inferWorkerStartFailedDetail" = "Transcription helper couldn't start. Quit Voicey and try again. (%@)";
 "runtime.genericModelLoadFailed" = "Failed to load model.";
-"runtime.whisperModelLoadFailed" = "Failed to load Whisper model. First launch can take several minutes for CoreML compilation—keep Voicey open and try again.";
+"runtime.whisperModelLoadFailed" = "Failed to load Whisper model. Keep Voicey open and try again.";
 "runtime.graniteModelLoadFailed" = "Failed to load Granite model. Install Python dependencies (mlx-audio, huggingface_hub) and try again.";
 "advanced.data" = "Data";
 "advanced.clearAllData" = "Clear All Data";
@@ -164,6 +164,9 @@
 "advanced.appStore" = "App Store";
 "advanced.checkForUpdates" = "Check for Updates";
 "advanced.updatesDeliveredFrom" = "Updates are delivered directly from voicy.work";
+
+/* Loading Window */
+"loadingWindow.title" = "Loading AI Model...";
 
 /* Model Download Window */
 "download.whisperModels" = "Speech Models";

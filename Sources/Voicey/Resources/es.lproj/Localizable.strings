@@ -157,6 +157,9 @@
 "advanced.checkForUpdates" = "Buscar actualizaciones";
 "advanced.updatesDeliveredFrom" = "Las actualizaciones se entregan directamente desde voicy.work";
 
+/* Loading Window */
+"loadingWindow.title" = "Cargando modelo de IA...";
+
 /* Model Download Window */
 "download.whisperModels" = "Modelos de voz";
 "download.description" = "Descarga un modelo de reconocimiento de voz para activar la transcripción.\nLos modelos más grandes son más precisos pero requieren más memoria.";

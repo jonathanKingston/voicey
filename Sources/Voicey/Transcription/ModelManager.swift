@@ -54,6 +54,16 @@ enum SpeechModel: String, CaseIterable, Identifiable {
     backendKind == .qwenMLX
   }
 
+  /// Whether this model is available in the app UI (Qwen only; other cases remain for benchmarks)
+  var isUserFacing: Bool {
+    isQwenModel
+  }
+
+  /// Models shown in settings and download UI
+  static var userFacingModels: [SpeechModel] {
+    [.qwen3Large, .qwen3Small]
+  }
+
   var displayName: String {
     switch self {
     case .graniteSpeech: return "Granite 4.0 1B Speech"
@@ -170,9 +180,6 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 /// Backward compatibility alias
 typealias WhisperModel = SpeechModel
 
-/// Callback for when a background model upgrade completes
-typealias ModelUpgradeCallback = (SpeechModel) -> Void
-
 /// Manages downloading, storing, and selecting speech models
 final class ModelManager: ObservableObject, @unchecked Sendable {
   static let shared = ModelManager()
@@ -182,14 +189,8 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   @Published var isDownloading: [SpeechModel: Bool] = [:]
   @Published var downloadError: String?
 
-  /// Whether a model is currently being prewarmed (loaded into memory)
-  @Published var isPrewarming: [SpeechModel: Bool] = [:]
-
-  /// Model that's ready for background upgrade (downloaded and prewarmed)
+  /// Model queued for automatic switch when idle (e.g. default model migration)
   @Published var pendingUpgradeModel: SpeechModel?
-
-  /// Callback when a background model upgrade is ready
-  var onUpgradeReady: ModelUpgradeCallback?
 
   private let fileManager = FileManager.default
   private var downloadTasks: [SpeechModel: Task<Void, Never>] = [:]
@@ -202,12 +203,6 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
   // MARK: - Model Hierarchy
 
-  /// The fast model for English users
-  static let fastModelEnglish = SpeechModel.baseEn
-
-  /// The fast model for non-English users (multilingual)
-  static let fastModelMultilingual = SpeechModel.base
-
   /// Use the smaller Qwen model on machines with less than 16 GB RAM.
   private static let largeQwenMemoryThresholdBytes: UInt64 = 16 * 1024 * 1024 * 1024
 
@@ -215,32 +210,6 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   static var defaultModel: SpeechModel {
     let physicalMemory = ProcessInfo.processInfo.physicalMemory
     return physicalMemory < largeQwenMemoryThresholdBytes ? .qwen3Small : .qwen3Large
-  }
-
-  /// The quality model used for better accuracy (multilingual) - Whisper fallback
-  static let qualityModel = SpeechModel.largeTurbo
-
-  /// Returns the appropriate fast model based on the user's system language
-  /// - English users get the English-optimized model (slightly better for English)
-  /// - Non-English users get the multilingual model
-  static var fastModelForCurrentLocale: WhisperModel {
-    let languageCode = Locale.current.language.languageCode?.identifier ?? "en"
-    if languageCode == "en" {
-      return fastModelEnglish
-    } else {
-      return fastModelMultilingual
-    }
-  }
-
-  /// For backward compatibility - returns the locale-appropriate fast model
-  static var fastModel: WhisperModel {
-    fastModelForCurrentLocale
-  }
-
-  /// Check if we should upgrade from a fast model to quality model
-  var shouldUpgradeToQuality: Bool {
-    let currentModel = SettingsManager.shared.selectedModel
-    return currentModel.isFastModel && isDownloaded(Self.qualityModel)
   }
 
   // MARK: - CoreML Compilation Check
@@ -397,7 +366,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   }
 
   var hasDownloadedModel: Bool {
-    !downloadedModels.isEmpty
+    SpeechModel.userFacingModels.contains { isDownloaded($0) }
   }
 
   // MARK: - Model Discovery
@@ -936,111 +905,6 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     downloadedModels.remove(model)
     downloadProgress[model] = 0
-  }
-
-  // MARK: - Background Upgrade
-
-  /// Start background download and prewarm of the quality model
-  /// Call this after the fast model is loaded and working
-  func startBackgroundUpgrade(engine: WhisperEngine) {
-    guard !isDownloaded(Self.qualityModel) else {
-      // Already downloaded, just need to prewarm
-      Task {
-        await prewarmForUpgrade(model: Self.qualityModel, engine: engine)
-      }
-      return
-    }
-
-    // Download first, then prewarm
-    AppLogger.model.info(
-      "Starting background download of quality model: \(Self.qualityModel.displayName)")
-    downloadModel(Self.qualityModel)
-
-    // Watch for download completion
-    Task {
-      await waitForDownloadAndPrewarm(model: Self.qualityModel, engine: engine)
-    }
-  }
-
-  /// Wait for a model to download, then prewarm it
-  private func waitForDownloadAndPrewarm(model: WhisperModel, engine: WhisperEngine) async {
-    // Poll until download completes
-    while isDownloading[model] == true {
-      try? await Task.sleep(nanoseconds: 1_000_000_000)  // Check every 1s
-    }
-
-    // Check if download succeeded
-    guard isDownloaded(model) else {
-      AppLogger.model.error("Background download of \(model.displayName) failed")
-      return
-    }
-
-    // Now prewarm the model
-    await prewarmForUpgrade(model: model, engine: engine)
-  }
-
-  /// Prewarm a model in background so it's ready for hot-swap
-  private func prewarmForUpgrade(model: WhisperModel, engine: WhisperEngine) async {
-    await MainActor.run {
-      isPrewarming[model] = true
-    }
-
-    debugPrint("🔥 Prewarming \(model.displayName) for background upgrade...", category: "MODEL")
-    debugPrint("⏳ This may take 2-5 minutes for CoreML compilation (happens once per model)", category: "MODEL")
-    AppLogger.model.info("Prewarming \(model.displayName) for background upgrade...")
-
-    // Create a temporary engine to prewarm the model
-    // This compiles CoreML models if needed
-    let prewarmEngine = WhisperEngine()
-
-    // Start a progress indicator task
-    let modelName = model.displayName
-    let progressTask = Task {
-      for tick in 1...20 {  // Up to 10 minutes (20 x 30s)
-        try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
-        if Task.isCancelled { break }
-        let elapsed = tick * 30
-        await MainActor.run {
-          debugPrint("⏳ Still prewarming \(modelName)... (\(elapsed)s elapsed)", category: "MODEL")
-        }
-      }
-    }
-
-    do {
-      let startTime = CFAbsoluteTimeGetCurrent()
-      try await prewarmEngine.loadModel(variant: model.rawValue)
-      let loadTime = CFAbsoluteTimeGetCurrent() - startTime
-
-      progressTask.cancel()
-
-      await MainActor.run {
-        isPrewarming[model] = false
-        pendingUpgradeModel = model
-
-        debugPrint("✅ \(model.displayName) prewarmed in \(String(format: "%.1f", loadTime))s - ready for upgrade!", category: "MODEL")
-        AppLogger.model.info("✅ \(model.displayName) prewarmed and ready for upgrade")
-
-        // Notify that upgrade is ready
-        onUpgradeReady?(model)
-      }
-    } catch {
-      progressTask.cancel()
-
-      await MainActor.run {
-        isPrewarming[model] = false
-        debugPrint("❌ Failed to prewarm \(model.displayName): \(error)", category: "MODEL")
-        AppLogger.model.error("Failed to prewarm \(model.displayName): \(error)")
-      }
-    }
-  }
-
-  /// Perform the model upgrade - switch to the quality model
-  func performUpgrade() {
-    guard let upgradeModel = pendingUpgradeModel else { return }
-
-    AppLogger.model.info("Upgrading to \(upgradeModel.displayName)")
-    SettingsManager.shared.selectedModel = upgradeModel
-    pendingUpgradeModel = nil
   }
 
   // MARK: - Formatting

@@ -157,6 +157,9 @@
 "advanced.checkForUpdates" = "Nach Updates suchen";
 "advanced.updatesDeliveredFrom" = "Updates werden direkt von voicy.work bereitgestellt";
 
+/* Loading Window */
+"loadingWindow.title" = "KI-Modell wird geladen...";
+
 /* Model Download Window */
 "download.whisperModels" = "Sprachmodelle";
 "download.description" = "Laden Sie ein Spracherkennungsmodell herunter, um die Transkription zu aktivieren.\nGrößere Modelle sind genauer, benötigen aber mehr Speicher.";

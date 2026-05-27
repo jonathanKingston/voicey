@@ -157,6 +157,9 @@
 "advanced.checkForUpdates" = "检查更新";
 "advanced.updatesDeliveredFrom" = "更新直接从 voicy.work 提供";
 
+/* Loading Window */
+"loadingWindow.title" = "正在加载 AI 模型...";
+
 /* Model Download Window */
 "download.whisperModels" = "语音模型";
 "download.description" = "下载语音识别模型以启用转录。\n较大的模型更准确，但需要更多内存。";
