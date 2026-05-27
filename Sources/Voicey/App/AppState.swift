@@ -118,6 +118,21 @@ final class AppState: ObservableObject {
   /// Model loading status - for startup warmup indication
   @Published var modelStatus: ModelStatus = .notDownloaded
 
+  /// Normalized bar heights for the clip being transcribed (see `AudioWaveformEnvelope`).
+  @Published private(set) var recordingWaveformEnvelope: [Float] = []
+
+  /// Duration of the captured clip in seconds (16 kHz sample count / rate).
+  @Published private(set) var recordingAudioDuration: TimeInterval = 0
+
+  /// Wall-clock start of the in-flight Qwen transcription (overlay progress).
+  @Published private(set) var transcriptionProcessingStartedAt: Date?
+
+  /// Expected processing time / audio duration used to animate overlay progress.
+  @Published private(set) var transcriptionProcessingEstimateRTF: Double = 1.0
+
+  private var recentQwenTranscriptionRTFs: [Double] = []
+  private let maxRecentQwenTranscriptionRTFs = 5
+
   // MARK: - Convenience Accessors
 
   /// Whether we're currently recording (delegates to transcriptionState)
@@ -128,5 +143,50 @@ final class AppState: ObservableObject {
   /// Whether the app is ready to record (model loaded and permissions granted)
   var isReadyToRecord: Bool {
     modelStatus.isReady
+  }
+
+  // MARK: - Overlay waveform / progress
+
+  var averageQwenTranscriptionRTF: Double? {
+    guard !recentQwenTranscriptionRTFs.isEmpty else { return nil }
+    let sum = recentQwenTranscriptionRTFs.reduce(0, +)
+    return sum / Double(recentQwenTranscriptionRTFs.count)
+  }
+
+  func prepareTranscriptionProgressDisplay(
+    envelope: [Float],
+    audioDuration: TimeInterval,
+    estimatedRTF: Double
+  ) {
+    recordingWaveformEnvelope = envelope
+    recordingAudioDuration = audioDuration
+    transcriptionProcessingEstimateRTF = max(estimatedRTF, 0.05)
+    transcriptionProcessingStartedAt = Date()
+  }
+
+  func recordQwenTranscriptionRTF(_ rtf: Double) {
+    guard rtf > 0 else { return }
+    recentQwenTranscriptionRTFs.append(rtf)
+    if recentQwenTranscriptionRTFs.count > maxRecentQwenTranscriptionRTFs {
+      recentQwenTranscriptionRTFs.removeFirst()
+    }
+  }
+
+  func clearRecordingWaveformDisplay() {
+    recordingWaveformEnvelope = []
+    recordingAudioDuration = 0
+    transcriptionProcessingStartedAt = nil
+    transcriptionProcessingEstimateRTF = 1.0
+  }
+
+  static func defaultEstimatedRTF(for model: SpeechModel) -> Double {
+    switch model {
+    case .qwen3Small:
+      return 0.65
+    case .qwen3Large:
+      return 1.05
+    default:
+      return 1.0
+    }
   }
 }

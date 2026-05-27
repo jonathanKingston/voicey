@@ -281,14 +281,30 @@ struct TranscriptionOverlayView: View {
       RoundedRectangle(cornerRadius: 10, style: .continuous)
         .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.12), lineWidth: 0.5)
 
-      if appState.transcriptionState.isRecording {
-        WaveformView(level: appState.audioLevel)
-          .frame(width: 100, height: 26)
-      }
+      activitySlotContent
+        .frame(width: 100, height: 26)
     }
     .frame(width: 108, height: 32)
     .animation(.easeInOut(duration: 0.2), value: appState.transcriptionState.isRecording)
     .clipped()
+  }
+
+  @ViewBuilder
+  private var activitySlotContent: some View {
+    if appState.transcriptionState.isRecording {
+      WaveformView(level: appState.audioLevel)
+    } else if appState.transcriptionState.isProcessing,
+              !appState.recordingWaveformEnvelope.isEmpty,
+              let startedAt = appState.transcriptionProcessingStartedAt {
+      CapturedWaveformProgressView(
+        envelope: appState.recordingWaveformEnvelope,
+        startedAt: startedAt,
+        audioDuration: appState.recordingAudioDuration,
+        estimatedRTF: appState.transcriptionProcessingEstimateRTF
+      )
+    } else if appState.transcriptionState.isProcessing || appState.transcriptionState.isLoadingModel {
+      TranscriptionActivityPlaceholderView()
+    }
   }
 
   @ViewBuilder

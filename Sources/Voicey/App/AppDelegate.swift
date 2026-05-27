@@ -936,6 +936,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if dependencies.settings.pauseMediaDuringTranscription {
       dependencies.mediaPlayback.pauseForTranscription()
     }
+    appState.clearRecordingWaveformDisplay()
     appState.transcriptionState = .recording(startTime: Date())
 
     // Show overlay on the screen where the user was last interacting
@@ -1036,8 +1037,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       statusBarController?.updateIcon(recording: false)
     }
 
-    appState.transcriptionState = .processing
-
     // Granite does better without additional end-of-audio trimming.
     let selectedModel = SettingsManager.shared.selectedModel
     let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
@@ -1070,6 +1069,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.audio.warning(
         "Audio too short (\(String(format: "%.2f", durationSec))s), skipping transcription")
       hideOverlay()
+      appState.clearRecordingWaveformDisplay()
       appState.transcriptionState = .idle
       dependencies.mediaPlayback.resumeAfterTranscription()
       // Check for pending model upgrade now that we're idle
@@ -1082,6 +1082,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       dependencies.mediaPlayback.resumeAfterTranscription()
     }
 
+    configureProcessingWaveformDisplay(
+      audioBuffer: audioBuffer,
+      durationSec: durationSec,
+      model: selectedModel
+    )
+    appState.transcriptionState = .processing
+
     // Process transcription
     Task {
       await processTranscription(audioBuffer: audioBuffer)
@@ -1092,6 +1099,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.general.info("Cancelling transcription...")
 
     appState.transcriptionState = .idle
+    appState.clearRecordingWaveformDisplay()
 
     // Stop and discard audio
     _ = audioCaptureManager?.stopCapture()
@@ -1164,6 +1172,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let hasDeliverableText =
         processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
+      if selectedModel.isQwenModel {
+        await MainActor.run {
+          appState.recordQwenTranscriptionRTF(result.performanceMetrics.realTimeFactor)
+        }
+      }
+
       // Output text
       await MainActor.run {
         appState.transcriptionState = .completed(text: processedText)
@@ -1216,6 +1230,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // MARK: - Overlay
 
+  private func configureProcessingWaveformDisplay(
+    audioBuffer: [Float],
+    durationSec: TimeInterval,
+    model: SpeechModel
+  ) {
+    guard model.isQwenModel else { return }
+    let envelope = AudioWaveformEnvelope.normalizedBars(from: audioBuffer)
+    let estimatedRTF = estimatedTranscriptionRTF(for: model)
+    appState.prepareTranscriptionProgressDisplay(
+      envelope: envelope,
+      audioDuration: durationSec,
+      estimatedRTF: estimatedRTF
+    )
+  }
+
+  private func estimatedTranscriptionRTF(for model: SpeechModel) -> Double {
+    if let average = appState.averageQwenTranscriptionRTF, average > 0 {
+      return average
+    }
+    if let inProcessAverage = qwenEngine?.averageRTF, inProcessAverage > 0 {
+      return inProcessAverage
+    }
+    return AppState.defaultEstimatedRTF(for: model)
+  }
+
   private func showOverlay() {
     Task { @MainActor [weak self] in
       guard let self else { return }
@@ -1232,6 +1271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func hideOverlay() {
     Task { @MainActor [weak self] in
       self?.transcriptionOverlay?.hide()
+      self?.appState.clearRecordingWaveformDisplay()
     }
   }
 
