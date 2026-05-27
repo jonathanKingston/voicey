@@ -743,12 +743,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let loadingView = VStack(spacing: 16) {
       ProgressView()
         .scaleEffect(1.5)
-      Text("Loading AI Model...")
+      Text(L10n.LoadingWindow.title)
         .font(.headline)
-      Text("First launch may take 1-3 minutes for CoreML compilation")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
     }
     .padding(30)
     .frame(width: 300)

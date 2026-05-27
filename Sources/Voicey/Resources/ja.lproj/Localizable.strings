@@ -157,6 +157,9 @@
 "advanced.checkForUpdates" = "アップデートを確認";
 "advanced.updatesDeliveredFrom" = "アップデートはvoicy.workから直接配信されます";
 
+/* Loading Window */
+"loadingWindow.title" = "AIモデルを読み込み中...";
+
 /* Model Download Window */
 "download.whisperModels" = "音声モデル";
 "download.description" = "文字起こしを有効にするには、音声認識モデルをダウンロードしてください。\n大きなモデルはより正確ですが、より多くのメモリが必要です。";
