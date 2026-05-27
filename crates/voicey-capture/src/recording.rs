@@ -6,7 +6,9 @@ use std::thread;
 use std::time::Duration;
 
 const TARGET_SAMPLE_RATE: f64 = 16_000.0;
-const MAX_RECORDING_SECONDS: f64 = 300.0;
+/// Safety rail for forgotten recordings (~19 MiB at 16 kHz). Keep aligned with Swift
+/// `RecordingDurationLimits.maxSeconds`.
+const MAX_RECORDING_SECONDS: f64 = 600.0;
 
 static LIVE_LEVEL_BITS: AtomicU32 = AtomicU32::new(0);
 
@@ -117,8 +119,8 @@ fn record_until_stop(stop_rx: mpsc::Receiver<()>) -> Result<Vec<f32>, String> {
         if stop_rx.try_recv().is_ok() {
             break;
         }
-        if started.elapsed().as_secs_f64() > MAX_RECORDING_SECONDS {
-            return Err("recording exceeded maximum duration".into());
+        if started.elapsed().as_secs_f64() >= MAX_RECORDING_SECONDS {
+            break;
         }
         thread::sleep(Duration::from_millis(20));
     }

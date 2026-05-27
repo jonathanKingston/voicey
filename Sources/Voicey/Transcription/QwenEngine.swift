@@ -13,6 +13,9 @@ final class QwenEngine: @unchecked Sendable {
   private let maximumQwenMaxTokens = 4096
   private let qwenTokensPerSecondEstimate = 8.0
   private let qwenTokenBuffer = 128
+  /// Qwen single-pass MLX inference degrades on very long clips; segment beyond this.
+  private let maxSinglePassAudioSeconds: Double = 120
+  private let chunkAudioSeconds: Double = 60
 
   /// Callback to notify when model loading state changes
   var onLoadingStateChanged: ((Bool) -> Void)?
@@ -147,8 +150,6 @@ final class QwenEngine: @unchecked Sendable {
 
     let thermalStateBefore = ProcessInfo.processInfo.thermalState
     let audioDuration = Double(audioBuffer.count) / 16000.0
-    let tokenBudget = Int(ceil(audioDuration * qwenTokensPerSecondEstimate)) + qwenTokenBuffer
-    let maxTokens = min(maximumQwenMaxTokens, max(minimumQwenMaxTokens, tokenBudget))
     let startTime = CFAbsoluteTimeGetCurrent()
 
     if let decoderContext {
@@ -157,16 +158,38 @@ final class QwenEngine: @unchecked Sendable {
       )
     }
 
-    AppLogger.transcription.info(
-      "QwenEngine: Transcribing \(String(format: "%.1f", audioDuration))s audio with maxTokens=\(maxTokens)"
-    )
-    let transcribedText = qwenModel.transcribe(
-      audio: audioBuffer,
-      sampleRate: 16000,
-      language: nil,
-      maxTokens: maxTokens,
-      context: decoderContext
-    )
+    let transcribedText: String
+    if audioDuration <= maxSinglePassAudioSeconds {
+      transcribedText = transcribeSinglePass(
+        qwenModel: qwenModel,
+        audioBuffer: audioBuffer,
+        decoderContext: decoderContext
+      )
+    } else {
+      let chunkSampleCount = Int(chunkAudioSeconds * 16000)
+      var parts: [String] = []
+      var offset = 0
+      let chunkCount = Int(ceil(audioDuration / chunkAudioSeconds))
+      let chunkSeconds = Int(chunkAudioSeconds)
+      AppLogger.transcription.info(
+        "QwenEngine: Long clip (\(String(format: "%.1f", audioDuration))s); transcribing in \(chunkCount) × \(chunkSeconds)s segments"
+      )
+      while offset < audioBuffer.count {
+        let end = min(offset + chunkSampleCount, audioBuffer.count)
+        let chunk = Array(audioBuffer[offset..<end])
+        let chunkText = transcribeSinglePass(
+          qwenModel: qwenModel,
+          audioBuffer: chunk,
+          decoderContext: decoderContext
+        )
+        if !chunkText.isEmpty {
+          parts.append(chunkText)
+        }
+        offset = end
+      }
+      transcribedText = parts.joined(separator: " ")
+    }
+
     let processingTime = CFAbsoluteTimeGetCurrent() - startTime
     let rtf = audioDuration > 0 ? processingTime / audioDuration : 0
 
@@ -188,13 +211,48 @@ final class QwenEngine: @unchecked Sendable {
       }
     }
 
+    if transcribedText.isEmpty {
+      AppLogger.transcription.warning(
+        "QwenEngine: Empty transcript after stripping steering echo / chunk merge"
+      )
+    }
+
     return TranscriptionResult(
-      text: transcribedText.trimmingCharacters(in: .whitespacesAndNewlines),
+      text: transcribedText,
       segments: [],
       language: "auto",
       processingTime: processingTime,
       performanceMetrics: metrics
     )
+  }
+
+  private func transcribeSinglePass(
+    qwenModel: Qwen3ASRModel,
+    audioBuffer: [Float],
+    decoderContext: String?
+  ) -> String {
+    let audioDuration = Double(audioBuffer.count) / 16000.0
+    let tokenBudget = Int(ceil(audioDuration * qwenTokensPerSecondEstimate)) + qwenTokenBuffer
+    let maxTokens = min(maximumQwenMaxTokens, max(minimumQwenMaxTokens, tokenBudget))
+
+    AppLogger.transcription.info(
+      "QwenEngine: Transcribing \(String(format: "%.1f", audioDuration))s audio with maxTokens=\(maxTokens)"
+    )
+    let rawText = qwenModel.transcribe(
+      audio: audioBuffer,
+      sampleRate: 16000,
+      language: nil,
+      maxTokens: maxTokens,
+      context: decoderContext
+    )
+    let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let stripped = TranscriptionGlossary.strippingEchoedDecoderContext(trimmed, decoderContext: decoderContext)
+    if stripped.isEmpty, !trimmed.isEmpty {
+      AppLogger.transcription.warning(
+        "QwenEngine: Model echoed decoder context instead of speech; treating segment as empty"
+      )
+    }
+    return stripped
   }
 
   func resetPerformanceTracking() {
