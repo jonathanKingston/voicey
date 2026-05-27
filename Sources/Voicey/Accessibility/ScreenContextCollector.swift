@@ -72,7 +72,7 @@ enum ScreenContextCollector {
     )
     if SettingsManager.shared.enableDetailedLogging, !harvestedForLog.isEmpty {
       AppLogger.transcription.info(
-        "ScreenContextCollector harvest: \(harvestedForLog, privacy: .public)"
+        "ScreenContextCollector harvest: \(harvestedForLog, privacy: .private)"
       )
     }
 

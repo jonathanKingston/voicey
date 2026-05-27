@@ -38,6 +38,7 @@
 "settings.hotkey" = "ホットキー";
 "settings.audio" = "オーディオ";
 "settings.model" = "モデル";
+"settings.transcription" = "Spelling & Context";
 "settings.voiceCommands" = "音声コマンド";
 "settings.advanced" = "詳細";
 
@@ -105,16 +106,20 @@
 "model.failedToDelete" = "モデルの削除に失敗しました";
 "model.ok" = "OK";
 "model.unknownError" = "不明なエラー";
-"model.transcriptionGlossary" = "Transcription Glossary";
-"model.transcriptionGlossaryEnable" = "Bias spelling toward glossary terms";
-"model.transcriptionGlossaryDescription" = "Names and terms listed here are sent to the Qwen model before transcription to improve spelling. Separate entries with commas or new lines.";
-"model.transcriptionGlossaryPlaceholder" = "Metformin, HbA1c, Voicey, QuirkQuid";
-"model.transcriptionScreenContextEnable" = "Use accessibility text from target app";
-"model.transcriptionScreenContextDescription" = "When recording starts, Voicey reads the front app's focused field and nearby UI text, ranks terms with BM25, and sends them to Qwen before transcription. Requires Accessibility permission.";
-"model.transcriptionScreenContextOCREnable" = "Use on-device OCR when accessibility text is limited";
-"model.transcriptionScreenContextOCRDescription" = "If the target app (for example Electron) does not expose enough text via Accessibility, Voicey can capture that window and run Apple's on-device Vision OCR. Requires Screen Recording permission and stays local.";
-"model.transcriptionScreenContextOCRPermission" = "Screen Recording permission is required for OCR fallback.";
-"model.openScreenCaptureSettings" = "Open Screen Recording Settings";
+
+/* Spelling & context (transcription steering) */
+"transcription.intro" = "Improve recognition of names, jargon, and words visible in the app you're dictating into. Voicey is always included; add more terms below if you like. Processing stays on your Mac.";
+"transcription.customVocabulary" = "Custom vocabulary";
+"transcription.glossaryEnable" = "Prefer my vocabulary list";
+"transcription.glossaryDescription" = "Terms you list here are sent to the speech model before transcription to improve spelling (along with Voicey). Separate entries with commas or new lines.";
+"transcription.glossaryPlaceholder" = "Metformin, HbA1c, Voicey, QuirkQuid";
+"transcription.onScreenText" = "On-screen text";
+"transcription.screenContextEnable" = "Use text from the target app";
+"transcription.screenContextDescription" = "When you start recording, Voicey reads the focused field and nearby UI text in the front app and uses it to steer spelling. Requires Accessibility permission (same as auto-insert).";
+"transcription.screenContextOCREnable" = "Read the window with on-device OCR when needed";
+"transcription.screenContextOCRDescription" = "Some apps (for example Cursor or other Electron apps) expose little text via Accessibility. Voicey can capture that window and run Apple's on-device Vision OCR instead. Requires Screen Recording permission; nothing is sent to the cloud.";
+"transcription.screenContextOCRPermission" = "Screen Recording permission is required for OCR.";
+"transcription.openScreenCaptureSettings" = "Open Screen Recording Settings";
 
 /* Voice Commands */
 "voiceCommands.enable" = "音声コマンドを有効にする";

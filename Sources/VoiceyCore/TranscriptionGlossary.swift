@@ -1,14 +1,18 @@
 import Foundation
 
-/// Builds decoder context strings for Qwen3 ASR vocabulary biasing.
+/// Builds decoder context strings for on-device ASR vocabulary biasing.
 public enum TranscriptionGlossary {
   /// Upper bound on glossary context length passed to the model.
   public static let maxContextCharacterCount = 2000
 
+  /// Always included in steering glossaries when biasing is enabled.
+  public static let builtInTerms: [String] = ["Voicey"]
+
   /// Returns decoder context for the combined term list, or nil when empty.
   public static func decodingContext(terms: [String]) -> String? {
+    let merged = builtInTerms + terms
     let unique = ScreenTermSelector.dedupePreservingOrder(
-      terms,
+      merged,
       maxCount: ScreenTermSelector.defaultMaxTerms
     )
     guard !unique.isEmpty else { return nil }

@@ -5,13 +5,15 @@ public enum BM25 {
   public static func rankTerms(
     query: String,
     documents: [String],
+    anchorVocabulary: [String] = [],
     k1: Float = 1.2,
     lengthNormalization: Float = 0.75
   ) -> [(term: String, score: Float)] {
-    let docTokens = documents.map { ScreenTermFilter.tokenize($0) }
+    let anchors = anchorVocabulary
+    let docTokens = documents.map { ScreenTermHealing.enrichedTokens(in: $0, anchors: anchors) }
     guard !docTokens.isEmpty else { return [] }
 
-    let queryTokens = ScreenTermFilter.tokenize(query)
+    let queryTokens = ScreenTermHealing.enrichedTokens(in: query, anchors: anchors)
     guard !queryTokens.isEmpty else { return [] }
 
     let avgDocLength = Float(docTokens.map(\.count).reduce(0, +)) / Float(docTokens.count)

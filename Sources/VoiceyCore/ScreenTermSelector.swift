@@ -24,22 +24,35 @@ public enum ScreenTermSelector {
     let query = queryParts.joined(separator: " ")
 
     let chunks = snapshot.corpusChunks.filter { !ScreenTermFilter.isNoiseChunk($0) }
-    let rankedTerms = BM25.rankTerms(query: query, documents: chunks)
+    let corpusAnchors =
+      chunks
+      .flatMap { ScreenTermFilter.tokenize($0) }
+      .filter { $0.count >= 5 }
+    let anchors = ScreenTermSelector.dedupePreservingOrder(
+      TranscriptionGlossary.builtInTerms + mustKeep + corpusAnchors,
+      maxCount: 200
+    )
+    let rankedTerms = BM25.rankTerms(query: query, documents: chunks, anchorVocabulary: anchors)
 
     var selected: [String] = []
     selected.append(contentsOf: mustKeep)
 
     let mustKeepKeys = Set(mustKeep.map { normalizedKey($0) })
     for entry in rankedTerms {
+      let term = ScreenTermHealing.canonicalTerm(entry.term, anchors: anchors)
+      guard !ScreenTermFilter.isSteeringNoiseToken(term) else { continue }
+      guard !ScreenTermHealing.isInteriorFragment(term, anchors: anchors) else { continue }
       let key = normalizedKey(entry.term)
       guard !mustKeepKeys.contains(key) else { continue }
-      selected.append(entry.term)
+      selected.append(term)
       if selected.count >= maxTerms { break }
     }
 
     if selected.count < maxTerms, !query.isEmpty {
-      let queryTokens = ScreenTermFilter.tokenize(query)
+      let queryTokens = ScreenTermHealing.enrichedTokens(in: query, anchors: anchors)
       for token in queryTokens {
+        guard !ScreenTermFilter.isSteeringNoiseToken(token) else { continue }
+        guard !ScreenTermHealing.isInteriorFragment(token, anchors: anchors) else { continue }
         let key = normalizedKey(token)
         guard !mustKeepKeys.contains(key) else { continue }
         if !selected.contains(where: { normalizedKey($0) == key }) {

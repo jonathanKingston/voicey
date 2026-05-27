@@ -13,7 +13,7 @@ struct SettingsView: View {
   private static let sidebarMaxWidth: CGFloat = 240
 
   enum Tab: String, CaseIterable, Hashable, Identifiable {
-    case setup, general, hotkey, audio, model, voiceCommands, advanced
+    case setup, general, hotkey, audio, model, transcription, voiceCommands, advanced
 
     var id: Self { self }
 
@@ -29,6 +29,8 @@ struct SettingsView: View {
         return L10n.Settings.audio
       case .model:
         return L10n.Settings.model
+      case .transcription:
+        return L10n.Settings.transcription
       case .voiceCommands:
         return L10n.Settings.voiceCommands
       case .advanced:
@@ -48,6 +50,8 @@ struct SettingsView: View {
         return "mic.fill"
       case .model:
         return "waveform"
+      case .transcription:
+        return "text.book.closed.fill"
       case .voiceCommands:
         return "text.bubble.fill"
       case .advanced:
@@ -128,6 +132,8 @@ struct SettingsView: View {
       AudioSettingsView()
     case .model:
       ModelSettingsView()
+    case .transcription:
+      TranscriptionSteeringSettingsView()
     case .voiceCommands:
       VoiceCommandsSettingsView()
     case .advanced:
@@ -491,18 +497,6 @@ struct ModelSettingsView: View {
   private static let defaults = SettingsManager.defaultsStore
   @AppStorage("selectedModel", store: defaults) private var selectedModel: String = ModelManager
     .defaultModel.rawValue
-  @AppStorage("transcriptionGlossaryEnabled", store: defaults) private
-    var transcriptionGlossaryEnabled = false
-  @AppStorage("transcriptionScreenContextEnabled", store: defaults) private
-    var transcriptionScreenContextEnabled = false
-  @AppStorage("transcriptionScreenContextOCREnabled", store: defaults) private
-    var transcriptionScreenContextOCREnabled = false
-  @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
-  @State private var screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
-
-  private var selectedSpeechModel: SpeechModel? {
-    SpeechModel(rawValue: selectedModel)
-  }
 
   var body: some View {
     Form {
@@ -534,61 +528,6 @@ struct ModelSettingsView: View {
         }
       }
 
-      if selectedSpeechModel?.isQwenModel == true {
-        Section(L10n.Model.transcriptionGlossary) {
-          Toggle(L10n.Model.transcriptionScreenContextEnable, isOn: $transcriptionScreenContextEnabled)
-
-          Text(L10n.Model.transcriptionScreenContextDescription)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-          if transcriptionScreenContextEnabled {
-            Toggle(L10n.Model.transcriptionScreenContextOCREnable, isOn: $transcriptionScreenContextOCREnabled)
-              .onChange(of: transcriptionScreenContextOCREnabled) { _, enabled in
-                if enabled, !PermissionsManager.shared.checkScreenCapturePermission() {
-                  _ = PermissionsManager.shared.requestScreenCapturePermission()
-                }
-                screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
-              }
-
-            Text(L10n.Model.transcriptionScreenContextOCRDescription)
-              .font(.caption)
-              .foregroundStyle(.secondary)
-
-            if transcriptionScreenContextOCREnabled, !screenCaptureGranted {
-              Text(L10n.Model.transcriptionScreenContextOCRPermission)
-                .font(.caption)
-                .foregroundStyle(.orange)
-              Button(L10n.Model.openScreenCaptureSettings) {
-                PermissionsManager.shared.openScreenCaptureSettings()
-              }
-            }
-          }
-
-          Toggle(L10n.Model.transcriptionGlossaryEnable, isOn: $transcriptionGlossaryEnabled)
-
-          Text(L10n.Model.transcriptionGlossaryDescription)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-          if transcriptionGlossaryEnabled {
-            TextEditor(text: $transcriptionGlossary)
-              .font(.system(.body, design: .monospaced))
-              .frame(minHeight: 80, maxHeight: 140)
-              .overlay(alignment: .topLeading) {
-                if transcriptionGlossary.isEmpty {
-                  Text(L10n.Model.transcriptionGlossaryPlaceholder)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 8)
-                    .allowsHitTesting(false)
-                }
-              }
-          }
-        }
-      }
-
       Section(L10n.Model.performance) {
         Text(L10n.Model.performanceDescription)
           .font(.caption)
@@ -605,13 +544,96 @@ struct ModelSettingsView: View {
       if let model = SpeechModel(rawValue: selectedModel) {
         appState.currentModel = model
       }
-      transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
-      screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
     }
     .onChange(of: selectedModel) {
       guard let model = SpeechModel(rawValue: selectedModel) else { return }
       appState.currentModel = model
       NotificationCenter.default.post(name: .voiceySelectedModelDidChange, object: model)
+    }
+  }
+}
+
+// MARK: - Transcription steering (glossary & screen context)
+
+struct TranscriptionSteeringSettingsView: View {
+  private static let defaults = SettingsManager.defaultsStore
+  @AppStorage("transcriptionGlossaryEnabled", store: defaults) private
+    var transcriptionGlossaryEnabled = true
+  @AppStorage("transcriptionScreenContextEnabled", store: defaults) private
+    var transcriptionScreenContextEnabled = true
+  @AppStorage("transcriptionScreenContextOCREnabled", store: defaults) private
+    var transcriptionScreenContextOCREnabled = false
+  @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+  @State private var screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+
+  var body: some View {
+    Form {
+      Section {
+        Text(L10n.Transcription.intro)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+
+      Section(L10n.Transcription.customVocabulary) {
+        Toggle(L10n.Transcription.glossaryEnable, isOn: $transcriptionGlossaryEnabled)
+
+        Text(L10n.Transcription.glossaryDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if transcriptionGlossaryEnabled {
+          TextEditor(text: $transcriptionGlossary)
+            .font(.system(.body, design: .monospaced))
+            .frame(minHeight: 80, maxHeight: 140)
+            .overlay(alignment: .topLeading) {
+              if transcriptionGlossary.isEmpty {
+                Text(L10n.Transcription.glossaryPlaceholder)
+                  .font(.caption)
+                  .foregroundStyle(.tertiary)
+                  .padding(.horizontal, 5)
+                  .padding(.vertical, 8)
+                  .allowsHitTesting(false)
+              }
+            }
+        }
+      }
+
+      Section(L10n.Transcription.onScreenText) {
+        Toggle(L10n.Transcription.screenContextEnable, isOn: $transcriptionScreenContextEnabled)
+
+        Text(L10n.Transcription.screenContextDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if transcriptionScreenContextEnabled {
+          Toggle(L10n.Transcription.screenContextOCREnable, isOn: $transcriptionScreenContextOCREnabled)
+            .onChange(of: transcriptionScreenContextOCREnabled) { _, enabled in
+              if enabled, !PermissionsManager.shared.checkScreenCapturePermission() {
+                _ = PermissionsManager.shared.requestScreenCapturePermission()
+              }
+              screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+            }
+
+          Text(L10n.Transcription.screenContextOCRDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          if transcriptionScreenContextOCREnabled, !screenCaptureGranted {
+            Text(L10n.Transcription.screenContextOCRPermission)
+              .font(.caption)
+              .foregroundStyle(.orange)
+            Button(L10n.Transcription.openScreenCaptureSettings) {
+              PermissionsManager.shared.openScreenCaptureSettings()
+            }
+          }
+        }
+      }
+    }
+    .formStyle(.grouped)
+    .padding()
+    .onAppear {
+      transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+      screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
     }
     .onChange(of: transcriptionGlossary) {
       SettingsManager.shared.transcriptionGlossary = transcriptionGlossary

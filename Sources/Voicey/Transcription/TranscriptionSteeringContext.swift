@@ -33,9 +33,9 @@ enum TranscriptionSteeringContext {
       )
       if settings.enableDetailedLogging {
         let termsLine = terms.joined(separator: ", ")
-        AppLogger.transcription.info("Steering terms: \(termsLine, privacy: .public)")
+        AppLogger.transcription.info("Steering terms: \(termsLine, privacy: .private)")
         if let context {
-          AppLogger.transcription.info("Steering decoder_context: \(context, privacy: .public)")
+          AppLogger.transcription.info("Steering decoder_context: \(context, privacy: .private)")
         }
       }
     }

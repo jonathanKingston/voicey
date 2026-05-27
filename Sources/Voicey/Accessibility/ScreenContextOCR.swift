@@ -31,7 +31,7 @@ enum ScreenContextOCR {
     await withCheckedContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
         let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .fast
+        request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
 
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
@@ -45,18 +45,19 @@ enum ScreenContextOCR {
           return
         }
 
-        let lines = (request.results ?? [])
+        let rawLines = (request.results ?? [])
           .compactMap { $0.topCandidates(1).first?.string }
           .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
           .filter { !$0.isEmpty }
 
+        let lines = ScreenContextOCRTextFilter.filteredRecognizedLines(rawLines)
         let snapshot = snapshot(fromRecognizedLines: lines)
         AppLogger.transcription.info(
-          "ScreenContextOCR: lines=\(lines.count) queryChars=\(snapshot.queryText.count) chunks=\(snapshot.corpusChunks.count)"
+          "ScreenContextOCR: rawLines=\(rawLines.count) lines=\(lines.count) queryChars=\(snapshot.queryText.count) chunks=\(snapshot.corpusChunks.count)"
         )
         if SettingsManager.shared.enableDetailedLogging, !lines.isEmpty {
           let preview = lines.prefix(8).joined(separator: " | ")
-          AppLogger.transcription.info("ScreenContextOCR sample: \(preview, privacy: .public)")
+          AppLogger.transcription.info("ScreenContextOCR sample: \(preview, privacy: .private)")
         }
         continuation.resume(returning: snapshot)
       }

@@ -202,6 +202,7 @@ enum L10n {
         static var hotkey: String { L10n.string("settings.hotkey") }
         static var audio: String { L10n.string("settings.audio") }
         static var model: String { L10n.string("settings.model") }
+        static var transcription: String { L10n.string("settings.transcription") }
         static var voiceCommands: String { L10n.string("settings.voiceCommands") }
         static var advanced: String { L10n.string("settings.advanced") }
     }
@@ -290,31 +291,30 @@ enum L10n {
         static var failedToDelete: String { L10n.string("model.failedToDelete") }
         static var ok: String { L10n.string("model.ok") }
         static var unknownError: String { L10n.string("model.unknownError") }
-        static var transcriptionGlossary: String { L10n.string("model.transcriptionGlossary") }
-        static var transcriptionGlossaryEnable: String { L10n.string("model.transcriptionGlossaryEnable") }
-        static var transcriptionGlossaryDescription: String {
-            L10n.string("model.transcriptionGlossaryDescription")
+    }
+
+    // MARK: - Transcription steering settings
+
+    enum Transcription {
+        static var intro: String { L10n.string("transcription.intro") }
+        static var customVocabulary: String { L10n.string("transcription.customVocabulary") }
+        static var glossaryEnable: String { L10n.string("transcription.glossaryEnable") }
+        static var glossaryDescription: String { L10n.string("transcription.glossaryDescription") }
+        static var glossaryPlaceholder: String { L10n.string("transcription.glossaryPlaceholder") }
+        static var onScreenText: String { L10n.string("transcription.onScreenText") }
+        static var screenContextEnable: String { L10n.string("transcription.screenContextEnable") }
+        static var screenContextDescription: String {
+            L10n.string("transcription.screenContextDescription")
         }
-        static var transcriptionGlossaryPlaceholder: String {
-            L10n.string("model.transcriptionGlossaryPlaceholder")
+        static var screenContextOCREnable: String { L10n.string("transcription.screenContextOCREnable") }
+        static var screenContextOCRDescription: String {
+            L10n.string("transcription.screenContextOCRDescription")
         }
-        static var transcriptionScreenContextEnable: String {
-            L10n.string("model.transcriptionScreenContextEnable")
-        }
-        static var transcriptionScreenContextDescription: String {
-            L10n.string("model.transcriptionScreenContextDescription")
-        }
-        static var transcriptionScreenContextOCREnable: String {
-            L10n.string("model.transcriptionScreenContextOCREnable")
-        }
-        static var transcriptionScreenContextOCRDescription: String {
-            L10n.string("model.transcriptionScreenContextOCRDescription")
-        }
-        static var transcriptionScreenContextOCRPermission: String {
-            L10n.string("model.transcriptionScreenContextOCRPermission")
+        static var screenContextOCRPermission: String {
+            L10n.string("transcription.screenContextOCRPermission")
         }
         static var openScreenCaptureSettings: String {
-            L10n.string("model.openScreenCaptureSettings")
+            L10n.string("transcription.openScreenCaptureSettings")
         }
     }
 

@@ -8,7 +8,17 @@ final class TranscriptionGlossaryTests: XCTestCase {
   }
 
   func testDecodingContextEmptyGlossaryReturnsNil() {
-    XCTAssertNil(TranscriptionGlossary.decodingContext(enabled: true, rawGlossary: "  \n  "))
+    XCTAssertEqual(
+      TranscriptionGlossary.decodingContext(enabled: true, rawGlossary: "  \n  "),
+      "Glossary: Voicey"
+    )
+  }
+
+  func testDecodingContextAlwaysIncludesBuiltInVoicey() {
+    XCTAssertEqual(
+      TranscriptionGlossary.decodingContext(terms: ["Metformin"]),
+      "Glossary: Voicey, Metformin"
+    )
   }
 
   func testDecodingContextMergesManualAndScreenTerms() {

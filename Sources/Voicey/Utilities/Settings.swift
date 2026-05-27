@@ -38,8 +38,8 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.restoreClipboardAfterPaste: true,  // Restore original clipboard after paste
       Keys.pauseMediaDuringTranscription: true,
       Keys.voiceCommandsEnabled: false,
-      Keys.transcriptionGlossaryEnabled: false,
-      Keys.transcriptionScreenContextEnabled: false,
+      Keys.transcriptionGlossaryEnabled: true,
+      Keys.transcriptionScreenContextEnabled: true,
       Keys.transcriptionScreenContextOCREnabled: false,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
