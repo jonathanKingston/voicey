@@ -168,8 +168,9 @@ struct TranscriptionOverlayView: View {
     .padding(.vertical, 14)
     .frame(width: 454, alignment: .center)
     .background { glassBackground }
-    .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0.18), radius: 28, y: 14)
-    .shadow(color: .black.opacity(colorScheme == .dark ? 0.2 : 0.06), radius: 6, y: 2)
+    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.14), radius: 20, y: 10)
+    .shadow(color: .black.opacity(colorScheme == .dark ? 0.1 : 0.05), radius: 4, y: 2)
   }
 
   @ViewBuilder
@@ -246,8 +247,7 @@ struct TranscriptionOverlayView: View {
         LinearGradient(
           colors: [
             Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55),
-            Color.white.opacity(colorScheme == .dark ? 0.06 : 0.12),
-            Color.black.opacity(colorScheme == .dark ? 0.35 : 0.06)
+            Color.white.opacity(colorScheme == .dark ? 0.08 : 0.15)
           ],
           startPoint: .topLeading,
           endPoint: .bottomTrailing
