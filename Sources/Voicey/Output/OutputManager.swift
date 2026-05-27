@@ -8,6 +8,9 @@ final class OutputManager: @unchecked Sendable {
   private let notifications: NotificationProviding
   private let settings: SettingsProviding
   private let permissions: PermissionsProviding
+  private var autoPasteTask: Task<Void, Never>?
+  private static let directInsertionRestoreDelayNanoseconds: UInt64 = 200_000_000
+  private static let clipboardPasteRestoreDelayNanoseconds: UInt64 = 1_000_000_000
   private static let terminalBundleIdentifiers: Set<String> = [
     "com.apple.Terminal",
     "com.googlecode.iterm2",
@@ -42,11 +45,9 @@ final class OutputManager: @unchecked Sendable {
     AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
 
     // Save original clipboard if user wants it restored after paste.
-    // The final restore decision is made after target app activation.
+    // Keep the snapshot local so overlapping deliver flows cannot clobber each other.
     let restoreClipboardEnabled = settings.autoPasteEnabled && settings.restoreClipboardAfterPaste
-    if restoreClipboardEnabled {
-      clipboardManager.saveContents()
-    }
+    let savedClipboard = restoreClipboardEnabled ? clipboardManager.captureContents() : nil
 
     // Copy transcribed text to clipboard
     clipboardManager.copy(text)
@@ -69,16 +70,20 @@ final class OutputManager: @unchecked Sendable {
       guard permissions.checkAccessibilityPermission() else {
         AppLogger.output.error("Auto-paste enabled but Accessibility permission is not granted")
         permissions.promptForAccessibilityPermission()
-        clipboardManager.discardSavedContents()
-        notifications.showTranscriptionCopied()
         completion?()
+        notifications.showTranscriptionCopied()
         return
       }
 
       AppLogger.output.info("Auto-paste enabled - attempting to insert text")
       debugPrint("🔌 Auto-paste: Starting insert flow, targetPID=\(targetPID?.description ?? "nil")", category: "OUTPUT")
 
-      Task { @MainActor in
+      let previousTask = autoPasteTask
+      autoPasteTask = Task { @MainActor in
+        if let previousTask {
+          await previousTask.value
+        }
+
         // Let caller clean up UI first (hide overlay, etc.)
         completion?()
 
@@ -93,20 +98,31 @@ final class OutputManager: @unchecked Sendable {
           )
         }
 
-        // Attempt to paste via accessibility
-        let success = AccessibilityPaster.paste(text, preferKeyboardPaste: preferKeyboardPaste)
+        // Re-copy right before paste so the target reads the transcription even if
+        // activation took a while or another deliver flow touched the pasteboard.
+        self.clipboardManager.copy(text)
 
-        if success {
-          AppLogger.output.info("Deliver: Auto-paste succeeded")
+        // Attempt to paste via accessibility
+        let pasteResult = AccessibilityPaster.paste(text, preferKeyboardPaste: preferKeyboardPaste)
+
+        if pasteResult.succeeded {
+          AppLogger.output.info(
+            "Deliver: Auto-paste succeeded via \(pasteResult.method == .directInsertion ? "direct insertion" : "clipboard paste")"
+          )
           debugPrint("✅ Auto-paste: Successfully inserted via Accessibility API!", category: "OUTPUT")
 
           // Keep transcription on clipboard for terminal/TUI targets so manual retry remains possible.
           let shouldRestoreClipboard = restoreClipboardEnabled && !preferKeyboardPaste
-          if shouldRestoreClipboard {
-            try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
-            self.clipboardManager.restoreContents()
+          if shouldRestoreClipboard, let savedClipboard {
+            let restoreDelay = pasteResult.method.usesClipboard
+              ? Self.clipboardPasteRestoreDelayNanoseconds
+              : Self.directInsertionRestoreDelayNanoseconds
+            AppLogger.output.info(
+              "Auto-paste: Waiting \(restoreDelay / 1_000_000)ms before restoring clipboard"
+            )
+            try? await Task.sleep(nanoseconds: restoreDelay)
+            self.clipboardManager.restoreContents(savedClipboard)
           } else if restoreClipboardEnabled {
-            self.clipboardManager.discardSavedContents()
             AppLogger.output.info(
               "Auto-paste: Preserving transcription on clipboard for terminal/TUI target"
             )
@@ -114,7 +130,6 @@ final class OutputManager: @unchecked Sendable {
         } else {
           AppLogger.output.warning("Deliver: Auto-paste failed, text remains on clipboard")
           debugPrint("❌ Auto-paste: All methods failed - text remains on clipboard", category: "OUTPUT")
-          self.clipboardManager.discardSavedContents()
           self.notifications.showTranscriptionCopied()
         }
       }

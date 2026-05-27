@@ -8,32 +8,47 @@ import Foundation
 /// which is like the user pressing ⌘V through the accessibility framework.
 enum AccessibilityPaster {
 
+  enum PasteMethod: Sendable {
+    case directInsertion
+    case clipboardPaste
+    case none
+
+    var usesClipboard: Bool {
+      self == .clipboardPaste
+    }
+  }
+
+  struct PasteResult: Sendable {
+    let succeeded: Bool
+    let method: PasteMethod
+  }
+
   /// Attempts to paste text into the currently focused text field using Accessibility API.
-  /// NOTE: Assumes text is already on clipboard before calling this method.
-  /// - Parameter text: The text to insert (used as fallback for direct value manipulation)
-  /// - Returns: `true` if successful, `false` if it couldn't paste
+  /// NOTE: Clipboard-based methods assume text is already on the general pasteboard.
+  /// - Parameter text: The text to insert (used for direct value manipulation)
+  /// - Returns: Whether paste succeeded and which strategy was used
   @discardableResult
-  static func paste(_ text: String, preferKeyboardPaste: Bool = false) -> Bool {
+  static func paste(_ text: String, preferKeyboardPaste: Bool = false) -> PasteResult {
     debugPrint("🔌 AccessibilityPaster: Attempting to paste \(text.count) characters", category: "AX")
 
     guard AXIsProcessTrusted() else {
       debugPrint("❌ AccessibilityPaster: Accessibility permission not granted", category: "AX")
       AppLogger.output.error("AccessibilityPaster: Accessibility permission not granted")
-      return false
+      return PasteResult(succeeded: false, method: .none)
     }
     debugPrint("✅ AccessibilityPaster: AXIsProcessTrusted() = true", category: "AX")
 
     // Get frontmost app for fallback attempts
     guard let frontApp = NSWorkspace.shared.frontmostApplication else {
       debugPrint("❌ AccessibilityPaster: No frontmost application", category: "AX")
-      return false
+      return PasteResult(succeeded: false, method: .none)
     }
     let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
 
     if preferKeyboardPaste {
       debugPrint("⌨️ AccessibilityPaster: Terminal/TUI target detected, trying keyboard paste first", category: "AX")
       if performKeyboardPaste(frontAppPid: frontApp.processIdentifier) {
-        return true
+        return PasteResult(succeeded: true, method: .clipboardPaste)
       }
       debugPrint("⚠️ AccessibilityPaster: Keyboard paste failed, trying AX fallbacks", category: "AX")
     }
@@ -45,49 +60,46 @@ enum AccessibilityPaster {
       // Log info about the focused element for debugging
       logElementInfo(element)
 
-      // METHOD 1: AXPasteAction on focused element (most reliable for sandboxed apps)
-      // This is like the user pressing ⌘V but through the accessibility framework
-      if performPasteAction(on: element) {
-        return true
-      }
-
-      // METHOD 2: Set selected text (works for native text fields)
+      // Prefer direct insertion first so paste does not depend on clipboard timing.
       if insertViaSelectedText(element: element, text: text) {
-        return true
+        return PasteResult(succeeded: true, method: .directInsertion)
       }
 
-      // METHOD 3: Insert at cursor via value manipulation
       if let insertResult = insertAtCursor(element: element, text: text), insertResult {
-        return true
+        return PasteResult(succeeded: true, method: .directInsertion)
       }
 
-      // METHOD 4: Replace entire value (last resort for native fields)
       if replaceValue(element: element, text: text) {
-        return true
+        return PasteResult(succeeded: true, method: .directInsertion)
+      }
+
+      // Clipboard-based fallback for focused element
+      if performPasteAction(on: element) {
+        return PasteResult(succeeded: true, method: .clipboardPaste)
       }
     } else {
       debugPrint("⚠️ AccessibilityPaster: Could not get focused element", category: "AX")
     }
 
-    // METHOD 5: AXPasteAction on app element
+    // METHOD: AXPasteAction on app element
     // Some apps (especially Electron) respond to paste on the app element even when
     // we can't get the focused element, or when the focused element doesn't support paste
     debugPrint("🔧 AccessibilityPaster: Trying AXPasteAction on app element", category: "AX")
     if performPasteAction(on: appElement) {
-      return true
+      return PasteResult(succeeded: true, method: .clipboardPaste)
     }
 
-    // METHOD 6: CGEventPost - Last resort fallback
+    // CGEventPost - Last resort fallback
     // This simulates the keyboard shortcut directly rather than using accessibility actions.
     debugPrint("🔧 AccessibilityPaster: Trying CGEventPost as final fallback", category: "AX")
     if performKeyboardPaste(frontAppPid: frontApp.processIdentifier) {
-      return true
+      return PasteResult(succeeded: true, method: .clipboardPaste)
     }
 
     // All methods failed - text is already on clipboard, user can paste manually
     debugPrint("❌ AccessibilityPaster: All methods failed (including CGEventPost)", category: "AX")
     AppLogger.output.warning("AccessibilityPaster: All paste methods failed - user should paste manually with ⌘V")
-    return false
+    return PasteResult(succeeded: false, method: .none)
   }
 
   /// Perform Cmd+V simulation via CGEvent posting.
