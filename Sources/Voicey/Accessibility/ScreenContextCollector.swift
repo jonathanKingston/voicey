@@ -87,16 +87,16 @@ enum ScreenContextCollector {
   ) -> [String] {
     var parts: [String] = []
 
-    if includeValue, let value = copyStringAttribute(element, kAXValueAttribute) {
+    if includeValue, let value = copyStringAttribute(element, kAXValueAttribute as CFString) {
       parts.append(value)
     }
-    if includeSelected, let selected = copyStringAttribute(element, kAXSelectedTextAttribute) {
+    if includeSelected, let selected = copyStringAttribute(element, kAXSelectedTextAttribute as CFString) {
       parts.append(selected)
     }
-    if let title = copyStringAttribute(element, kAXTitleAttribute) {
+    if let title = copyStringAttribute(element, kAXTitleAttribute as CFString) {
       parts.append(title)
     }
-    if let description = copyStringAttribute(element, kAXDescriptionAttribute) {
+    if let description = copyStringAttribute(element, kAXDescriptionAttribute as CFString) {
       parts.append(description)
     }
 

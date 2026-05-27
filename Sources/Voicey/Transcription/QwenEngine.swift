@@ -150,11 +150,11 @@ final class QwenEngine: @unchecked Sendable {
       )
     }
 
-    let options = Qwen3DecodingOptions(context: decoderContext)
     let transcribedText = qwenModel.transcribe(
       audio: audioBuffer,
       sampleRate: 16000,
-      options: options
+      language: nil,
+      context: decoderContext
     )
     let processingTime = CFAbsoluteTimeGetCurrent() - startTime
     let rtf = audioDuration > 0 ? processingTime / audioDuration : 0
