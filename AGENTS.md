@@ -136,3 +136,7 @@ When making code changes on this codebase from a Cloud Agent:
 ### Rust sandboxed runtime (macOS)
 
 See [`docs/RUST_RUNTIME.md`](docs/RUST_RUNTIME.md). Build workers with `make build-rust` (requires Rust toolchain on macOS). Qwen uses the infer worker by default; set `VOICEY_RUNTIME=in-process` to force in-app MLX. Runtime parity: `make benchmark-runtime-parity-common-voice`, `make benchmark-measure-runtime-memory`.
+
+### macOS dev restart (agents on Mac)
+
+After rebuilds or permission issues on a **Mac** (not Cloud Linux), use [`.cursor/skills/voicey-macos-dev-restart/SKILL.md`](.cursor/skills/voicey-macos-dev-restart/SKILL.md): `make dev-restart` by default; `make reset-permissions-direct-relaunch` only when TCC is stale.
