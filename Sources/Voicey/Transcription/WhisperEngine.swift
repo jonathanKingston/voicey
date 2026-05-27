@@ -165,38 +165,6 @@ final class WhisperEngine: @unchecked Sendable {
     }
   }
 
-  /// Select the best available model from downloaded models
-  /// Prefers already-compiled models, then smaller/faster models for quick startup
-  private static func selectBestAvailableModel(from models: Set<SpeechModel>) -> SpeechModel? {
-    guard !models.isEmpty else { return nil }
-
-    // First, check if any model is already compiled (will load fast)
-    // Prefer higher quality if already compiled.
-    let qualityFirst: [SpeechModel] = [
-      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn
-    ]
-    for model in qualityFirst {
-      if models.contains(model) && ModelManager.shared.isLikelyCompiled(model) {
-        debugPrint("🚀 Found already-compiled model: \(model.rawValue)", category: "MODEL")
-        return model
-      }
-    }
-
-    // No compiled models found - prefer smaller/faster models for quick first-time compilation
-    // Quality model (Granite) will be downloaded/upgraded in background.
-    // Prefer English fast variants first for English-heavy installs.
-    let smallFirst: [SpeechModel] = [
-      .tinyEn, .baseEn, .smallEn, .tiny, .base, .small, .distilLarge, .large, .largeTurbo
-    ]
-    for model in smallFirst where models.contains(model) {
-      debugPrint("📦 No compiled models found, using fastest to compile: \(model.rawValue)", category: "MODEL")
-      return model
-    }
-
-    // Fallback to any available model
-    return models.first
-  }
-
   /// Load a Whisper model
   func loadModel(variant: String = "base.en") async throws {
     // Don't reload if already loaded with same variant
