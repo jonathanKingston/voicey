@@ -51,7 +51,10 @@ enum BenchmarkCaptureCompareCommand {
         "durationSeconds": options.durationSeconds
       ]
       let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-      print(String(decoding: data, as: UTF8.self))
+      guard let json = String(data: data, encoding: .utf8) else {
+        throw BenchmarkCaptureCompareError.invalidJSON
+      }
+      print(json)
       return maxDelta <= options.tolerance ? 0 : 2
     } catch {
       fputs("error: \(error.localizedDescription)\n", stderr)
@@ -107,6 +110,7 @@ private struct Options {
 enum BenchmarkCaptureCompareError: LocalizedError {
   case missingValue(String)
   case unknownArgument(String)
+  case invalidJSON
 
   var errorDescription: String? {
     switch self {
@@ -114,6 +118,8 @@ enum BenchmarkCaptureCompareError: LocalizedError {
       return "Missing value for \(argument)"
     case .unknownArgument(let argument):
       return "Unknown argument: \(argument)"
+    case .invalidJSON:
+      return "Failed to encode benchmark output as UTF-8 JSON"
     }
   }
 }

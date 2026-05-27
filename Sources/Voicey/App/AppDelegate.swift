@@ -6,7 +6,7 @@ import os
 
 // AppDelegate is the legacy lifecycle coordinator. Keep size warnings disabled
 // here until the existing recording/model/output responsibilities are split.
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"
   private static let settingsWindowAutosaveName = "VoiceySettingsWindow"

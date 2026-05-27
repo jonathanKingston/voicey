@@ -32,12 +32,14 @@ enum BenchmarkTranscribeCommand {
 
       if options.outputJSON {
         try printJSON(
-          result: result,
-          text: text,
-          model: options.model,
-          audioURL: options.audioURL,
-          runtime: options.runtime,
-          warmupCount: options.warmupCount
+          BenchmarkTranscribeJSONOutput(
+            result: result,
+            text: text,
+            model: options.model,
+            audioURL: options.audioURL,
+            runtime: options.runtime,
+            warmupCount: options.warmupCount
+          )
         )
       } else {
         print(text)
@@ -77,25 +79,18 @@ enum BenchmarkTranscribeCommand {
     }
   }
 
-  private static func printJSON(
-    result: TranscriptionResult,
-    text: String,
-    model: SpeechModel,
-    audioURL: URL,
-    runtime: TranscriptionRuntimeKind,
-    warmupCount: Int
-  ) throws {
+  private static func printJSON(_ output: BenchmarkTranscribeJSONOutput) throws {
     let payload: [String: Any] = [
-      "audio": audioURL.path,
-      "model": model.rawValue,
-      "runtime": runtime.rawValue,
-      "warmupCount": warmupCount,
-      "text": text,
-      "rawText": result.text,
-      "language": result.language,
-      "processingSeconds": result.processingTime,
-      "audioSeconds": result.performanceMetrics.audioDuration,
-      "realTimeFactor": result.performanceMetrics.realTimeFactor
+      "audio": output.audioURL.path,
+      "model": output.model.rawValue,
+      "runtime": output.runtime.rawValue,
+      "warmupCount": output.warmupCount,
+      "text": output.text,
+      "rawText": output.result.text,
+      "language": output.result.language,
+      "processingSeconds": output.result.processingTime,
+      "audioSeconds": output.result.performanceMetrics.audioDuration,
+      "realTimeFactor": output.result.performanceMetrics.realTimeFactor
     ]
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     guard let json = String(data: data, encoding: .utf8) else {
@@ -103,6 +98,15 @@ enum BenchmarkTranscribeCommand {
     }
     print(json)
   }
+}
+
+private struct BenchmarkTranscribeJSONOutput {
+  let result: TranscriptionResult
+  let text: String
+  let model: SpeechModel
+  let audioURL: URL
+  let runtime: TranscriptionRuntimeKind
+  let warmupCount: Int
 }
 
 private struct Options {
