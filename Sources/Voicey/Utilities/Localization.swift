@@ -359,7 +359,7 @@ enum L10n {
     // MARK: - Model Download Window
 
     enum Download {
-        static var whisperModels: String { L10n.string("download.whisperModels") }
+        static var speechModels: String { L10n.string("download.whisperModels") }
         static var description: String { L10n.string("download.description") }
         static var done: String { L10n.string("download.done") }
     }

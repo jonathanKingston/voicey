@@ -173,32 +173,14 @@ struct SetupSettingsView: View {
 
   private var defaultModelIcon: String {
     switch defaultModel {
-    case .graniteSpeech:
-      return "waveform"
     case .qwen3Small:
       return "globe"
     case .qwen3Large:
       return "sparkles.rectangle.stack"
-    case .largeTurbo:
-      return "bolt.fill"
-    case .large:
-      return "star.fill"
-    case .distilLarge:
-      return "brain.head.profile"
-    case .small, .smallEn:
-      return "scalemass"
-    case .base, .baseEn:
-      return "gauge.medium"
-    case .tiny, .tinyEn:
-      return "hare"
+    default:
+      return "cpu"
     }
   }
-
-  /// The fast Whisper model for quick startup (language-aware) - fallback
-  private var fastModel: SpeechModel { ModelManager.fastModel }
-
-  /// The high-quality Whisper model to download in background
-  private let qualityModel = ModelManager.qualityModel
 
   /// Whether all required setup is complete
   private var isSetupComplete: Bool {
@@ -210,44 +192,14 @@ struct SetupSettingsView: View {
     modelManager.isDownloading[defaultModel] == true
   }
 
-  /// Whether fast model is currently downloading
-  private var isFastModelDownloading: Bool {
-    modelManager.isDownloading[fastModel] == true
-  }
-
-  /// Whether quality model is currently downloading
-  private var isQualityModelDownloading: Bool {
-    modelManager.isDownloading[qualityModel] == true
-  }
-
   /// Whether default model is ready
   private var isDefaultModelReady: Bool {
     modelManager.isDownloaded(defaultModel)
   }
 
-  /// Whether fast model is ready
-  private var isFastModelReady: Bool {
-    modelManager.hasDownloadedModel || modelManager.isDownloaded(fastModel)
-  }
-
-  /// Whether quality model is ready
-  private var isQualityModelReady: Bool {
-    modelManager.isDownloaded(qualityModel)
-  }
-
   /// Download progress for default model (0-1)
   private var defaultDownloadProgress: Double {
     modelManager.downloadProgress[defaultModel] ?? 0
-  }
-
-  /// Download progress for fast model (0-1)
-  private var fastDownloadProgress: Double {
-    modelManager.downloadProgress[fastModel] ?? 0
-  }
-
-  /// Download progress for quality model (0-1)
-  private var qualityDownloadProgress: Double {
-    modelManager.downloadProgress[qualityModel] ?? 0
   }
 
   var body: some View {
@@ -286,25 +238,6 @@ struct SetupSettingsView: View {
           action: startDefaultModelDownload
         )
 
-        // Optional quality-model download for users who want an additional local fallback.
-        SetupStepRow(
-          stepNumber: 4,
-          icon: "sparkles",
-          title: L10n.Setup.downloadQualityModel,
-          description: L10n.Setup.downloadQualityModelDesc(qualityModel.displayName),
-          isComplete: isQualityModelReady,
-          isInProgress: isQualityModelDownloading,
-          progress: qualityDownloadProgress,
-          isOptional: true,
-          buttonTitle: isQualityModelReady
-            ? L10n.Setup.ready
-            : (isQualityModelDownloading
-              ? L10n.Setup.downloading : (isDefaultModelReady ? L10n.Setup.download : L10n.Setup.afterFastModel)),
-          action: startQualityModelDownload
-        )
-        .disabled(!isDefaultModelReady && !isQualityModelDownloading)
-        .opacity(isDefaultModelReady || isQualityModelDownloading || isQualityModelReady ? 1.0 : 0.6)
-
         // Step 2: Microphone
         SetupStepRow(
           stepNumber: 2,
@@ -338,13 +271,7 @@ struct SetupSettingsView: View {
           HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
               .foregroundStyle(.green)
-            if isQualityModelReady {
-              Text(L10n.Setup.allSetQualityModel)
-            } else if isQualityModelDownloading {
-              Text(L10n.Setup.qualityModelDownloading)
-            } else {
-              Text(L10n.Setup.readyToUse)
-            }
+            Text(L10n.Setup.readyToUse)
           }
           .font(.subheadline)
           .foregroundStyle(.green)
@@ -405,46 +332,6 @@ struct SetupSettingsView: View {
     }
 
     modelManager.downloadModel(defaultModel)
-  }
-
-  private func startFastModelDownload() {
-    guard !modelManager.hasDownloadedModel else { return }
-    guard !modelManager.isDownloaded(fastModel),
-      modelManager.isDownloading[fastModel] != true
-    else {
-      if isFastModelReady {
-        startQualityModelDownload()
-      }
-      return
-    }
-
-    modelManager.downloadModel(fastModel)
-
-    Task {
-      await waitForFastModelThenStartQualityDownload()
-    }
-  }
-
-  private func waitForFastModelThenStartQualityDownload() async {
-    while modelManager.isDownloading[fastModel] == true {
-      try? await Task.sleep(nanoseconds: 500_000_000)
-    }
-
-    if modelManager.isDownloaded(fastModel) {
-      await MainActor.run {
-        startQualityModelDownload()
-      }
-    }
-  }
-
-  private func startQualityModelDownload() {
-    guard !modelManager.isDownloaded(qualityModel),
-      modelManager.isDownloading[qualityModel] != true
-    else {
-      return
-    }
-
-    modelManager.downloadModel(qualityModel)
   }
 
   private func requestMicrophonePermission() {
@@ -607,7 +494,7 @@ struct ModelSettingsView: View {
     Form {
       Section(L10n.Model.selectedModel) {
         Picker(L10n.Model.modelLabel, selection: $selectedModel) {
-          ForEach(SpeechModel.allCases) { model in
+          ForEach(SpeechModel.userFacingModels) { model in
             HStack {
               Text(model.displayName)
               if modelManager.isDownloaded(model) {
@@ -628,7 +515,7 @@ struct ModelSettingsView: View {
       }
 
       Section(L10n.Model.availableModels) {
-        ForEach(SpeechModel.allCases) { model in
+        ForEach(SpeechModel.userFacingModels) { model in
           ModelRowView(model: model)
         }
       }
@@ -643,6 +530,9 @@ struct ModelSettingsView: View {
     .padding()
     .onAppear {
       modelManager.loadDownloadedModels()
+      if !SpeechModel.userFacingModels.contains(where: { $0.rawValue == selectedModel }) {
+        selectedModel = ModelManager.defaultModel.rawValue
+      }
       if let model = SpeechModel(rawValue: selectedModel) {
         appState.currentModel = model
       }

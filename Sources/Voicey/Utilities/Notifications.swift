@@ -45,7 +45,7 @@ final class NotificationManager: NotificationProviding, @unchecked Sendable {
   func showNoModelNotification() {
     showNotification(
       title: "No Transcription Model",
-      body: "Download a Whisper model from the Voicey menu."
+      body: "Download a speech model from the Voicey menu."
     )
   }
 

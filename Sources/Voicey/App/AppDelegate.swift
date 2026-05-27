@@ -81,6 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Initialize components
     setupComponents()
 
+    SettingsManager.shared.migrateSelectedModelToUserFacingIfNeeded()
+
     #if VOICEY_DIRECT_DISTRIBUTION || VOICEY_MEDIA_REMOTE_PROBE
       // Defer MR registration: avoids re-entrancy during launch and keeps a bad MediaRemote call from
       // aborting startup before menubar/hotkey wiring runs.
@@ -216,33 +218,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var multiprocessInferReady = false
 
   private func fallbackOrder(preferredBackend: SpeechBackendKind? = nil) -> [SpeechModel] {
-    let baseOrder: [SpeechModel] = [
-      ModelManager.defaultModel,
-      .qwen3Large, .qwen3Small, .graniteSpeech,
-      .largeTurbo, .large, .distilLarge, .small, .smallEn, .base, .baseEn, .tiny, .tinyEn
-    ]
-
-    var ordered: [SpeechModel] = []
-    let prioritized =
-      preferredBackend == nil ? baseOrder : baseOrder.filter { $0.backendKind == preferredBackend }
-    let remainder =
-      preferredBackend == nil ? [] : baseOrder.filter { $0.backendKind != preferredBackend }
-
-    for model in prioritized + remainder where !ordered.contains(model) {
-      ordered.append(model)
-    }
-    return ordered
+    SpeechModel.userFacingModels
   }
 
-  /// Best available fallback model when the selected backend cannot load.
+  /// Best available Qwen fallback when the selected model cannot load.
   private func bestAvailableFallback(excluding failedBackend: SpeechBackendKind) -> SpeechModel? {
     let downloaded = ModelManager.shared.downloadedModels
-    for model in fallbackOrder() {
-      if model.backendKind != failedBackend && downloaded.contains(model) {
-        return model
-      }
-    }
-    return downloaded.first(where: { $0.backendKind != failedBackend })
+    return SpeechModel.userFacingModels.first { downloaded.contains($0) }
   }
 
   @MainActor
@@ -457,10 +439,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     postProcessor = PostProcessor()
     outputManager = OutputManager()
 
-    // Setup model upgrade callback
-    ModelManager.shared.onUpgradeReady = { [weak self] model in
-      self?.handleModelUpgradeReady(model)
-    }
   }
 
   // MARK: - Performance Handling
@@ -475,11 +453,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   // MARK: - Model Upgrade Handling
-
-  private func handleModelUpgradeReady(_ model: SpeechModel) {
-    debugPrint("🎉 Model ready for upgrade: \(model.displayName)", category: "MODEL")
-    tryPerformPendingUpgrade()
-  }
 
   /// Try to perform a pending model upgrade if conditions are right
   private func tryPerformPendingUpgrade() {
@@ -868,11 +841,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    // If selected model isn't downloaded, switch to the best deterministic fallback.
+    // If selected model isn't downloaded, switch to the best available Qwen model.
     if !ModelManager.shared.isDownloaded(selectedModel),
-      let fallbackModel = fallbackOrder(preferredBackend: selectedModel.backendKind).first(where: {
-        downloadedModels.contains($0)
-      }) {
+      let fallbackModel = SpeechModel.userFacingModels.first(where: { downloadedModels.contains($0) }) {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
       SettingsManager.shared.selectedModel = fallbackModel
