@@ -15,6 +15,10 @@ protocol SettingsProviding: AnyObject {
   var pauseMediaDuringTranscription: Bool { get set }
   var voiceCommandsEnabled: Bool { get set }
   var voiceCommands: [VoiceCommand] { get set }
+  var transcriptionGlossaryEnabled: Bool { get set }
+  var transcriptionGlossary: String { get set }
+  var transcriptionScreenContextEnabled: Bool { get set }
+  var transcriptionScreenContextOCREnabled: Bool { get set }
   var enableDetailedLogging: Bool { get set }
 
   func configureLaunchAtLogin(enabled: Bool)
@@ -44,6 +48,9 @@ protocol PermissionsProviding {
   func promptForAccessibilityPermission()
   func openAccessibilitySettings()
   func openMicrophoneSettings()
+  func checkScreenCapturePermission() -> Bool
+  func requestScreenCapturePermission() -> Bool
+  func openScreenCaptureSettings()
 }
 
 /// Protocol for notifications

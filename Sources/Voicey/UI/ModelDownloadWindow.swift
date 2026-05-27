@@ -17,7 +17,7 @@ struct ModelDownloadView: View {
           .font(.system(size: 40))
           .foregroundStyle(.blue)
 
-        Text(L10n.Download.speechModels)
+        Text(L10n.Download.whisperModels)
           .font(.title2)
           .fontWeight(.semibold)
 

@@ -16,7 +16,8 @@ final class TextCleanupTests: XCTestCase {
 
   func testDefaultExpansionsNormalizeSpelledOutOK() {
     XCTAssertEqual(
-      TextCleanup.applyExpansions("that sounds o k to me", expansions: TextCleanup.defaultTextExpansions),
+      TextCleanup.applyExpansions(
+        "that sounds o k to me", expansions: TextCleanup.defaultTextExpansions),
       "that sounds OK to me"
     )
   }

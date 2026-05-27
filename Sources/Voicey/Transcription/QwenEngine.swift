@@ -1,5 +1,6 @@
 import Foundation
 import Qwen3ASR
+import VoiceyCore
 import os
 
 /// Wrapper around native Swift MLX Qwen3-ASR models.
@@ -101,7 +102,8 @@ final class QwenEngine: @unchecked Sendable {
       throw QwenError.invalidModel
     }
     guard ModelManager.shared.modelPath(for: selectedModel) != nil,
-          let modelID = selectedModel.huggingFaceModelId else {
+      let modelID = selectedModel.huggingFaceModelId
+    else {
       throw QwenError.modelNotDownloaded
     }
 
@@ -119,7 +121,10 @@ final class QwenEngine: @unchecked Sendable {
     qwenModel != nil
   }
 
-  func transcribe(audioBuffer: [Float]) async throws -> TranscriptionResult {
+  func transcribe(
+    audioBuffer: [Float],
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
     if qwenModel == nil {
       let selectedModel = SettingsManager.shared.selectedModel
       guard selectedModel.isQwenModel else {
@@ -138,7 +143,19 @@ final class QwenEngine: @unchecked Sendable {
     let thermalStateBefore = ProcessInfo.processInfo.thermalState
     let audioDuration = Double(audioBuffer.count) / 16000.0
     let startTime = CFAbsoluteTimeGetCurrent()
-    let transcribedText = qwenModel.transcribe(audio: audioBuffer, sampleRate: 16000, language: nil)
+
+    if let decoderContext {
+      AppLogger.transcription.info(
+        "QwenEngine: Using transcription context (\(decoderContext.count) characters)"
+      )
+    }
+
+    let transcribedText = qwenModel.transcribe(
+      audio: audioBuffer,
+      sampleRate: 16000,
+      language: nil,
+      context: decoderContext
+    )
     let processingTime = CFAbsoluteTimeGetCurrent() - startTime
     let rtf = audioDuration > 0 ? processingTime / audioDuration : 0
 

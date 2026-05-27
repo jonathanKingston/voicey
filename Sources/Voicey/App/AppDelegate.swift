@@ -2,6 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import KeyboardShortcuts
 import SwiftUI
+import VoiceyCore
 import os
 
 // AppDelegate is the legacy lifecycle coordinator. Keep size warnings disabled
@@ -926,6 +927,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       recordingTargetScreen = nil
     }
 
+    startScreenContextCaptureIfNeeded()
+
     if dependencies.settings.pauseMediaDuringTranscription {
       dependencies.mediaPlayback.pauseForTranscription()
     }
@@ -985,6 +988,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Find screen containing this point
     return NSScreen.screens.first { screen in
       screen.frame.contains(cocoaCenter)
+    }
+  }
+
+  private func startScreenContextCaptureIfNeeded() {
+    ScreenContextStore.shared.clear()
+
+    guard dependencies.settings.transcriptionScreenContextEnabled else { return }
+    guard dependencies.permissions.checkAccessibilityPermission() else {
+      AppLogger.transcription.warning(
+        "Screen context enabled but Accessibility permission is not granted")
+      return
+    }
+    guard let targetPID = recordingTargetPID else { return }
+
+    Task.detached(priority: .utility) {
+      let windowImage = ScreenContextOCR.grabFrontWindowImageSync(targetPID: targetPID)
+      let captured = ScreenContextCollector.captureWithExposure(targetPID: targetPID)
+      var snapshot = captured.snapshot
+
+      let ocrEnabled = SettingsManager.shared.transcriptionScreenContextOCREnabled
+      let screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+      if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, screenCaptureGranted,
+        let windowImage
+      {
+        if let ocrSnapshot = await ScreenContextOCR.recognizeText(in: windowImage) {
+          snapshot = ScreenContextSnapshotMerger.merging(snapshot, supplemental: ocrSnapshot)
+        }
+      } else if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, !screenCaptureGranted {
+        AppLogger.transcription.warning(
+          "ScreenContext OCR enabled but Screen Recording permission is not granted")
+      }
+
+      ScreenContextStore.shared.set(snapshot, exposure: captured.exposure)
     }
   }
 
@@ -1077,6 +1113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       // Transcribe audio using the appropriate engine
       let selectedModel = SettingsManager.shared.selectedModel
+      let decoderContext = TranscriptionSteeringContext.make()
       let result: TranscriptionResult
       switch selectedModel.backendKind {
       case .granitePython:
@@ -1090,10 +1127,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           result = try await VoiceyRuntimeSupervisor.shared.transcribe(
             samples: audioBuffer,
             model: selectedModel,
-            warmupAlreadyDone: multiprocessInferReady
+            warmupAlreadyDone: multiprocessInferReady,
+            decoderContext: decoderContext
           )
         } else {
-          guard let qwenResult = try await qwenEngine?.transcribe(audioBuffer: audioBuffer) else {
+          guard let qwenResult = try await qwenEngine?.transcribe(
+            audioBuffer: audioBuffer,
+            decoderContext: decoderContext
+          ) else {
             throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
           }
           result = qwenResult

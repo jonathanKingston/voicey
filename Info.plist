@@ -36,6 +36,8 @@
 	<string>Copyright © 2026 Voicey. All rights reserved.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voicey needs access to your microphone to transcribe your voice.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Voicey can optionally capture the target app window to read on-screen text for transcription spelling when Accessibility does not expose enough content. Processing stays on your Mac.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsAutomaticTermination</key>

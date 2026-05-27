@@ -85,6 +85,24 @@ final class PermissionsManager: PermissionsProviding, @unchecked Sendable {
     }
   }
 
+  // MARK: - Screen Capture Permission
+
+  func checkScreenCapturePermission() -> Bool {
+    CGPreflightScreenCaptureAccess()
+  }
+
+  @discardableResult
+  func requestScreenCapturePermission() -> Bool {
+    CGRequestScreenCaptureAccess()
+  }
+
+  func openScreenCaptureSettings() {
+    if let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
   /// Check all required permissions
   func checkAllPermissions() async -> PermissionStatus {
     let microphone = await checkMicrophonePermission()

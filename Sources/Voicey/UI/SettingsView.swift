@@ -1,5 +1,5 @@
-import AppKit
 import AVFoundation
+import AppKit
 import KeyboardShortcuts
 import SwiftUI
 import VoiceyCore
@@ -13,7 +13,7 @@ struct SettingsView: View {
   private static let sidebarMaxWidth: CGFloat = 240
 
   enum Tab: String, CaseIterable, Hashable, Identifiable {
-    case setup, general, hotkey, audio, model, voiceCommands, advanced
+    case setup, general, hotkey, audio, model, transcription, voiceCommands, advanced
 
     var id: Self { self }
 
@@ -29,6 +29,8 @@ struct SettingsView: View {
         return L10n.Settings.audio
       case .model:
         return L10n.Settings.model
+      case .transcription:
+        return L10n.Settings.transcription
       case .voiceCommands:
         return L10n.Settings.voiceCommands
       case .advanced:
@@ -48,6 +50,8 @@ struct SettingsView: View {
         return "mic.fill"
       case .model:
         return "waveform"
+      case .transcription:
+        return "text.book.closed.fill"
       case .voiceCommands:
         return "text.bubble.fill"
       case .advanced:
@@ -128,6 +132,8 @@ struct SettingsView: View {
       AudioSettingsView()
     case .model:
       ModelSettingsView()
+    case .transcription:
+      TranscriptionSteeringSettingsView()
     case .voiceCommands:
       VoiceCommandsSettingsView()
     case .advanced:
@@ -234,7 +240,8 @@ struct SetupSettingsView: View {
           isInProgress: isDefaultModelDownloading,
           progress: defaultDownloadProgress,
           buttonTitle: isDefaultModelReady
-            ? L10n.Setup.ready : (isDefaultModelDownloading ? L10n.Setup.downloading : L10n.Setup.download),
+            ? L10n.Setup.ready
+            : (isDefaultModelDownloading ? L10n.Setup.downloading : L10n.Setup.download),
           action: startDefaultModelDownload
         )
 
@@ -488,7 +495,8 @@ struct ModelSettingsView: View {
   @EnvironmentObject private var appState: AppState
   @ObservedObject var modelManager = ModelManager.shared
   private static let defaults = SettingsManager.defaultsStore
-  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = ModelManager.defaultModel.rawValue
+  @AppStorage("selectedModel", store: defaults) private var selectedModel: String = ModelManager
+    .defaultModel.rawValue
 
   var body: some View {
     Form {
@@ -541,6 +549,97 @@ struct ModelSettingsView: View {
       guard let model = SpeechModel(rawValue: selectedModel) else { return }
       appState.currentModel = model
       NotificationCenter.default.post(name: .voiceySelectedModelDidChange, object: model)
+    }
+  }
+}
+
+// MARK: - Transcription steering (glossary & screen context)
+
+struct TranscriptionSteeringSettingsView: View {
+  private static let defaults = SettingsManager.defaultsStore
+  @AppStorage("transcriptionGlossaryEnabled", store: defaults) private
+    var transcriptionGlossaryEnabled = true
+  @AppStorage("transcriptionScreenContextEnabled", store: defaults) private
+    var transcriptionScreenContextEnabled = true
+  @AppStorage("transcriptionScreenContextOCREnabled", store: defaults) private
+    var transcriptionScreenContextOCREnabled = false
+  @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+  @State private var screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+
+  var body: some View {
+    Form {
+      Section {
+        Text(L10n.Transcription.intro)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+
+      Section(L10n.Transcription.customVocabulary) {
+        Toggle(L10n.Transcription.glossaryEnable, isOn: $transcriptionGlossaryEnabled)
+
+        Text(L10n.Transcription.glossaryDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if transcriptionGlossaryEnabled {
+          TextEditor(text: $transcriptionGlossary)
+            .font(.system(.body, design: .monospaced))
+            .frame(minHeight: 80, maxHeight: 140)
+            .overlay(alignment: .topLeading) {
+              if transcriptionGlossary.isEmpty {
+                Text(L10n.Transcription.glossaryPlaceholder)
+                  .font(.caption)
+                  .foregroundStyle(.tertiary)
+                  .padding(.horizontal, 5)
+                  .padding(.vertical, 8)
+                  .allowsHitTesting(false)
+              }
+            }
+        }
+      }
+
+      Section(L10n.Transcription.onScreenText) {
+        Toggle(L10n.Transcription.screenContextEnable, isOn: $transcriptionScreenContextEnabled)
+
+        Text(L10n.Transcription.screenContextDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if transcriptionScreenContextEnabled {
+          Toggle(L10n.Transcription.screenContextOCREnable, isOn: $transcriptionScreenContextOCREnabled)
+            .onChange(of: transcriptionScreenContextOCREnabled) { _, enabled in
+              if enabled, !PermissionsManager.shared.checkScreenCapturePermission() {
+                _ = PermissionsManager.shared.requestScreenCapturePermission()
+              }
+              screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+            }
+
+          Text(L10n.Transcription.screenContextOCRDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          if transcriptionScreenContextOCREnabled, !screenCaptureGranted {
+            Text(L10n.Transcription.screenContextOCRPermission)
+              .font(.caption)
+              .foregroundStyle(.orange)
+            Button(L10n.Transcription.openScreenCaptureSettings) {
+              PermissionsManager.shared.openScreenCaptureSettings()
+            }
+          }
+        }
+      }
+    }
+    .formStyle(.grouped)
+    .padding()
+    .onAppear {
+      transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+      screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+    }
+    .onChange(of: transcriptionGlossary) {
+      SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
+    }
+    .onDisappear {
+      SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
     }
   }
 }
@@ -624,7 +723,8 @@ struct ModelRowView: View {
 
 struct VoiceCommandsSettingsView: View {
   private static let defaults = SettingsManager.defaultsStore
-  @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool = false
+  @AppStorage("voiceCommandsEnabled", store: defaults) private var voiceCommandsEnabled: Bool =
+    false
   @State private var commands: [VoiceCommand] = SettingsManager.shared.voiceCommands
   @State private var showAddCommand: Bool = false
 
@@ -634,8 +734,8 @@ struct VoiceCommandsSettingsView: View {
         Toggle(L10n.VoiceCommands.enable, isOn: $voiceCommandsEnabled)
 
         Text(L10n.VoiceCommands.description)
-        .font(.caption)
-        .foregroundStyle(.secondary)
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
 
       if voiceCommandsEnabled {
@@ -808,9 +908,11 @@ struct AddVoiceCommandView: View {
 
 struct AdvancedSettingsView: View {
   private static let defaults = SettingsManager.defaultsStore
-  @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool = false
+  @AppStorage("enableDetailedLogging", store: defaults) private var enableDetailedLogging: Bool =
+    false
   @AppStorage("autoPasteEnabled", store: defaults) private var autoPasteEnabled: Bool = false
-  @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste: Bool = true
+  @AppStorage("restoreClipboardAfterPaste", store: defaults) private var restoreClipboardAfterPaste:
+    Bool = true
   @AppStorage("pauseMediaDuringTranscription", store: defaults)
   private var pauseMediaDuringTranscription: Bool = true
   @State private var accessibilityGranted = false
@@ -818,7 +920,7 @@ struct AdvancedSettingsView: View {
   @State private var showClearError = false
   @State private var runtimeDiagnosticsCopied = false
   #if VOICEY_DIRECT_DISTRIBUTION
-  @ObservedObject private var sparkleUpdater = SparkleUpdater.shared
+    @ObservedObject private var sparkleUpdater = SparkleUpdater.shared
   #endif
 
   var body: some View {
@@ -916,21 +1018,22 @@ struct AdvancedSettingsView: View {
           L10n.Advanced.version,
           value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
         LabeledContent(
-          L10n.Advanced.build, value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
+          L10n.Advanced.build,
+          value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
 
         #if VOICEY_DIRECT_DISTRIBUTION
-        LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.directInstall)
+          LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.directInstall)
 
-        Button(L10n.Advanced.checkForUpdates) {
-          sparkleUpdater.checkForUpdates()
-        }
-        .disabled(!sparkleUpdater.canCheckForUpdates)
+          Button(L10n.Advanced.checkForUpdates) {
+            sparkleUpdater.checkForUpdates()
+          }
+          .disabled(!sparkleUpdater.canCheckForUpdates)
 
-        Text(L10n.Advanced.updatesDeliveredFrom)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+          Text(L10n.Advanced.updatesDeliveredFrom)
+            .font(.caption)
+            .foregroundStyle(.secondary)
         #else
-        LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.appStore)
+          LabeledContent(L10n.Advanced.distribution, value: L10n.Advanced.appStore)
         #endif
       }
     }

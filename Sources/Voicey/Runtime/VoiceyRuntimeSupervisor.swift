@@ -76,7 +76,12 @@ actor VoiceyRuntimeSupervisor {
     captureReady = true
   }
 
-  func transcribe(samples: [Float], model: SpeechModel, warmupAlreadyDone: Bool) async throws -> TranscriptionResult {
+  func transcribe(
+    samples: [Float],
+    model: SpeechModel,
+    warmupAlreadyDone: Bool,
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
     if !warmupAlreadyDone || inferReadyModel != model {
       try await prewarmInfer(model: model)
     }
@@ -85,9 +90,17 @@ actor VoiceyRuntimeSupervisor {
     }
     do {
       if usesRustSupervisor {
-        return try await rustSupervisor.transcribe(samples: samples, model: model)
+        return try await rustSupervisor.transcribe(
+          samples: samples,
+          model: model,
+          decoderContext: decoderContext
+        )
       }
-      return try await inferClient.transcribe(samples: samples, model: model)
+      return try await inferClient.transcribe(
+        samples: samples,
+        model: model,
+        decoderContext: decoderContext
+      )
     } catch {
       AppLogger.runtime.warning(
         "Infer transcribe failed, retrying once: \(error.localizedDescription, privacy: .public)"
@@ -100,9 +113,17 @@ actor VoiceyRuntimeSupervisor {
       inferReadyModel = nil
       try await prewarmInfer(model: model)
       if usesRustSupervisor {
-        return try await rustSupervisor.transcribe(samples: samples, model: model)
+        return try await rustSupervisor.transcribe(
+          samples: samples,
+          model: model,
+          decoderContext: decoderContext
+        )
       }
-      return try await inferClient.transcribe(samples: samples, model: model)
+      return try await inferClient.transcribe(
+        samples: samples,
+        model: model,
+        decoderContext: decoderContext
+      )
     }
   }
 
