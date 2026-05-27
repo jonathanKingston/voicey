@@ -28,9 +28,42 @@ BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMAR
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 
-.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full
+.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full build-rust benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
+
+build-rust:
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo build
+	@mkdir -p $(BUILD_DIR)/debug
+	@cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor $(BUILD_DIR)/debug/ 2>/dev/null || true
+
+benchmark-golden-fixtures:
+	python3 scripts/generate_golden_fixtures.py
+
+benchmark-compare-runtime: build build-rust benchmark-golden-fixtures
+	chmod +x scripts/compare_benchmark_runtime.sh
+	scripts/compare_benchmark_runtime.sh $(BENCHMARK_COMPARE_MODEL) $(BENCHMARK_COMPARE_AUDIO)
+
+BENCHMARK_COMPARE_MODEL ?= qwen3-asr-0.6b-6bit
+BENCHMARK_COMPARE_AUDIO ?= Benchmarks/Golden/tone_0p5s_440hz.wav
+BENCHMARK_RUNTIME_PARITY_MODEL ?= qwen3-asr-0.6b-6bit
+BENCHMARK_RUNTIME_PARITY_WARMUP ?= 1
+BENCHMARK_RUNTIME_PARITY_OUT = benchmark-results/runtime-parity-common-voice-$(subst /,-,$(BENCHMARK_RUNTIME_PARITY_MODEL)).json
+
+benchmark-runtime-parity-common-voice: build
+	@mkdir -p benchmark-results
+	@test -f "$(BENCHMARK_COMMON_VOICE_DIR)/test.tsv" || (echo "Missing $(BENCHMARK_COMMON_VOICE_DIR)/test.tsv — run: make benchmark-prepare-common-voice" >&2 && exit 1)
+	python3 scripts/benchmark_runtime_parity_matrix.py \
+		--voicey $(BUILD_DIR)/debug/Voicey \
+		--model "$(BENCHMARK_RUNTIME_PARITY_MODEL)" \
+		--tsv "$(BENCHMARK_COMMON_VOICE_DIR)/test.tsv" \
+		--clips-dir "$(BENCHMARK_COMMON_VOICE_DIR)/clips" \
+		--warmup "$(BENCHMARK_RUNTIME_PARITY_WARMUP)" \
+		--out "$(BENCHMARK_RUNTIME_PARITY_OUT)"
+
+benchmark-measure-runtime-memory: build
+	chmod +x scripts/measure_runtime_memory.sh
+	scripts/measure_runtime_memory.sh "$(BENCHMARK_RUNTIME_PARITY_MODEL)" "$(BENCHMARK_COMPARE_AUDIO)"
 
 # Debug build (includes MediaRemote Now Playing probe; no Sparkle — use build-direct for that)
 build:
@@ -76,13 +109,14 @@ bundle: build-release
 	@echo "App bundle created: $(APP_BUNDLE)"
 
 # Create app bundle from debug build (recommended for testing permissions during development)
-bundle-debug: build
+bundle-debug: build build-rust
 	@echo "Creating debug app bundle..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(MACOS_DIR)
 	@mkdir -p $(RESOURCES_DIR)
 	@cp $(BUILD_DIR)/debug/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp $(MLX_METALLIB_DEBUG) $(MACOS_DIR)/mlx.metallib
+	@if [ -f target/debug/voicey-capture ]; then cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor $(MACOS_DIR)/ 2>/dev/null || true; fi
 	@cp Info.plist $(CONTENTS_DIR)/
 	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
@@ -96,7 +130,7 @@ bundle-debug: build
 	@echo "Debug app bundle created: $(APP_BUNDLE)"
 
 # Create debug app bundle with direct-distribution features
-bundle-debug-direct: build-direct
+bundle-debug-direct: build-direct build-rust
 	@echo "Creating debug app bundle (direct distribution)..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(MACOS_DIR)
@@ -104,6 +138,7 @@ bundle-debug-direct: build-direct
 	@mkdir -p $(FRAMEWORKS_DIR)
 	@cp $(BUILD_DIR)/debug/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp $(MLX_METALLIB_DEBUG) $(MACOS_DIR)/mlx.metallib
+	@if [ -f target/debug/voicey-capture ]; then cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor $(MACOS_DIR)/ 2>/dev/null || true; fi
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
 	@if [ -z "$(strip $(SWIFTPM_RESOURCES_DEBUG))" ]; then \
@@ -354,6 +389,11 @@ test-sparkle-linking:
 	fi
 	@echo ""
 	@echo "🎉 All Sparkle linking tests passed!"
+
+# Run debug bundle (Qwen uses infer-worker by default)
+run-multiprocess: bundle-debug sign-local-debug
+	@echo "Launching Voicey.app (Rust workers on hot path when bundled; run make build-rust if missing)."
+	@open -n "$(CURDIR)/$(APP_BUNDLE)"
 
 # Run debug bundle with direct-distribution flags (recommended default)
 run: bundle-debug-direct sign-local-debug

@@ -21,12 +21,26 @@ enum BenchmarkTranscribeCommand {
 
       let samples = try AudioFileSamples.load16kMonoFloatSamples(from: options.audioURL)
       let result = try await withStdoutRedirectedToStderr {
-        try await transcribe(samples: samples, model: options.model)
+        try await TranscriptionRuntime.transcribe(
+          samples: samples,
+          model: options.model,
+          runtime: options.runtime,
+          warmupCount: options.warmupCount
+        )
       }
       let text = options.postProcess ? PostProcessor().process(result) : result.text
 
       if options.outputJSON {
-        try printJSON(result: result, text: text, model: options.model, audioURL: options.audioURL)
+        try printJSON(
+          BenchmarkTranscribeJSONOutput(
+            result: result,
+            text: text,
+            model: options.model,
+            audioURL: options.audioURL,
+            runtime: options.runtime,
+            warmupCount: options.warmupCount
+          )
+        )
       } else {
         print(text)
       }
@@ -34,25 +48,6 @@ enum BenchmarkTranscribeCommand {
     } catch {
       fputs("error: \(error.localizedDescription)\n", stderr)
       return 1
-    }
-  }
-
-  private static func transcribe(samples: [Float], model: SpeechModel) async throws -> TranscriptionResult {
-    SettingsManager.shared.selectedModel = model
-
-    switch model.backendKind {
-    case .whisperKit:
-      let engine = WhisperEngine()
-      try await engine.loadModel(variant: model.rawValue)
-      return try await engine.transcribe(audioBuffer: samples)
-    case .qwenMLX:
-      let engine = QwenEngine()
-      try await engine.loadModel(variant: model.rawValue)
-      return try await engine.transcribe(audioBuffer: samples)
-    case .granitePython:
-      let engine = GraniteEngine()
-      try await engine.loadModel(variant: model.rawValue)
-      return try await engine.transcribe(audioBuffer: samples)
     }
   }
 
@@ -84,21 +79,18 @@ enum BenchmarkTranscribeCommand {
     }
   }
 
-  private static func printJSON(
-    result: TranscriptionResult,
-    text: String,
-    model: SpeechModel,
-    audioURL: URL
-  ) throws {
+  private static func printJSON(_ output: BenchmarkTranscribeJSONOutput) throws {
     let payload: [String: Any] = [
-      "audio": audioURL.path,
-      "model": model.rawValue,
-      "text": text,
-      "rawText": result.text,
-      "language": result.language,
-      "processingSeconds": result.processingTime,
-      "audioSeconds": result.performanceMetrics.audioDuration,
-      "realTimeFactor": result.performanceMetrics.realTimeFactor
+      "audio": output.audioURL.path,
+      "model": output.model.rawValue,
+      "runtime": output.runtime.rawValue,
+      "warmupCount": output.warmupCount,
+      "text": output.text,
+      "rawText": output.result.text,
+      "language": output.result.language,
+      "processingSeconds": output.result.processingTime,
+      "audioSeconds": output.result.performanceMetrics.audioDuration,
+      "realTimeFactor": output.result.performanceMetrics.realTimeFactor
     ]
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     guard let json = String(data: data, encoding: .utf8) else {
@@ -108,16 +100,28 @@ enum BenchmarkTranscribeCommand {
   }
 }
 
+private struct BenchmarkTranscribeJSONOutput {
+  let result: TranscriptionResult
+  let text: String
+  let model: SpeechModel
+  let audioURL: URL
+  let runtime: TranscriptionRuntimeKind
+  let warmupCount: Int
+}
+
 private struct Options {
   static let helpText = """
     Usage:
-      Voicey benchmark-transcribe --model MODEL --audio PATH [--json] [--post-process]
+      Voicey benchmark-transcribe --model MODEL --audio PATH [--json] [--post-process] \\
+        [--runtime in-process|multiprocess] [--warmup N]
 
     Runs a single audio file through Voicey's real model wrapper code without launching the app UI.
 
     Options:
       --model MODEL       SpeechModel raw value, for example qwen3-asr-0.6b-6bit or large-v3_turbo.
       --audio PATH        Audio file readable by AVFoundation. It is converted to 16 kHz mono float samples.
+      --runtime MODE      in-process (default) or multiprocess (Qwen infer worker + prewarm).
+      --warmup N          Discard N transcribes after load before the timed run (default: 1 for multiprocess, 0 for in-process).
       --json              Print a single JSON object instead of plain transcript text.
       --post-process      Apply Voicey's PostProcessor before printing text.
       --help              Show this help.
@@ -128,6 +132,8 @@ private struct Options {
   let outputJSON: Bool
   let postProcess: Bool
   let showHelp: Bool
+  let runtime: TranscriptionRuntimeKind
+  let warmupCount: Int
 
   init(arguments: [String]) throws {
     var state = OptionsState()
@@ -141,6 +147,8 @@ private struct Options {
     self.outputJSON = state.outputJSON
     self.postProcess = state.postProcess
     self.showHelp = state.showHelp
+    self.runtime = state.runtime
+    self.warmupCount = state.warmupCount ?? (state.runtime == .multiprocess ? 1 : 0)
 
     if state.showHelp {
       self.model = ModelManager.defaultModel
@@ -169,6 +177,14 @@ private struct Options {
       state.model = try modelValue(after: argument, arguments: arguments, index: &index)
     case "--audio":
       state.audioURL = URL(fileURLWithPath: try value(after: argument, arguments: arguments, index: &index))
+    case "--runtime":
+      state.runtime = try runtimeValue(after: argument, arguments: arguments, index: &index)
+    case "--warmup":
+      let raw = try value(after: argument, arguments: arguments, index: &index)
+      guard let warmup = Int(raw), warmup >= 0 else {
+        throw BenchmarkTranscribeError.invalidWarmupCount(raw)
+      }
+      state.warmupCount = warmup
     case "--json":
       state.outputJSON = true
     case "--post-process":
@@ -201,6 +217,18 @@ private struct Options {
     }
     return model
   }
+
+  private static func runtimeValue(
+    after argument: String,
+    arguments: [String],
+    index: inout Int
+  ) throws -> TranscriptionRuntimeKind {
+    let raw = try value(after: argument, arguments: arguments, index: &index)
+    guard let runtime = TranscriptionRuntimeKind(rawValue: raw) else {
+      throw BenchmarkTranscribeError.invalidRuntime(raw)
+    }
+    return runtime
+  }
 }
 
 private struct OptionsState {
@@ -209,6 +237,8 @@ private struct OptionsState {
   var outputJSON = false
   var postProcess = false
   var showHelp = false
+  var runtime: TranscriptionRuntimeKind = .inProcess
+  var warmupCount: Int?
 }
 
 enum AudioFileSamples {
@@ -304,6 +334,8 @@ enum BenchmarkTranscribeError: LocalizedError {
   case emptyTSV
   case invalidJSONOutput
   case invalidModel(String)
+  case invalidRuntime(String)
+  case invalidWarmupCount(String)
   case missingValue(String)
   case requiredColumn(String)
   case requiredArgument(String)
@@ -327,6 +359,10 @@ enum BenchmarkTranscribeError: LocalizedError {
       return "Unable to encode JSON output"
     case .invalidModel(let model):
       return "Unknown model: \(model)"
+    case .invalidRuntime(let runtime):
+      return "Unknown runtime: \(runtime). Use in-process or multiprocess."
+    case .invalidWarmupCount(let value):
+      return "Invalid warmup count: \(value)"
     case .missingValue(let argument):
       return "Missing value for \(argument)"
     case .requiredColumn(let column):

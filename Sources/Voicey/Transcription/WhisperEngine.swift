@@ -129,11 +129,22 @@ final class WhisperEngine: @unchecked Sendable {
 
   /// Pre-load a Whisper model for faster first transcription
   func preloadModel() async {
-    guard !isLoading && whisperKit == nil else { return }
-
     let modelToLoad = SettingsManager.shared.selectedModel
     // Skip if a Granite model is selected - that uses a different engine
     guard modelToLoad.isWhisperModel else { return }
+
+    if whisperKit != nil && loadedModelVariant == modelToLoad.rawValue {
+      return
+    }
+
+    if isLoading {
+      while isLoading {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      if whisperKit != nil && loadedModelVariant == modelToLoad.rawValue {
+        return
+      }
+    }
     debugPrint("🎯 Selected model: \(modelToLoad.rawValue)", category: "MODEL")
     debugPrint(
       "📋 Downloaded models: \(ModelManager.shared.downloadedModels.map { $0.rawValue })",

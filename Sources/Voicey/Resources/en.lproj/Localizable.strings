@@ -144,6 +144,14 @@
 "advanced.debugging" = "Debugging";
 "advanced.enableDetailedLogging" = "Enable Detailed Logging";
 "advanced.loggingDescription" = "Logs additional information for troubleshooting. May impact performance.";
+"advanced.copyRuntimeDiagnostics" = "Copy Runtime Diagnostics";
+"advanced.runtimeDiagnosticsDescription" = "Copies infer-worker status, selected model, and recent errors for support.";
+"advanced.runtimeDiagnosticsCopied" = "Runtime diagnostics copied to the clipboard.";
+"runtime.inferWorkerStartFailed" = "Transcription helper couldn't start. Quit Voicey and try again.";
+"runtime.inferWorkerStartFailedDetail" = "Transcription helper couldn't start. Quit Voicey and try again. (%@)";
+"runtime.genericModelLoadFailed" = "Failed to load model.";
+"runtime.whisperModelLoadFailed" = "Failed to load Whisper model. First launch can take several minutes for CoreML compilation—keep Voicey open and try again.";
+"runtime.graniteModelLoadFailed" = "Failed to load Granite model. Install Python dependencies (mlx-audio, huggingface_hub) and try again.";
 "advanced.data" = "Data";
 "advanced.clearAllData" = "Clear All Data";
 "advanced.clearDataDescription" = "Removes all downloaded models and resets settings to defaults.";

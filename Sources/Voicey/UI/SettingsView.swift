@@ -642,6 +642,7 @@ struct ModelSettingsView: View {
     .formStyle(.grouped)
     .padding()
     .onAppear {
+      modelManager.loadDownloadedModels()
       if let model = SpeechModel(rawValue: selectedModel) {
         appState.currentModel = model
       }
@@ -925,6 +926,7 @@ struct AdvancedSettingsView: View {
   @State private var accessibilityGranted = false
   @State private var clearError: String?
   @State private var showClearError = false
+  @State private var runtimeDiagnosticsCopied = false
   #if VOICEY_DIRECT_DISTRIBUTION
   @ObservedObject private var sparkleUpdater = SparkleUpdater.shared
   #endif
@@ -988,6 +990,20 @@ struct AdvancedSettingsView: View {
       }
 
       Section(L10n.Advanced.debugging) {
+        Button(L10n.Advanced.copyRuntimeDiagnostics) {
+          copyRuntimeDiagnosticsToPasteboard()
+        }
+
+        if runtimeDiagnosticsCopied {
+          Text(L10n.Advanced.runtimeDiagnosticsCopied)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else {
+          Text(L10n.Advanced.runtimeDiagnosticsDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
         Toggle(L10n.Advanced.enableDetailedLogging, isOn: $enableDetailedLogging)
 
         Text(L10n.Advanced.loggingDescription)
@@ -1042,6 +1058,22 @@ struct AdvancedSettingsView: View {
 
   private func checkAccessibility() {
     accessibilityGranted = PermissionsManager.shared.checkAccessibilityPermission()
+  }
+
+  private func copyRuntimeDiagnosticsToPasteboard() {
+    Task {
+      let model = SettingsManager.shared.selectedModel
+      let inferReady = await VoiceyRuntimeSupervisor.shared.isInferReady
+      let report = VoiceyRuntimeDiagnostics.diagnosticReport(
+        selectedModel: model,
+        inferReady: inferReady
+      )
+      await MainActor.run {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(report, forType: .string)
+        runtimeDiagnosticsCopied = true
+      }
+    }
   }
 
   private func clearAllData() {

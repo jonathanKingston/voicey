@@ -164,7 +164,17 @@ enum L10n {
         static func error(_ message: String) -> String { L10n.string("modelStatus.error", message) }
     }
 
-    // MARK: - Menu Items
+    // MARK: - Runtime
+
+    enum Runtime {
+        static var inferWorkerStartFailed: String { L10n.string("runtime.inferWorkerStartFailed") }
+        static func inferWorkerStartFailedDetail(_ detail: String) -> String {
+            L10n.string("runtime.inferWorkerStartFailedDetail", detail)
+        }
+        static var genericModelLoadFailed: String { L10n.string("runtime.genericModelLoadFailed") }
+        static var whisperModelLoadFailed: String { L10n.string("runtime.whisperModelLoadFailed") }
+        static var graniteModelLoadFailed: String { L10n.string("runtime.graniteModelLoadFailed") }
+    }
 
     enum Menu {
         static var startTranscription: String { L10n.string("menu.startTranscription") }
@@ -327,6 +337,11 @@ enum L10n {
         static var debugging: String { L10n.string("advanced.debugging") }
         static var enableDetailedLogging: String { L10n.string("advanced.enableDetailedLogging") }
         static var loggingDescription: String { L10n.string("advanced.loggingDescription") }
+        static var copyRuntimeDiagnostics: String { L10n.string("advanced.copyRuntimeDiagnostics") }
+        static var runtimeDiagnosticsDescription: String {
+            L10n.string("advanced.runtimeDiagnosticsDescription")
+        }
+        static var runtimeDiagnosticsCopied: String { L10n.string("advanced.runtimeDiagnosticsCopied") }
         static var data: String { L10n.string("advanced.data") }
         static var clearAllData: String { L10n.string("advanced.clearAllData") }
         static var clearDataDescription: String { L10n.string("advanced.clearDataDescription") }

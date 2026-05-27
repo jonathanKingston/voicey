@@ -25,6 +25,9 @@ final class AudioCaptureManager {
   private let minimumRemainingAudioSeconds: Double = 0.3
   private let minimumTrimSeconds: Double = 0.08
 
+  private var levelTimer: Timer?
+  private var usesRustCaptureWorker = false
+
   init() {
     setupAudioSession()
   }
@@ -35,6 +38,36 @@ final class AudioCaptureManager {
   }
 
   func startCapture() {
+    if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
+      usesRustCaptureWorker = true
+      AppLogger.audio.info("AudioCapture: Starting voicey-capture worker...")
+      Task {
+        do {
+          try await VoiceyCaptureWorkerSession.shared.startRecording()
+        } catch {
+          AppLogger.audio.error("voicey-capture start failed: \(error.localizedDescription)")
+        }
+      }
+      levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        guard let self else { return }
+        Task {
+          do {
+            let level = try await VoiceyCaptureWorkerSession.shared.currentInputLevel()
+            await MainActor.run {
+              self.delegate?.audioCaptureManager(self, didUpdateLevel: level)
+            }
+          } catch {
+            // Worker may still be starting; keep last level.
+          }
+        }
+      }
+      if let levelTimer {
+        RunLoop.main.add(levelTimer, forMode: .common)
+      }
+      return
+    }
+
+    usesRustCaptureWorker = false
     AppLogger.audio.info("AudioCapture: Starting capture...")
     audioBuffer.removeAll()
 
@@ -83,6 +116,29 @@ final class AudioCaptureManager {
   }
 
   func stopCapture(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
+    if usesRustCaptureWorker {
+      usesRustCaptureWorker = false
+      levelTimer?.invalidate()
+      levelTimer = nil
+      delegate?.audioCaptureManager(self, didUpdateLevel: 0)
+      do {
+        var samples = try runSynchronously {
+          try await VoiceyCaptureWorkerSession.shared.stopRecording()
+        }
+        if applyTrailingTrimHeuristic {
+          samples = trimTrailingLowEnergyAudio(samples) ?? samples
+        }
+        let durationSec = Double(samples.count) / targetSampleRate
+        AppLogger.audio.info(
+          "AudioCapture (voicey-capture): \(samples.count) samples (~\(String(format: "%.1f", durationSec))s)"
+        )
+        return samples
+      } catch {
+        AppLogger.audio.error("voicey-capture stop failed: \(error.localizedDescription)")
+        return nil
+      }
+    }
+
     // Stop the tap first to prevent more data from being queued
     inputNode?.removeTap(onBus: 0)
     audioEngine?.stop()
@@ -277,5 +333,20 @@ final class AudioCaptureManager {
 
   static var defaultInputDevice: AVCaptureDevice? {
     AVCaptureDevice.default(for: .audio)
+  }
+
+  private func runSynchronously<T>(_ operation: @escaping () async throws -> T) throws -> T {
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: Result<T, Error>?
+    Task {
+      do {
+        result = .success(try await operation())
+      } catch {
+        result = .failure(error)
+      }
+      semaphore.signal()
+    }
+    semaphore.wait()
+    return try result!.get()
   }
 }

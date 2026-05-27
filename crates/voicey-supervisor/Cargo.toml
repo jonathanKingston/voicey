@@ -1,0 +1,16 @@
+[package]
+name = "voicey-supervisor"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "voicey-supervisor"
+path = "src/main.rs"
+
+[dependencies]
+voicey-protocol = { path = "../voicey-protocol" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

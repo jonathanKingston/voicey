@@ -38,7 +38,8 @@ final class PostProcessor {
       return ""
     }
 
-    // Apply intelligent punctuation based on timing and segment analysis
+    // Apply intelligent punctuation based on timing and segment analysis.
+    // Qwen and other segment-less backends skip this path; output stays stable across in-process vs multiprocess.
     text = applyIntelligentPunctuation(text, segments: result.segments)
 
     // Apply text expansions

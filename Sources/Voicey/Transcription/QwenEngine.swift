@@ -38,10 +38,21 @@ final class QwenEngine: @unchecked Sendable {
   init() {}
 
   func preloadModel() async {
-    guard !isLoading && qwenModel == nil else { return }
-
     let modelToLoad = SettingsManager.shared.selectedModel
     guard modelToLoad.isQwenModel else { return }
+
+    if qwenModel != nil && loadedModelVariant == modelToLoad.rawValue {
+      return
+    }
+
+    if isLoading {
+      while isLoading {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      if qwenModel != nil && loadedModelVariant == modelToLoad.rawValue {
+        return
+      }
+    }
 
     guard ModelManager.shared.isDownloaded(modelToLoad) else {
       AppLogger.model.warning("QwenEngine: Selected Qwen model not downloaded, skipping preload")
