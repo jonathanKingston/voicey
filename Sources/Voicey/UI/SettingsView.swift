@@ -582,19 +582,10 @@ struct TranscriptionSteeringSettingsView: View {
           .foregroundStyle(.secondary)
 
         if transcriptionGlossaryEnabled {
-          TextEditor(text: $transcriptionGlossary)
-            .font(.system(.body, design: .monospaced))
-            .frame(minHeight: 80, maxHeight: 140)
-            .overlay(alignment: .topLeading) {
-              if transcriptionGlossary.isEmpty {
-                Text(L10n.Transcription.glossaryPlaceholder)
-                  .font(.caption)
-                  .foregroundStyle(.tertiary)
-                  .padding(.horizontal, 5)
-                  .padding(.vertical, 8)
-                  .allowsHitTesting(false)
-              }
-            }
+          MonospacedGlossaryEditor(
+            text: $transcriptionGlossary,
+            placeholder: L10n.Transcription.glossaryPlaceholder
+          )
         }
       }
 
@@ -606,13 +597,15 @@ struct TranscriptionSteeringSettingsView: View {
           .foregroundStyle(.secondary)
 
         if transcriptionScreenContextEnabled {
-          Toggle(L10n.Transcription.screenContextOCREnable, isOn: $transcriptionScreenContextOCREnabled)
-            .onChange(of: transcriptionScreenContextOCREnabled) { _, enabled in
-              if enabled, !PermissionsManager.shared.checkScreenCapturePermission() {
-                _ = PermissionsManager.shared.requestScreenCapturePermission()
-              }
-              screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+          Toggle(
+            L10n.Transcription.screenContextOCREnable, isOn: $transcriptionScreenContextOCREnabled
+          )
+          .onChange(of: transcriptionScreenContextOCREnabled) { _, enabled in
+            if enabled, !PermissionsManager.shared.checkScreenCapturePermission() {
+              _ = PermissionsManager.shared.requestScreenCapturePermission()
             }
+            screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+          }
 
           Text(L10n.Transcription.screenContextOCRDescription)
             .font(.caption)
