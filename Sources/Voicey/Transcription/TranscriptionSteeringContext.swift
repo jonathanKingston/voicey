@@ -1,5 +1,6 @@
 import Foundation
 import VoiceyCore
+import os
 
 /// Builds Qwen decoder steering context on the Voicey host (Accessibility + settings).
 enum TranscriptionSteeringContext {
@@ -8,17 +9,37 @@ enum TranscriptionSteeringContext {
       return nil
     }
 
-    var terms: [String] = []
+    var manualTerms: [String] = []
+    var screenTerms: [String] = []
     if settings.transcriptionGlossaryEnabled {
-      terms.append(contentsOf: TranscriptionGlossary.parseTerms(settings.transcriptionGlossary))
+      manualTerms = TranscriptionGlossary.parseTerms(settings.transcriptionGlossary)
     }
     if settings.transcriptionScreenContextEnabled {
-      let screenTerms = ScreenContextStore.shared.consumeScreenTerms(
+      screenTerms = ScreenContextStore.shared.consumeScreenTerms(
         manualGlossaryForQuery: settings.transcriptionGlossary
       )
-      terms.append(contentsOf: screenTerms)
     }
 
-    return TranscriptionGlossary.decodingContext(terms: terms)
+    let terms = manualTerms + screenTerms
+    let context = TranscriptionGlossary.decodingContext(terms: terms)
+
+    if terms.isEmpty {
+      AppLogger.transcription.info(
+        "Steering: enabled but no terms (manual=\(manualTerms.count) screen=\(screenTerms.count))"
+      )
+    } else {
+      AppLogger.transcription.info(
+        "Steering: manual=\(manualTerms.count) screen=\(screenTerms.count) total=\(terms.count) contextChars=\(context?.count ?? 0)"
+      )
+      if settings.enableDetailedLogging {
+        let termsLine = terms.joined(separator: ", ")
+        AppLogger.transcription.info("Steering terms: \(termsLine, privacy: .public)")
+        if let context {
+          AppLogger.transcription.info("Steering decoder_context: \(context, privacy: .public)")
+        }
+      }
+    }
+
+    return context
   }
 }

@@ -1002,8 +1002,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard let targetPID = recordingTargetPID else { return }
 
     Task.detached(priority: .utility) {
-      let snapshot = ScreenContextCollector.capture(targetPID: targetPID)
-      ScreenContextStore.shared.set(snapshot)
+      let captured = ScreenContextCollector.captureWithExposure(targetPID: targetPID)
+      // Future: if captured.exposure.shouldConsiderOCRFallback && ocrEnabled {
+      //   captured.snapshot = merge(captured.snapshot, ScreenContextOCR.captureWindow(pid: targetPID))
+      // }
+      ScreenContextStore.shared.set(captured.snapshot, exposure: captured.exposure)
     }
   }
 
