@@ -7,8 +7,10 @@ final class ClipboardManager: @unchecked Sendable {
 
   private let pasteboard = NSPasteboard.general
 
-  /// Stored clipboard data for restore
+  /// Stored clipboard data for restore (legacy single-flight save)
   private var savedItems: [(NSPasteboard.PasteboardType, Data)]?
+
+  typealias SavedClipboardItems = [(NSPasteboard.PasteboardType, Data)]
 
   private init() {}
 
@@ -48,27 +50,31 @@ final class ClipboardManager: @unchecked Sendable {
 
   // MARK: - Save/Restore for AXPaste Flow
 
-  /// Save current clipboard contents for later restoration
-  func saveContents() {
-    savedItems = []
-
+  /// Capture current clipboard contents for later restoration.
+  /// Returns an independent snapshot so concurrent deliver flows do not clobber each other.
+  func captureContents() -> SavedClipboardItems {
     guard let types = pasteboard.types else {
-      AppLogger.output.info("Clipboard: No types to save")
-      return
+      AppLogger.output.info("Clipboard: No types to capture")
+      return []
     }
 
-    for type in types {
-      if let data = pasteboard.data(forType: type) {
-        savedItems?.append((type, data))
-      }
+    let items = types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
+      guard let data = pasteboard.data(forType: type) else { return nil }
+      return (type, data)
     }
 
-    AppLogger.output.info("Clipboard: Saved \(self.savedItems?.count ?? 0) items")
+    AppLogger.output.info("Clipboard: Captured \(items.count) items")
+    return items
   }
 
-  /// Restore previously saved clipboard contents
-  func restoreContents() {
-    guard let items = savedItems, !items.isEmpty else {
+  /// Save current clipboard contents for later restoration
+  func saveContents() {
+    savedItems = captureContents()
+  }
+
+  /// Restore previously captured clipboard contents
+  func restoreContents(_ items: SavedClipboardItems) {
+    guard !items.isEmpty else {
       AppLogger.output.info("Clipboard: Nothing to restore")
       return
     }
@@ -79,9 +85,18 @@ final class ClipboardManager: @unchecked Sendable {
       pasteboard.setData(data, forType: type)
     }
 
-    let count = items.count
+    AppLogger.output.info("Clipboard: Restored \(items.count) items")
+  }
+
+  /// Restore previously saved clipboard contents
+  func restoreContents() {
+    guard let items = savedItems, !items.isEmpty else {
+      AppLogger.output.info("Clipboard: Nothing to restore")
+      return
+    }
+
+    restoreContents(items)
     savedItems = nil
-    AppLogger.output.info("Clipboard: Restored \(count) items")
   }
 
   /// Discard saved contents (user wants to keep transcription on clipboard)
