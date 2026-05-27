@@ -137,6 +137,6 @@ When making code changes on this codebase from a Cloud Agent:
 
 See [`docs/RUST_RUNTIME.md`](docs/RUST_RUNTIME.md). Build workers with `make build-rust` (requires Rust toolchain on macOS). Qwen uses the infer worker by default; set `VOICEY_RUNTIME=in-process` to force in-app MLX. Runtime parity: `make benchmark-runtime-parity-common-voice`, `make benchmark-measure-runtime-memory`.
 
-### macOS permissions and restart (agents on Mac)
+### macOS dev restart (agents on Mac)
 
-When helping reset TCC or debug Accessibility/microphone on a **Mac** (not Cloud Linux), use the skill [`.cursor/skills/voicey-macos-permissions/SKILL.md`](.cursor/skills/voicey-macos-permissions/SKILL.md). Always quit running instances before `tccutil` and relaunch afterward: `./scripts/voicey_restart.sh` or `make reset-permissions-direct-relaunch`.
+After rebuilds or permission issues on a **Mac** (not Cloud Linux), use [`.cursor/skills/voicey-macos-dev-restart/SKILL.md`](.cursor/skills/voicey-macos-dev-restart/SKILL.md): `make dev-restart` by default; `make reset-permissions-direct-relaunch` only when TCC is stale.

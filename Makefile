@@ -28,7 +28,7 @@ BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMAR
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 
-.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
+.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
 
@@ -427,6 +427,10 @@ run-bundle-direct: bundle-direct sign-local-debug
 voicey-quit:
 	@./scripts/voicey_restart.sh --quit-only
 
+# Quit, rebuild/sign direct debug bundle, and relaunch (default after code changes).
+dev-restart:
+	@./scripts/voicey_restart.sh --launch-direct-debug
+
 # Reset and re-open Accessibility permission flow for the direct debug build.
 accessibility-setup-direct: voicey-quit bundle-debug-direct sign-local-debug
 	@echo "Resetting Accessibility permission for VoiceyDirect..."
@@ -659,6 +663,7 @@ help:
 	@echo "  sign              - Sign the app bundle (ad-hoc)"
 	@echo "  clean             - Clean build artifacts"
 	@echo "  run               - Build and run debug app bundle (default)"
+	@echo "  dev-restart       - Quit workers, rebuild/sign, relaunch (no log stream)"
 	@echo "  run-binary        - Build and run raw debug binary"
 	@echo "  run-bundle        - Build and run as app bundle"
 	@echo "  run-appstore      - Build and run App Store-style debug app bundle"
