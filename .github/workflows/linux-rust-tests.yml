@@ -33,3 +33,24 @@ jobs:
         run: |
           python3 scripts/test_common_voice_benchmark.py
           python3 scripts/test_prepare_common_voice.py
+
+  rust-workspace:
+    name: Rust workspace (Tier 2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ALSA build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Workspace unit tests
+        run: cargo test --workspace
+
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --tests -- -D warnings
