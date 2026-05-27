@@ -28,14 +28,27 @@ BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMAR
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 
-.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
+.PHONY: all build build-release release release-direct build-rust build-rust-release ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
+
+RUST_WORKERS = voicey-capture voicey-fetch voicey-supervisor
 
 build-rust:
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo build
 	@mkdir -p $(BUILD_DIR)/debug
-	@cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor $(BUILD_DIR)/debug/ 2>/dev/null || true
+	@cp $(addprefix target/debug/,$(RUST_WORKERS)) $(BUILD_DIR)/debug/ 2>/dev/null || true
+
+build-rust-release:
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo build --release
+	@mkdir -p $(RELEASE_DIR)
+	@for worker in $(RUST_WORKERS); do \
+		if [ ! -f target/release/$$worker ]; then \
+			echo "Error: release worker target/release/$$worker not found" >&2; \
+			exit 1; \
+		fi; \
+	done
+	@cp $(addprefix target/release/,$(RUST_WORKERS)) $(RELEASE_DIR)/
 
 benchmark-golden-fixtures:
 	python3 scripts/generate_golden_fixtures.py
@@ -165,7 +178,7 @@ SPARKLE_FRAMEWORK_DEBUG = $(BUILD_DIR)/debug/Sparkle.framework
 SPARKLE_FRAMEWORK_RELEASE = $(RELEASE_DIR)/Sparkle.framework
 APPLE_DEV_IDENTITY ?= $(shell security find-identity -v -p codesigning | grep "Apple Development" | head -1 | awk '{print $$2}')
 
-bundle-direct: release-direct
+bundle-direct: release-direct build-rust-release
 	@echo "Creating app bundle (direct distribution)..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(MACOS_DIR)
@@ -173,6 +186,13 @@ bundle-direct: release-direct
 	@mkdir -p $(FRAMEWORKS_DIR)
 	@cp $(RELEASE_DIR)/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp $(MLX_METALLIB_RELEASE) $(MACOS_DIR)/mlx.metallib
+	@for worker in $(RUST_WORKERS); do \
+		if [ ! -f target/release/$$worker ]; then \
+			echo "Error: release worker target/release/$$worker not found (run make build-rust-release)" >&2; \
+			exit 1; \
+		fi; \
+	done
+	@cp $(addprefix target/release/,$(RUST_WORKERS)) $(MACOS_DIR)/
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
 	@if [ -z "$(strip $(SWIFTPM_RESOURCES_RELEASE))" ]; then \
@@ -266,6 +286,10 @@ sign-direct: bundle-direct
 	@codesign $(CODESIGN_OPTS) "$(SPARKLE_FW)"
 	@# Sign bundled Metal library
 	@codesign $(CODESIGN_OPTS) "$(APP_BUNDLE)/Contents/MacOS/mlx.metallib"
+	@# Sign Rust worker binaries (required for notarization)
+	@for worker in $(RUST_WORKERS); do \
+		codesign $(CODESIGN_OPTS) "$(APP_BUNDLE)/Contents/MacOS/$$worker"; \
+	done
 	@echo "Signing main app..."
 	@codesign $(CODESIGN_OPTS) --entitlements VoiceyDirect.entitlements $(APP_BUNDLE)
 	@echo "App signed for direct distribution"
