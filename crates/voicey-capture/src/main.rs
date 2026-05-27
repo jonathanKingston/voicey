@@ -7,7 +7,6 @@ use recording::{live_input_level, LiveRecorder};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::thread;
 use std::time::Duration;
 
 const TARGET_SAMPLE_RATE: f64 = 16_000.0;
@@ -210,7 +209,7 @@ fn capture_live_samples(duration_seconds: f64) -> std::io::Result<Vec<f32>> {
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no input device"))?;
     let config = device
         .default_input_config()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
     let sample_rate = config.sample_rate().0 as f64;
     let channels = config.channels() as usize;
 
@@ -235,9 +234,9 @@ fn capture_live_samples(duration_seconds: f64) -> std::io::Result<Vec<f32>> {
             ))
         }
     }
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    .map_err(std::io::Error::other)?;
 
-    stream.play().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    stream.play().map_err(std::io::Error::other)?;
     std::thread::sleep(Duration::from_secs_f64(duration_seconds));
     drop(stream);
 

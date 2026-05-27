@@ -7,6 +7,10 @@ edition.workspace = true
 name = "voicey-fetch"
 path = "src/main.rs"
 
+[lib]
+name = "voicey_fetch"
+path = "src/lib.rs"
+
 [dependencies]
 voicey-protocol = { path = "../voicey-protocol" }
 serde = { version = "1", features = ["derive"] }
@@ -14,3 +18,6 @@ serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 sha2 = "0.10"
 hex = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
