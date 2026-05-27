@@ -22,7 +22,8 @@ public enum ScreenContextOCRTextFilter {
 
   public static func filteredRecognizedLines(_ lines: [String]) -> [String] {
     let joined = joinContinuationLines(lines)
-    return joined
+    return
+      joined
       .map { sanitizeLine($0) }
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
@@ -85,7 +86,8 @@ public enum ScreenContextOCRTextFilter {
 
   public static func sanitizeLine(_ line: String) -> String {
     var result = line
-    result = replacingMatches(in: result, pattern: #"\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?"#, with: " ")
+    result = replacingMatches(
+      in: result, pattern: #"\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?"#, with: " ")
     result = replacingMatches(in: result, pattern: #"\b\d{1,2}:\d{2}(:\d{2})?\b"#, with: " ")
     result = replacingMatches(in: result, pattern: #"\b\d{4}\b"#, with: " ")
     result = replacingMatches(in: result, pattern: #"\b0x[0-9a-fA-F]+\b"#, with: " ")
@@ -97,7 +99,8 @@ public enum ScreenContextOCRTextFilter {
     ScreenTermFilter.isSteeringNoiseToken(token)
   }
 
-  private static func replacingMatches(in text: String, pattern: String, with replacement: String) -> String {
+  private static func replacingMatches(in text: String, pattern: String, with replacement: String)
+    -> String {
     guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
     let range = NSRange(text.startIndex..., in: text)
     return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)

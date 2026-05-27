@@ -33,6 +33,6 @@ public struct VoiceCommand: Identifiable, Codable, Equatable {
     VoiceCommand(id: UUID(), phrase: "mister", action: .custom("Mr."), enabled: true),
     VoiceCommand(id: UUID(), phrase: "missus", action: .custom("Mrs."), enabled: true),
     VoiceCommand(id: UUID(), phrase: "doctor", action: .custom("Dr."), enabled: true),
-    VoiceCommand(id: UUID(), phrase: "okay", action: .custom("OK"), enabled: true),
+    VoiceCommand(id: UUID(), phrase: "okay", action: .custom("OK"), enabled: true)
   ]
 }

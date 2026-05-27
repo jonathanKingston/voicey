@@ -73,8 +73,13 @@ enum ScreenContextExposureAssessment {
         "ScreenContext exposure: limited for \(result.bundleID ?? "pid:\(targetPID)", privacy: .public) — \(guidance(bundleID: result.bundleID), privacy: .public)"
       )
     case .menuDominated:
+      let bundleLabel = result.bundleID ?? "pid:\(targetPID)"
+      let editorGuidance = guidance(bundleID: result.bundleID)
       AppLogger.transcription.warning(
-        "ScreenContext exposure: menu-dominated tree for \(result.bundleID ?? "pid:\(targetPID)", privacy: .public); dismiss menus and focus the editor. \(guidance(bundleID: result.bundleID), privacy: .public)"
+        """
+        ScreenContext exposure: menu-dominated tree for \(bundleLabel, privacy: .public); \
+        dismiss menus and focus the editor. \(editorGuidance, privacy: .public)
+        """
       )
     }
     return result
@@ -94,7 +99,8 @@ enum ScreenContextExposureAssessment {
       return .menuDominated
     }
 
-    if metrics.webAreaCount >= 1, metrics.staticTextCount >= 15 || queryChars >= 20 || chunkCount >= 3 {
+    if metrics.webAreaCount >= 1,
+      metrics.staticTextCount >= 15 || queryChars >= 20 || chunkCount >= 3 {
       return .rich
     }
 
@@ -190,7 +196,9 @@ enum ScreenContextExposureAssessment {
 
   private static func copyFocusedWindow(from appElement: AXUIElement) -> AXUIElement? {
     var window: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &window) == .success,
+    guard
+      AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &window)
+        == .success,
       let element = window,
       CFGetTypeID(element) == AXUIElementGetTypeID()
     else { return nil }
@@ -200,7 +208,9 @@ enum ScreenContextExposureAssessment {
 
   private static func copyFocusedElement(from appElement: AXUIElement) -> AXUIElement? {
     var focused: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+    guard
+      AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focused)
+        == .success,
       let element = focused,
       CFGetTypeID(element) == AXUIElementGetTypeID()
     else { return nil }
@@ -210,7 +220,9 @@ enum ScreenContextExposureAssessment {
 
   private static func copyChildren(_ element: AXUIElement) -> [AXUIElement] {
     var children: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success,
+    guard
+      AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
+        == .success,
       let childArray = children as? [AXUIElement]
     else { return [] }
     return childArray
@@ -223,8 +235,7 @@ enum ScreenContextExposureAssessment {
     else { return nil }
     if let string = value as? String { return string }
     if CFGetTypeID(value) == CFStringGetTypeID() {
-      // swiftlint:disable:next force_cast
-      return (value as! CFString) as String
+      return unsafeDowncast(value, to: CFString.self) as String
     }
     return nil
   }

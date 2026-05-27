@@ -9,7 +9,7 @@ final class BM25Tests: XCTestCase {
       documents: [
         "Patient chart metformin dosage adjustment",
         "File Edit View Help Window",
-        "Unrelated toolbar labels cancel ok",
+        "Unrelated toolbar labels cancel ok"
       ]
     )
 

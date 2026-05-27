@@ -9,14 +9,14 @@ public enum ScreenTermFilter {
     "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have",
     "he", "her", "his", "i", "if", "in", "is", "it", "its", "me", "my", "not", "of", "on", "or",
     "our", "she", "so", "that", "the", "their", "them", "there", "they", "this", "to", "was",
-    "we", "were", "what", "when", "which", "who", "will", "with", "you", "your",
+    "we", "were", "what", "when", "which", "who", "will", "with", "you", "your"
   ]
 
   private static let uiChrome: Set<String> = [
     "about", "add", "back", "cancel", "close", "copy", "cut", "delete", "done", "edit", "file",
     "forward", "help", "home", "menu", "more", "new", "next", "ok", "open", "paste", "preferences",
     "redo", "refresh", "remove", "save", "search", "settings", "share", "stop", "tools", "undo",
-    "view", "window", "zoom",
+    "view", "window", "zoom"
   ]
 
   /// True when `term` appears in `text` with non-alphanumeric boundaries (not glued across a space).
@@ -26,7 +26,9 @@ public enum ScreenTermFilter {
 
     let escaped = NSRegularExpression.escapedPattern(for: trimmed)
     let pattern = #"(?<![A-Za-z0-9])"# + escaped + #"(?![A-Za-z0-9])"#
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return false }
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+      return false
+    }
     let range = NSRange(text.startIndex..., in: text)
     return regex.firstMatch(in: text, range: range) != nil
   }
@@ -85,7 +87,9 @@ public enum ScreenTermFilter {
       }
     }
 
-    let pathFragments: Set<String> = ["tmp", "usr", "bin", "private", "var", "predicate", "subsystem"]
+    let pathFragments: Set<String> = [
+      "tmp", "usr", "bin", "private", "var", "predicate", "subsystem"
+    ]
     if pathFragments.contains(lower) {
       return true
     }

@@ -67,9 +67,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    guard VoiceySingleInstance.acquireLockOrQuit(applyLockedFileDescriptor: { fd in
-      self.singleInstanceLockFileDescriptor = fd
-    }) else { return }
+    guard
+      VoiceySingleInstance.acquireLockOrQuit(applyLockedFileDescriptor: { fd in
+        self.singleInstanceLockFileDescriptor = fd
+      })
+    else { return }
 
     // Keep the menubar app alive even when it has no open windows.
     ProcessInfo.processInfo.disableAutomaticTermination(Self.automaticTerminationReason)
@@ -840,7 +842,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // If selected model isn't downloaded, switch to the best available Qwen model.
     if !ModelManager.shared.isDownloaded(selectedModel),
-      let fallbackModel = SpeechModel.userFacingModels.first(where: { downloadedModels.contains($0) }) {
+      let fallbackModel = SpeechModel.userFacingModels.first(where: {
+        downloadedModels.contains($0)
+      }) {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
       SettingsManager.shared.selectedModel = fallbackModel
@@ -1010,8 +1014,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let ocrEnabled = SettingsManager.shared.transcriptionScreenContextOCREnabled
       let screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
       if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, screenCaptureGranted,
-        let windowImage
-      {
+        let windowImage {
         if let ocrSnapshot = await ScreenContextOCR.recognizeText(in: windowImage) {
           snapshot = ScreenContextSnapshotMerger.merging(snapshot, supplemental: ocrSnapshot)
         }
@@ -1131,10 +1134,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             decoderContext: decoderContext
           )
         } else {
-          guard let qwenResult = try await qwenEngine?.transcribe(
-            audioBuffer: audioBuffer,
-            decoderContext: decoderContext
-          ) else {
+          guard
+            let qwenResult = try await qwenEngine?.transcribe(
+              audioBuffer: audioBuffer,
+              decoderContext: decoderContext
+            )
+          else {
             throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
           }
           result = qwenResult

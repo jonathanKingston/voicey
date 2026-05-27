@@ -25,7 +25,8 @@ final class ScreenTermHealingTests: XCTestCase {
 
   func testAnchorCompletionFixesMissingPrefix() {
     let anchors = ["transcription", "Voicey"]
-    XCTAssertEqual(ScreenTermHealing.anchorCompletion(for: "ranscription", anchors: anchors), "transcription")
+    XCTAssertEqual(
+      ScreenTermHealing.anchorCompletion(for: "ranscription", anchors: anchors), "transcription")
   }
 
   func testInteriorFragmentDropped() {
@@ -37,7 +38,7 @@ final class ScreenTermHealingTests: XCTestCase {
   func testJoinContinuationLinesMergesLowercaseFollowOn() {
     let lines = [
       "I gave it a go. Can you look at your",
-      "logs?",
+      "logs?"
     ]
     let joined = ScreenContextOCRTextFilter.joinContinuationLines(lines)
     XCTAssertEqual(joined, ["I gave it a go. Can you look at your logs?"])
