@@ -1,4 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -6,6 +7,28 @@ use std::time::Duration;
 
 const TARGET_SAMPLE_RATE: f64 = 16_000.0;
 const MAX_RECORDING_SECONDS: f64 = 300.0;
+
+static LIVE_LEVEL_BITS: AtomicU32 = AtomicU32::new(0);
+
+/// Normalized input level 0–1 (matches Swift `calculateRMSLevel` mapping).
+pub fn live_input_level() -> f32 {
+    f32::from_bits(LIVE_LEVEL_BITS.load(Ordering::Relaxed))
+}
+
+pub fn reset_live_input_level() {
+    LIVE_LEVEL_BITS.store(0.0f32.to_bits(), Ordering::Relaxed);
+}
+
+fn update_live_input_level(samples: &[f32]) {
+    if samples.is_empty() {
+        return;
+    }
+    let sum_sq: f32 = samples.iter().map(|sample| sample * sample).sum();
+    let rms = (sum_sq / samples.len() as f32).sqrt();
+    let decibels = 20.0 * rms.max(1e-5).log10();
+    let normalized = ((decibels + 60.0) / 60.0).clamp(0.0, 1.0);
+    LIVE_LEVEL_BITS.store(normalized.to_bits(), Ordering::Relaxed);
+}
 
 pub struct LiveRecorder {
     stop_tx: Option<mpsc::Sender<()>>,
@@ -28,6 +51,7 @@ impl LiveRecorder {
         if self.is_recording() {
             return Err("capture already recording".into());
         }
+        reset_live_input_level();
         let (stop_tx, stop_rx) = mpsc::channel();
         let join = thread::spawn(move || record_until_stop(stop_rx));
         self.stop_tx = Some(stop_tx);
@@ -45,8 +69,11 @@ impl LiveRecorder {
             .take()
             .ok_or_else(|| "capture join handle missing".to_string())?;
         let _ = stop_tx.send(());
-        join.join()
-            .map_err(|_| "capture thread panicked".to_string())?
+        let result = join
+            .join()
+            .map_err(|_| "capture thread panicked".to_string())??;
+        reset_live_input_level();
+        Ok(result)
     }
 }
 
@@ -68,10 +95,13 @@ fn record_until_stop(stop_rx: mpsc::Receiver<()>) -> Result<Vec<f32>, String> {
             .build_input_stream(
                 &config.into(),
                 move |data: &[f32], _| {
-                    let mut guard = writer.lock().expect("lock");
+                    let mut mono_chunk = Vec::with_capacity(data.len() / channels + 1);
                     for frame in data.chunks(channels) {
-                        guard.push(frame[0]);
+                        mono_chunk.push(frame[0]);
                     }
+                    update_live_input_level(&mono_chunk);
+                    let mut guard = writer.lock().expect("lock");
+                    guard.extend_from_slice(&mono_chunk);
                 },
                 |error| eprintln!("voicey-capture stream error: {error}"),
                 None,

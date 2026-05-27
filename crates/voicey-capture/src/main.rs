@@ -3,7 +3,7 @@ mod recording;
 mod shm;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use recording::LiveRecorder;
+use recording::{live_input_level, LiveRecorder};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -25,6 +25,7 @@ enum CaptureRequest {
     Prewarm { id: String },
     StartRecording { id: String },
     StopRecording { id: String },
+    GetLevel { id: String },
     RecordFixture { id: String, duration_seconds: f64 },
     Shutdown { id: String },
 }
@@ -41,6 +42,10 @@ enum CaptureResponse {
         sample_count: Option<usize>,
         sample_rate: Option<u32>,
         error: Option<String>,
+    },
+    CaptureLevel {
+        id: String,
+        level: f32,
     },
     Error { id: String, message: String },
 }
@@ -123,6 +128,10 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
                 sample_rate: None,
                 error: Some(message),
             },
+        },
+        CaptureRequest::GetLevel { id } => CaptureResponse::CaptureLevel {
+            id,
+            level: live_input_level(),
         },
         CaptureRequest::RecordFixture { id, duration_seconds } => {
             if duration_seconds <= 0.0 || duration_seconds > 30.0 {

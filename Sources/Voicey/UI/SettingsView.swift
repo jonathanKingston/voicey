@@ -642,6 +642,7 @@ struct ModelSettingsView: View {
     .formStyle(.grouped)
     .padding()
     .onAppear {
+      modelManager.loadDownloadedModels()
       if let model = SpeechModel(rawValue: selectedModel) {
         appState.currentModel = model
       }

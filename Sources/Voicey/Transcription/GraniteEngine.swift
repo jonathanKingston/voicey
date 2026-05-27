@@ -53,10 +53,21 @@ final class GraniteEngine: @unchecked Sendable {
 
   /// Pre-load the Granite model by verifying Python environment and model availability
   func preloadModel() async {
-    guard !isLoading && !modelReady else { return }
-
     let selectedModel = SettingsManager.shared.selectedModel
     guard selectedModel.isGraniteModel else { return }
+
+    if modelReady {
+      return
+    }
+
+    if isLoading {
+      while isLoading {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      if modelReady {
+        return
+      }
+    }
 
     isLoading = true
     await MainActor.run {

@@ -269,10 +269,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func modelLoadFailureMessage(for model: SpeechModel) -> String {
-    if model.isQwenModel, VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
-      return VoiceyRuntimeDiagnostics.userFacingLoadFailureMessage()
+    switch model.backendKind {
+    case .qwenMLX:
+      if VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
+        return VoiceyRuntimeDiagnostics.userFacingLoadFailureMessage()
+      }
+      return L10n.Runtime.genericModelLoadFailed
+    case .whisperKit:
+      return L10n.Runtime.whisperModelLoadFailed
+    case .granitePython:
+      return L10n.Runtime.graniteModelLoadFailed
     }
-    return L10n.Runtime.genericModelLoadFailed
   }
 
   private func setupWorkspaceWakeObserver() {
@@ -375,7 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @MainActor
   private func handleSelectedModelChange(_ model: SpeechModel) async {
     appState.currentModel = model
-    unloadInactiveEngines(keeping: model.backendKind)
+    await unloadInactiveEngines(keeping: model.backendKind)
     ModelManager.shared.loadDownloadedModels()
 
     guard ModelManager.shared.isDownloaded(model) else {
@@ -384,6 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     appState.modelStatus = .loading
+    appState.transcriptionState = .idle
     let preloadSucceeded = await preloadSelectedModel()
     if preloadSucceeded && isActiveEngineLoaded {
       appState.modelStatus = .ready
@@ -392,7 +400,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func unloadInactiveEngines(keeping backend: SpeechBackendKind) {
+  @MainActor
+  private func unloadInactiveEngines(keeping backend: SpeechBackendKind) async {
     if backend != .whisperKit {
       whisperEngine?.unloadModel()
     }
@@ -402,9 +411,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if backend != .qwenMLX {
       qwenEngine?.unloadModel()
       multiprocessInferReady = false
-      Task {
-        await VoiceyRuntimeSupervisor.shared.shutdownGracefully()
-      }
+      await VoiceyRuntimeSupervisor.shared.shutdownInferWorkers()
     } else if VoiceyRuntimeConfiguration.usesInferWorker(
       for: SettingsManager.shared.selectedModel) {
       qwenEngine?.unloadModel()
@@ -881,6 +888,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       showOverlay()
 
       Task {
+        await self.unloadInactiveEngines(keeping: SettingsManager.shared.selectedModel.backendKind)
         let preloadSucceeded = await self.preloadSelectedModel()
 
         await MainActor.run {

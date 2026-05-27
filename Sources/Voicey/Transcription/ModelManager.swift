@@ -522,34 +522,36 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     let task = Task {
       do {
-        if VoiceyRuntimeConfiguration.useRustFetch {
-          try await VoiceyFetchWorkerSession.shared.ping()
-        }
-
-        guard let modelDir = qwenModelDirectory(for: model) else {
-          throw ModelDownloadError.verificationFailed
-        }
-
-        try fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
-        let qwenProgressHandler: @Sendable (Double) -> Void = { progress in
-          Task { @MainActor in
-            ModelManager.shared.downloadProgress[model] = progress
+        try await VoiceyQwenDownloadSerialExecutor.shared.perform {
+          if VoiceyRuntimeConfiguration.useRustFetch {
+            try await VoiceyFetchWorkerSession.shared.ping()
           }
-        }
-        if VoiceyRuntimeConfiguration.useRustFetch {
-          try await VoiceyRustQwenDownloader.downloadWeights(
-            modelId: hfId,
-            to: modelDir,
-            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
-            progressHandler: qwenProgressHandler
-          )
-        } else {
-          try await HuggingFaceDownloader.downloadWeights(
-            modelId: hfId,
-            to: modelDir,
-            additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
-            progressHandler: qwenProgressHandler
-          )
+
+          guard let modelDir = qwenModelDirectory(for: model) else {
+            throw ModelDownloadError.verificationFailed
+          }
+
+          try fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
+          let qwenProgressHandler: @Sendable (Double) -> Void = { progress in
+            Task { @MainActor in
+              ModelManager.shared.downloadProgress[model] = progress
+            }
+          }
+          if VoiceyRuntimeConfiguration.useRustFetch {
+            try await VoiceyRustQwenDownloader.downloadWeights(
+              modelId: hfId,
+              to: modelDir,
+              additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+              progressHandler: qwenProgressHandler
+            )
+          } else {
+            try await HuggingFaceDownloader.downloadWeights(
+              modelId: hfId,
+              to: modelDir,
+              additionalFiles: ["vocab.json", "merges.txt", "tokenizer_config.json"],
+              progressHandler: qwenProgressHandler
+            )
+          }
         }
 
         guard modelPath(for: model) != nil else {
@@ -566,6 +568,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
       } catch is CancellationError {
         await MainActor.run {
           cleanupIncompleteDownload(model)
+          loadDownloadedModels()
           isDownloading[model] = false
           downloadProgress[model] = 0
           downloadTasks[model] = nil
@@ -573,11 +576,9 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
       } catch {
         await MainActor.run {
           cleanupIncompleteDownload(model)
+          loadDownloadedModels()
           let errorMessage = Self.classifyDownloadError(error)
           AppLogger.model.error("Qwen model download failed: \(errorMessage) (underlying: \(error))")
-          if VoiceyRuntimeConfiguration.useRustFetch {
-            VoiceyFetchWorkerSession.shared.stop()
-          }
           downloadError = errorMessage
           isDownloading[model] = false
           downloadProgress[model] = 0

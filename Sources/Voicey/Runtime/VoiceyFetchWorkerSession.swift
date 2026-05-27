@@ -34,7 +34,8 @@ final class VoiceyFetchWorkerSession: @unchecked Sendable {
     if let expectedSHA256 {
       request["expected_sha256"] = expectedSHA256
     }
-    let response = try await client().send(request: request, timeout: 600)
+    // Large MLX weights (~2.5 GB) need headroom on slower links.
+    let response = try await client().send(request: request, timeout: 7_200)
     try VoiceyJSONLResponse.ensureSuccess(response, context: "download_hf_file")
   }
 

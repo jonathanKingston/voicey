@@ -33,7 +33,7 @@ BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1
 all: build
 
 build-rust:
-	cargo build
+	CARGO_TARGET_DIR="$(CURDIR)/target" cargo build
 	@mkdir -p $(BUILD_DIR)/debug
 	@cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor $(BUILD_DIR)/debug/ 2>/dev/null || true
 

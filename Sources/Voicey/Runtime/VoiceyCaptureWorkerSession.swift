@@ -16,6 +16,20 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     return worker
   }
 
+  func currentInputLevel() async throws -> Float {
+    let response = try await client().send(
+      request: ["type": "get_level", "id": UUID().uuidString],
+      timeout: 2
+    )
+    if let level = response["level"] as? Double {
+      return Float(level)
+    }
+    if let level = response["level"] as? Float {
+      return level
+    }
+    return 0
+  }
+
   func startRecording() async throws {
     let response = try await client().send(
       request: ["type": "start_recording", "id": UUID().uuidString]

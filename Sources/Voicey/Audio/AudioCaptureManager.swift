@@ -50,7 +50,19 @@ final class AudioCaptureManager {
       }
       levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
         guard let self else { return }
-        self.delegate?.audioCaptureManager(self, didUpdateLevel: 0.12)
+        Task {
+          do {
+            let level = try await VoiceyCaptureWorkerSession.shared.currentInputLevel()
+            await MainActor.run {
+              self.delegate?.audioCaptureManager(self, didUpdateLevel: level)
+            }
+          } catch {
+            // Worker may still be starting; keep last level.
+          }
+        }
+      }
+      if let levelTimer {
+        RunLoop.main.add(levelTimer, forMode: .common)
       }
       return
     }
@@ -108,6 +120,7 @@ final class AudioCaptureManager {
       usesRustCaptureWorker = false
       levelTimer?.invalidate()
       levelTimer = nil
+      delegate?.audioCaptureManager(self, didUpdateLevel: 0)
       do {
         var samples = try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.stopRecording()

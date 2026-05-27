@@ -172,6 +172,8 @@ enum L10n {
             L10n.string("runtime.inferWorkerStartFailedDetail", detail)
         }
         static var genericModelLoadFailed: String { L10n.string("runtime.genericModelLoadFailed") }
+        static var whisperModelLoadFailed: String { L10n.string("runtime.whisperModelLoadFailed") }
+        static var graniteModelLoadFailed: String { L10n.string("runtime.graniteModelLoadFailed") }
     }
 
     enum Menu {

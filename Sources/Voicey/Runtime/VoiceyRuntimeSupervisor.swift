@@ -127,15 +127,20 @@ actor VoiceyRuntimeSupervisor {
     }
   }
 
-  func shutdownGracefully() async {
+  /// Stop Qwen infer / supervisor only. Keeps mic capture and fetch workers alive for non-Qwen backends.
+  func shutdownInferWorkers() async {
     if usesRustSupervisor {
       rustSupervisor.stop()
     } else {
       await inferClient.gracefulShutdown()
     }
+    inferReadyModel = nil
+  }
+
+  func shutdownGracefully() async {
+    await shutdownInferWorkers()
     VoiceyCaptureWorkerSession.shared.stop()
     VoiceyFetchWorkerSession.shared.stop()
-    inferReadyModel = nil
     captureReady = false
   }
 

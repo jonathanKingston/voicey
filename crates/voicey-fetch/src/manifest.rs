@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io;
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
@@ -95,7 +95,7 @@ pub fn download_to_staging(url: &str, staging_path: &Path, expected_sha256: Opti
         .user_agent("voicey-fetch/0.1")
         .build()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    let response = client
+    let mut response = client
         .get(url)
         .send()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
@@ -105,12 +105,21 @@ pub fn download_to_staging(url: &str, staging_path: &Path, expected_sha256: Opti
             format!("HTTP {}", response.status()),
         ));
     }
-    let bytes = response
-        .bytes()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    fs::write(staging_path, &bytes)?;
+    let mut file = fs::File::create(staging_path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 256 * 1024];
+    loop {
+        let read = response
+            .read(&mut buffer)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        io::Write::write_all(&mut file, &buffer[..read])?;
+    }
     if let Some(expected) = expected_sha256 {
-        let hash = hex::encode(Sha256::digest(&bytes));
+        let hash = hex::encode(hasher.finalize());
         if hash != expected {
             fs::remove_file(staging_path)?;
             return Err(io::Error::new(io::ErrorKind::InvalidData, "sha256 mismatch"));
