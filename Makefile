@@ -28,7 +28,7 @@ BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMAR
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 
-.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-state-direct reset-all-direct reset-full build-rust benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
+.PHONY: all build build-release release release-direct ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
 
@@ -423,8 +423,12 @@ run-bundle-debug: bundle-debug sign-local-debug
 run-bundle-direct: bundle-direct sign-local-debug
 	@$(RUN_WITH_LOG_STREAM)
 
+# Quit Voicey and Rust workers (macOS only).
+voicey-quit:
+	@./scripts/voicey_restart.sh --quit-only
+
 # Reset and re-open Accessibility permission flow for the direct debug build.
-accessibility-setup-direct: bundle-debug-direct sign-local-debug
+accessibility-setup-direct: voicey-quit bundle-debug-direct sign-local-debug
 	@echo "Resetting Accessibility permission for VoiceyDirect..."
 	@tccutil reset Accessibility work.voicey.VoiceyDirect 2>/dev/null || echo "  (reset failed; you may need to remove Voicey manually in System Settings)"
 	@echo "Opening Accessibility settings..."
@@ -537,7 +541,7 @@ reset-all-direct:
 	@echo "Done. App will show onboarding and require model download."
 
 # Reset system permissions (microphone, accessibility, login items)
-reset-permissions:
+reset-permissions: voicey-quit
 	@echo "Resetting system permissions for Voicey..."
 	@echo ""
 	@echo "Resetting microphone permission..."
@@ -553,7 +557,7 @@ reset-permissions:
 	@echo "  - Re-enable 'Launch at Login' in app settings"
 
 # Reset permissions for direct distribution build (includes accessibility)
-reset-permissions-direct:
+reset-permissions-direct: voicey-quit
 	@echo "Resetting system permissions for Voicey (direct distribution)..."
 	@echo ""
 	@echo "Resetting microphone permission..."
@@ -563,10 +567,18 @@ reset-permissions-direct:
 	@echo "Resetting login items..."
 	@sfltool resetbtm 2>/dev/null || echo "  (requires admin privileges)"
 	@echo ""
-	@echo "Done. You may need to:"
+	@echo "Done. Quit Voicey and relaunch so TCC can re-prompt:"
+	@echo "  make reset-permissions-direct-relaunch"
+	@echo "  or: ./scripts/voicey_restart.sh --launch-direct-debug"
+	@echo ""
+	@echo "You may need to:"
 	@echo "  - Re-grant microphone access in System Settings > Privacy & Security > Microphone"
 	@echo "  - Re-grant accessibility in System Settings > Privacy & Security > Accessibility"
 	@echo "  - Re-enable 'Launch at Login' in app settings"
+
+# Reset direct permissions, then quit, build/sign, and relaunch debug bundle
+reset-permissions-direct-relaunch: reset-permissions-direct
+	@./scripts/voicey_restart.sh --launch-direct-debug
 
 # Full reset: app state + models + permissions
 reset-full: reset-all reset-permissions
@@ -676,6 +688,8 @@ help:
 	@echo "  reset-state       - Reset app state (keeps models)"
 	@echo "  reset-all         - Reset everything including models"
 	@echo "  reset-permissions - Reset system permissions (mic, accessibility, login)"
+	@echo "  reset-permissions-direct-relaunch - Reset direct TCC + quit + relaunch debug bundle"
+	@echo "  voicey-quit - Quit Voicey and Rust workers"
 	@echo "  accessibility-setup-direct - Reset/open Accessibility flow for direct debug build"
 	@echo "  reset-full        - Reset everything: state, models, and permissions"
 	@echo "  show-state        - Show current app settings and models"
