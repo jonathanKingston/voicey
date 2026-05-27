@@ -48,4 +48,23 @@ final class TranscriptionGlossaryTests: XCTestCase {
     XCTAssertEqual(formatted.count, TranscriptionGlossary.maxContextCharacterCount)
     XCTAssertTrue(formatted.hasPrefix("Glossary: "))
   }
+
+  func testStripEchoedDecoderContextExactMatch() {
+    let context = "Glossary: Voicey"
+    XCTAssertEqual(
+      TranscriptionGlossary.strippingEchoedDecoderContext("Glossary: Voicey", decoderContext: context),
+      ""
+    )
+  }
+
+  func testStripEchoedDecoderContextKeepsSpeech() {
+    let context = "Glossary: Voicey"
+    XCTAssertEqual(
+      TranscriptionGlossary.strippingEchoedDecoderContext(
+        "Hello world",
+        decoderContext: context
+      ),
+      "Hello world"
+    )
+  }
 }

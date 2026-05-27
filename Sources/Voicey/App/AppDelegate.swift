@@ -1028,7 +1028,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  func enforceRecordingDurationLimitIfNeeded() {
+    guard case .recording(let startTime) = appState.transcriptionState else { return }
+    let elapsed = Date().timeIntervalSince(startTime)
+    guard elapsed >= RecordingDurationLimits.maxSeconds else { return }
+    AppLogger.audio.info(
+      "Recording reached maximum duration (\(Int(RecordingDurationLimits.maxSeconds))s); stopping for transcription"
+    )
+    stopRecording()
+  }
+
   private func stopRecording() {
+    guard appState.isRecording else { return }
+
     debugPrint("⏹️ Stopping recording...", category: "RECORD")
     AppLogger.audio.info("Stopping recording...")
 

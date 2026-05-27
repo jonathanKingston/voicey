@@ -6,6 +6,12 @@ final class QwenInferWorkerClient: @unchecked Sendable {
   private static let defaultRequestTimeoutSeconds: TimeInterval = 120
   private static let loadRequestTimeoutSeconds: TimeInterval = 600
   private static let shutdownRequestTimeoutSeconds: TimeInterval = 5
+  private static let maxTranscribeTimeoutSeconds: TimeInterval = 3600
+
+  private static func transcribeTimeoutSeconds(sampleCount: Int) -> TimeInterval {
+    let audioDuration = Double(sampleCount) / 16_000.0
+    return min(maxTranscribeTimeoutSeconds, max(defaultRequestTimeoutSeconds, audioDuration * 4 + 60))
+  }
 
   private var process: Process?
   private var stdinHandle: FileHandle?
@@ -130,7 +136,7 @@ final class QwenInferWorkerClient: @unchecked Sendable {
 
     let response = try await send(
       request: request,
-      timeout: Self.defaultRequestTimeoutSeconds
+      timeout: Self.transcribeTimeoutSeconds(sampleCount: samples.count)
     )
 
     guard response.ok else {
