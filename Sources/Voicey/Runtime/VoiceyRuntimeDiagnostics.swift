@@ -83,6 +83,7 @@ enum VoiceyRuntimeDiagnostics {
       }
     }
     lines.append("Rust capture (hotkey mic): \(VoiceyRuntimeConfiguration.useRustCaptureHotPath)")
+    lines.append("Rust text postprocess: \(VoiceyRuntimeConfiguration.useRustTextPostProcess)")
     lines.append("Infer worker ready (app): \(inferReady)")
     if let readyModel {
       lines.append("Infer worker loaded model: \(readyModel)")
