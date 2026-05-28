@@ -169,7 +169,8 @@ enum VoiceyJSONLResponse {
   static func ensureSuccess(_ json: [String: Any], context: String) throws {
     let type = json["type"] as? String ?? ""
     switch type {
-    case "pong", "ready", "infer_ready", "capture_ready", "ok", "capture_level":
+    case "pong", "ready", "infer_ready", "capture_ready", "ok", "capture_level",
+      "listed_model_files", "downloaded_model_file":
       return
     case "transcribe_result":
       if (json["ok"] as? Bool) == true { return }

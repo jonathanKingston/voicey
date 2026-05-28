@@ -3,7 +3,11 @@ import Foundation
 
 /// Downloads Qwen MLX weights via `voicey-fetch` (hot path when the worker binary is bundled).
 enum VoiceyRustQwenDownloader {
-  private static let huggingFaceHost = "https://huggingface.co"
+  private static let defaultRevision = "main"
+  private static let requiredConfigFile = "config.json"
+  private static let defaultWeightGlob = "*.safetensors"
+  private static let weightIndexFile = "model.safetensors.index.json"
+  private static let stagingDirectoryName = ".voicey-fetch-staging"
 
   static func downloadWeights(
     modelId: String,
@@ -17,74 +21,51 @@ enum VoiceyRustQwenDownloader {
     }
 
     let fileManager = FileManager.default
-    let stagingRoot = directory.appendingPathComponent(".voicey-fetch-staging", isDirectory: true)
+    let stagingRoot = directory.appendingPathComponent(stagingDirectoryName, isDirectory: true)
     try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
     defer { try? fileManager.removeItem(at: stagingRoot) }
 
     for (index, relativePath) in files.enumerated() {
       let validated = try HuggingFaceDownloader.validatedRemoteFileName(relativePath)
-      let destination = try HuggingFaceDownloader.validatedLocalPath(directory: directory, fileName: validated)
-      let stagingPath = stagingRoot.appendingPathComponent(validated)
-      try fileManager.createDirectory(
-        at: stagingPath.deletingLastPathComponent(),
-        withIntermediateDirectories: true
-      )
+      let destination = try HuggingFaceDownloader.validatedLocalPath(
+        directory: directory, fileName: validated)
 
-      let url = "\(huggingFaceHost)/\(modelId)/resolve/main/\(validated)"
-      try await VoiceyFetchWorkerSession.shared.downloadHFFile(
-        url: url,
-        stagingPath: stagingPath.path
+      let stagedPath = try await VoiceyFetchWorkerSession.shared.downloadModelFile(
+        modelID: modelId,
+        revision: defaultRevision,
+        relativePath: validated,
+        modelRoot: directory.path
       )
+      let stagedURL = URL(fileURLWithPath: stagedPath)
 
       if fileManager.fileExists(atPath: destination.path) {
         try fileManager.removeItem(at: destination)
       }
-      try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try fileManager.moveItem(at: stagingPath, to: destination)
+      try fileManager.createDirectory(
+        at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try fileManager.moveItem(at: stagedURL, to: destination)
 
       progressHandler?(Double(index + 1) / Double(files.count))
     }
   }
 
-  private struct TreeEntry: Decodable {
-    let path: String
-    let type: String
-  }
-
-  private static func listWeightFiles(modelId: String, additionalFiles: [String]) async throws -> [String] {
-    var globs = ["config.json"]
+  private static func listWeightFiles(modelId: String, additionalFiles: [String]) async throws
+    -> [String]
+  {
+    var globs = [requiredConfigFile]
     let hasExplicitWeights = additionalFiles.contains { $0.hasSuffix(".safetensors") }
     if !hasExplicitWeights {
-      globs.append("*.safetensors")
-      globs.append("model.safetensors.index.json")
+      globs.append(defaultWeightGlob)
+      globs.append(weightIndexFile)
     }
     for file in additionalFiles where !globs.contains(file) {
       globs.append(file)
     }
 
-    let encodedModel = modelId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? modelId
-    guard let url = URL(string: "\(huggingFaceHost)/api/models/\(encodedModel)/tree/main?recursive=1") else {
-      throw DownloadError.failedToDownload(modelId)
-    }
-
-    var request = URLRequest(url: url)
-    request.setValue("voicey-fetch/1.0", forHTTPHeaderField: "User-Agent")
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-      throw DownloadError.failedToDownload("\(modelId): HF tree HTTP error")
-    }
-
-    let entries = try JSONDecoder().decode([TreeEntry].self, from: data)
-    let filePaths = entries.filter { $0.type == "file" }.map(\.path)
-    return filePaths.filter { path in
-      globs.contains { globMatches(glob: $0, path: path) }
-    }.sorted()
-  }
-
-  private static func globMatches(glob: String, path: String) -> Bool {
-    if glob == path { return true }
-    if glob.hasPrefix("*."), path.hasSuffix(String(glob.dropFirst())) { return true }
-    if glob == "*.safetensors", path.hasSuffix(".safetensors") { return true }
-    return false
+    return try await VoiceyFetchWorkerSession.shared.listModelFiles(
+      modelID: modelId,
+      revision: defaultRevision,
+      patterns: globs
+    )
   }
 }

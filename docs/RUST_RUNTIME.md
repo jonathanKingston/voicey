@@ -22,8 +22,20 @@ After `make build-rust` and `make bundle-debug`, workers live in `Voicey.app/Con
 | `VOICEY_USE_RUST_FETCH=0` | Hub-based Qwen downloads |
 | `VOICEY_USE_RUST_CAPTURE=0` | AVAudioEngine mic capture |
 | `VOICEY_RUNTIME=in-process` | Qwen MLX inside main app |
+| `VOICEY_FETCH_SANDBOX_PROFILE=/path/to/profile.sb` | Launch `voicey-fetch` via `sandbox-exec -f` with the given seatbelt profile |
 
 Copy runtime diagnostics from **Settings → Advanced** when reporting issues.
+
+## Fetch worker contract
+
+`voicey-fetch` now owns the Hugging Face tree listing + file download path for bundled Qwen downloads:
+
+- the app asks the worker to list matching repo files for a model;
+- the worker constructs the Hugging Face URLs itself;
+- downloads are staged under `<model-root>/.voicey-fetch-staging/`;
+- the worker rejects absolute paths, traversal, and malformed model IDs.
+
+That keeps the main app off the Qwen listing hot path and narrows the worker's authority versus the older raw `url + staging_path` contract.
 
 ## Build & run
 

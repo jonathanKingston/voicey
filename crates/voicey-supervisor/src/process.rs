@@ -53,10 +53,13 @@ impl WorkerProcesses {
 
     pub fn infer_load_model(&mut self, model_id: &str) -> Result<(), String> {
         let worker = self.ensure_infer()?;
-        let response = write_infer(worker, InferWorkerRequest::LoadModel {
-            id: new_id(),
-            model_id: model_id.to_string(),
-        })?;
+        let response = write_infer(
+            worker,
+            InferWorkerRequest::LoadModel {
+                id: new_id(),
+                model_id: model_id.to_string(),
+            },
+        )?;
         match response {
             InferWorkerResponse::InferReady { .. } | InferWorkerResponse::Ready { .. } => Ok(()),
             InferWorkerResponse::Error { message, .. } => Err(message),
@@ -66,10 +69,7 @@ impl WorkerProcesses {
 
     pub fn infer_unload(&mut self) -> Result<(), String> {
         let worker = self.ensure_infer()?;
-        let _ = write_infer(
-            worker,
-            InferWorkerRequest::UnloadModel { id: new_id() },
-        )?;
+        let _ = write_infer(worker, InferWorkerRequest::UnloadModel { id: new_id() })?;
         Ok(())
     }
 
@@ -108,7 +108,8 @@ impl WorkerProcesses {
                 audio_seconds: audio_seconds.unwrap_or(0.0),
             }),
             InferWorkerResponse::TranscribeResult {
-                error: Some(message), ..
+                error: Some(message),
+                ..
             } => Err(message),
             InferWorkerResponse::Error { message, .. } => Err(message),
             other => Err(format!("unexpected infer transcribe response: {other:?}")),
@@ -122,7 +123,9 @@ impl WorkerProcesses {
         if response.kind == "capture_ready" {
             Ok(())
         } else {
-            Err(response.error.unwrap_or_else(|| "capture prewarm failed".into()))
+            Err(response
+                .error
+                .unwrap_or_else(|| "capture prewarm failed".into()))
         }
     }
 
@@ -139,7 +142,9 @@ impl WorkerProcesses {
         .to_string();
         let response: CaptureFixtureResponse = write_capture_json(worker, &line)?;
         if !response.ok {
-            return Err(response.error.unwrap_or_else(|| "capture fixture failed".into()));
+            return Err(response
+                .error
+                .unwrap_or_else(|| "capture fixture failed".into()));
         }
         Ok((
             response.shm_name.ok_or_else(|| "missing shm".to_string())?,
@@ -164,7 +169,9 @@ impl WorkerProcesses {
             let path = env_path("VOICEY_INFER_WORKER")?;
             self.infer = Some(spawn_worker(&path, &["infer-worker"])?);
         }
-        self.infer.as_mut().ok_or_else(|| "infer worker missing".to_string())
+        self.infer
+            .as_mut()
+            .ok_or_else(|| "infer worker missing".to_string())
     }
 
     fn ensure_capture(&mut self) -> Result<&mut ManagedWorker, String> {
@@ -182,7 +189,9 @@ impl WorkerProcesses {
             let path = env_path("VOICEY_FETCH_WORKER")?;
             self.fetch = Some(spawn_worker(&path, &[])?);
         }
-        self.fetch.as_mut().ok_or_else(|| "fetch worker missing".to_string())
+        self.fetch
+            .as_mut()
+            .ok_or_else(|| "fetch worker missing".to_string())
     }
 }
 
@@ -203,32 +212,38 @@ impl WorkerProcesses {
         if response.kind == "pong" {
             Ok(())
         } else {
-            Err(response.message.unwrap_or_else(|| "fetch ping failed".into()))
+            Err(response
+                .message
+                .unwrap_or_else(|| "fetch ping failed".into()))
         }
     }
 
     #[allow(dead_code)]
-    pub fn fetch_download_hf_file(
+    pub fn fetch_download_model_file(
         &mut self,
-        url: &str,
-        staging_path: &str,
+        model_id: &str,
+        relative_path: &str,
+        model_root: &str,
         expected_sha256: Option<&str>,
     ) -> Result<(), String> {
         let worker = self.ensure_fetch()?;
         let mut payload = serde_json::json!({
-            "type": "download_hf_file",
+            "type": "download_model_file",
             "id": new_id(),
-            "url": url,
-            "staging_path": staging_path,
+            "model_id": model_id,
+            "relative_path": relative_path,
+            "model_root": model_root,
         });
         if let Some(hash) = expected_sha256 {
             payload["expected_sha256"] = serde_json::Value::String(hash.to_string());
         }
         let response: FetchLineResponse = write_fetch_json(worker, &payload.to_string())?;
-        if response.kind == "ok" {
+        if response.kind == "downloaded_model_file" {
             Ok(())
         } else {
-            Err(response.message.unwrap_or_else(|| "fetch download failed".into()))
+            Err(response
+                .message
+                .unwrap_or_else(|| "fetch download failed".into()))
         }
     }
 }
@@ -243,11 +258,15 @@ struct CaptureLineResponse {
 fn spawn_worker(path: &str, args: &[&str]) -> Result<ManagedWorker, String> {
     let mut command = Command::new(path);
     command.args(args);
-    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("spawn {path}: {e}"))?;
-    let stdin = child.stdin.take().ok_or_else(|| "stdin missing".to_string())?;
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    let mut child = command.spawn().map_err(|e| format!("spawn {path}: {e}"))?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "stdin missing".to_string())?;
     let stdout = child
         .stdout
         .take()
@@ -271,11 +290,17 @@ fn write_infer(
 
 fn read_infer_response(worker: &mut ManagedWorker) -> Result<InferWorkerResponse, String> {
     let mut line = String::new();
-    worker.stdout.read_line(&mut line).map_err(|e| e.to_string())?;
+    worker
+        .stdout
+        .read_line(&mut line)
+        .map_err(|e| e.to_string())?;
     serde_json::from_str(line.trim()).map_err(|e| e.to_string())
 }
 
-fn write_capture_line(worker: &mut ManagedWorker, line: &str) -> Result<CaptureLineResponse, String> {
+fn write_capture_line(
+    worker: &mut ManagedWorker,
+    line: &str,
+) -> Result<CaptureLineResponse, String> {
     write_capture_json(worker, line)
 }
 
