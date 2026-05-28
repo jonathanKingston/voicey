@@ -30,9 +30,13 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     return 0
   }
 
-  func startRecording() async throws {
+  func startRecording(mode: RecordingMode = .manual) async throws {
     let response = try await client().send(
-      request: ["type": "start_recording", "id": UUID().uuidString]
+      request: [
+        "type": "start_recording",
+        "id": UUID().uuidString,
+        "mode": mode == .handsFree ? "hands_free" : "manual"
+      ]
     )
     try VoiceyJSONLResponse.ensureSuccess(response, context: "start_recording")
   }

@@ -240,6 +240,8 @@ struct TranscriptionOverlayView: View {
     switch appState.transcriptionState {
     case .idle:
       return 0
+    case .waitingForSpeech:
+      return colorScheme == .dark ? 0.18 : 0.12
     case .recording, .error:
       return colorScheme == .dark ? 0.22 : 0.16
     case .processing:
@@ -285,13 +287,16 @@ struct TranscriptionOverlayView: View {
         .frame(width: 100, height: 26)
     }
     .frame(width: 108, height: 32)
-    .animation(.easeInOut(duration: 0.2), value: appState.transcriptionState.isRecording)
+    .animation(.easeInOut(duration: 0.2), value: appState.transcriptionState.isCaptureEngaged)
     .clipped()
   }
 
   @ViewBuilder
   private var activitySlotContent: some View {
-    if appState.transcriptionState.isRecording {
+    if appState.transcriptionState.isWaitingForSpeech {
+      WaveformView(level: appState.audioLevel)
+        .opacity(0.55)
+    } else if appState.transcriptionState.isRecording {
       WaveformView(level: appState.audioLevel)
     } else if appState.transcriptionState.isProcessing,
               !appState.recordingWaveformEnvelope.isEmpty,
@@ -338,6 +343,8 @@ struct TranscriptionOverlayView: View {
     switch appState.transcriptionState {
     case .loadingModel:
       return "arrow.down.circle"
+    case .waitingForSpeech:
+      return "mic.fill"
     case .recording:
       return "mic.fill"
     case .processing:
@@ -355,6 +362,8 @@ struct TranscriptionOverlayView: View {
     switch appState.transcriptionState {
     case .loadingModel:
       return .blue
+    case .waitingForSpeech:
+      return .orange
     case .recording:
       return .red
     case .processing:

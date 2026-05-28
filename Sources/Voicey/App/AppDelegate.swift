@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // Model upgrade lock - prevents recording during model swap
   private var isUpgradingModel = false
+  private var handsFreeWaitTimeoutTask: Task<Void, Never>?
 
   /// Held open with `flock(LOCK_NB)` so a second Voicey cannot register the same global shortcut.
   private var singleInstanceLockFileDescriptor: Int32 = -1
@@ -162,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationWillTerminate(_ notification: Notification) {
     ProcessInfo.processInfo.enableAutomaticTermination(Self.automaticTerminationReason)
+    cancelHandsFreeWaitTimeout()
 
     if let observer = workspaceWakeObserver {
       NSWorkspace.shared.notificationCenter.removeObserver(observer)
@@ -811,7 +813,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Transcription Control
 
   func toggleTranscription() {
-    if appState.isRecording {
+    if appState.isWaitingForSpeech {
+      cancelTranscription()
+    } else if appState.isRecording {
       stopRecording()
     } else {
       startRecording()
@@ -935,13 +939,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       dependencies.mediaPlayback.pauseForTranscription()
     }
     appState.clearRecordingWaveformDisplay()
-    appState.transcriptionState = .recording(startTime: Date())
+    let recordingMode = dependencies.settings.recordingMode
+    if recordingMode == .handsFree {
+      appState.transcriptionState = .waitingForSpeech(startTime: Date())
+      scheduleHandsFreeWaitTimeout()
+      AppLogger.audio.info("Hands-Free: Armed and waiting for speech")
+    } else {
+      appState.transcriptionState = .recording(startTime: Date())
+    }
 
     // Show overlay on the screen where the user was last interacting
     showOverlay()
 
     // Start audio capture
-    audioCaptureManager?.startCapture()
+    audioCaptureManager?.startCapture(mode: recordingMode)
 
     // Update menubar
     statusBarController?.updateIcon(recording: true)
@@ -1038,6 +1049,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func stopRecording() {
     guard appState.isRecording else { return }
+    cancelHandsFreeWaitTimeout()
 
     debugPrint("⏹️ Stopping recording...", category: "RECORD")
     AppLogger.audio.info("Stopping recording...")
@@ -1107,6 +1119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func cancelTranscription() {
     AppLogger.general.info("Cancelling transcription...")
+    cancelHandsFreeWaitTimeout()
 
     appState.transcriptionState = .idle
     appState.clearRecordingWaveformDisplay()
@@ -1124,6 +1137,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Check for pending model upgrade now that we're idle
     tryPerformPendingUpgrade()
+  }
+
+  func cancelHandsFreeWaitTimeout() {
+    handsFreeWaitTimeoutTask?.cancel()
+    handsFreeWaitTimeoutTask = nil
+  }
+
+  private func scheduleHandsFreeWaitTimeout() {
+    cancelHandsFreeWaitTimeout()
+
+    let timeoutDuration = audioCaptureManager?.handsFreeWaitTimeoutDuration ?? 8.0
+    handsFreeWaitTimeoutTask = Task { [weak self] in
+      guard timeoutDuration > 0 else { return }
+      let timeoutNanoseconds = UInt64(timeoutDuration * 1_000_000_000)
+      try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+
+      await MainActor.run {
+        guard let self, self.appState.isWaitingForSpeech else { return }
+        AppLogger.audio.info("Hands-Free: No speech detected before timeout; cancelling")
+        self.cancelTranscription()
+      }
+    }
   }
 
   private func processTranscription(audioBuffer: [Float]) async {
