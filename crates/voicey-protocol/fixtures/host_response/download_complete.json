@@ -1,0 +1,6 @@
+{
+  "type": "download_complete",
+  "id": "fixture-download-complete-001",
+  "model_id": "qwen3-asr-0.6b-6bit",
+  "path": "/tmp/voicey-models/qwen3-asr-0.6b-6bit"
+}

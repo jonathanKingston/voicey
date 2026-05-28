@@ -1,0 +1,7 @@
+{
+  "type": "capture_stopped",
+  "id": "fixture-capture-stopped-001",
+  "shm_name": "voicey-pcm-fixture",
+  "sample_count": 16000,
+  "sample_rate": 16000
+}

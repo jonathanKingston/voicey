@@ -1,0 +1,8 @@
+{
+  "type": "capture_fixture_result",
+  "id": "fixture-capture-fixture-result-002",
+  "ok": false,
+  "shm_name": null,
+  "sample_count": null,
+  "error": "capture timeout"
+}

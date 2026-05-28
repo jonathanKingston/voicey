@@ -25,5 +25,5 @@ jobs:
         with:
           swift-version: "5.10"
 
-      - name: Run VoiceyCore tests
+      - name: Run VoiceyCore tests (incl. protocol fixtures)
         run: swift test --filter VoiceyCoreTests

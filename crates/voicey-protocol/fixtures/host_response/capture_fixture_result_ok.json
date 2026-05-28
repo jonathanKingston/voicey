@@ -1,0 +1,8 @@
+{
+  "type": "capture_fixture_result",
+  "id": "fixture-capture-fixture-result-001",
+  "ok": true,
+  "shm_name": "voicey-pcm-fixture",
+  "sample_count": 24000,
+  "error": null
+}

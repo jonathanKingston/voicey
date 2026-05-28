@@ -23,7 +23,7 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Protocol unit tests
+      - name: Protocol contract tests (golden fixtures)
         run: cargo test -p voicey-protocol
 
       - name: Build supervisor and fetch workers
