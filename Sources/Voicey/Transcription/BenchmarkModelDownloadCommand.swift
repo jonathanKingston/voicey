@@ -24,6 +24,8 @@ enum BenchmarkModelDownloadCommand {
   }
 
   private static func download(models: [SpeechModel]) async throws {
+    try BenchmarkRustRequirements.requireFetch()
+
     let manager = ModelManager.shared
     manager.loadDownloadedModels()
 
@@ -76,7 +78,7 @@ private struct ModelDownloadOptions {
     Usage:
       Voicey benchmark-download-models MODEL... | --all
 
-    Downloads Voicey models using the app's ModelManager without launching the UI.
+    Downloads Voicey models via voicey-fetch (run make build-rust). Requires Rust fetch worker.
 
     Options:
       --all       Download every SpeechModel case.

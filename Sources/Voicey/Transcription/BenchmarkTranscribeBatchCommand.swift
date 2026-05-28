@@ -30,19 +30,22 @@ enum BenchmarkTranscribeBatchCommand {
     SettingsManager.shared.selectedModel = model
 
     switch model.backendKind {
-    case .whisperKit:
-      let engine = WhisperEngine()
-      try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-        try await engine.loadModel(variant: model.rawValue)
-      }
+    case .qwenMLX:
+      try BenchmarkRustRequirements.requireTranscribeBenchmarkStack()
       for sample in samples {
+        let audio = try sample.audioSamples()
         let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-          try await engine.transcribe(audioBuffer: sample.audioSamples())
+          try await TranscriptionRuntime.transcribe(
+            samples: audio,
+            model: model,
+            runtime: .multiprocess,
+            warmupCount: 0
+          )
         }
         try printBatchJSON(result: result, sample: sample, model: model)
       }
-    case .qwenMLX:
-      let engine = QwenEngine()
+    case .whisperKit:
+      let engine = WhisperEngine()
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
         try await engine.loadModel(variant: model.rawValue)
       }
@@ -94,6 +97,7 @@ private struct BatchOptions {
       Voicey benchmark-transcribe-batch --model MODEL --tsv PATH --clips-dir DIR
 
     Loads one Voicey model once, then transcribes every row in the TSV.
+    Qwen models use the multiprocess Rust supervisor path; Whisper/Granite remain in-process legacy paths.
     """
 
   let model: SpeechModel
