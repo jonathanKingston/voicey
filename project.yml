@@ -10,7 +10,7 @@ options:
 settings:
   base:
     PRODUCT_NAME: Voicey
-    MARKETING_VERSION: "1.6.0"
+    MARKETING_VERSION: "1.5.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
@@ -24,6 +24,9 @@ packages:
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit.git
     from: "1.0.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle.git
+    from: "2.6.0"
 
 targets:
   # App Store / TestFlight target
@@ -68,7 +71,7 @@ targets:
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
 
-  # Direct distribution target (non-sandboxed, has auto-paste)
+  # Direct distribution target (sandboxed, Sparkle updates)
   VoiceyDirect:
     type: application
     platform: macOS
@@ -85,6 +88,7 @@ targets:
     dependencies:
       - package: KeyboardShortcuts
       - package: WhisperKit
+      - package: Sparkle
       - sdk: AVFoundation.framework
       - sdk: CoreAudio.framework
       - sdk: Accelerate.framework
@@ -98,6 +102,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: VoiceyDirect.entitlements
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: VOICEY_DIRECT_DISTRIBUTION
       configs:
         Debug:
@@ -107,9 +112,12 @@ targets:
     entitlements:
       path: VoiceyDirect.entitlements
       properties:
-        com.apple.security.app-sandbox: false
+        com.apple.security.app-sandbox: true
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
+        com.apple.security.temporary-exception.mach-lookup.global-name:
+          - work.voicey.VoiceyDirect-spks
+          - work.voicey.VoiceyDirect-spki
 
 schemes:
   Voicey:

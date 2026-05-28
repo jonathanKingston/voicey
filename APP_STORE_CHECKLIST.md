@@ -2,21 +2,19 @@
 
 This document outlines what's needed to submit Voicey to the Apple App Store.
 
-## ⚠️ Important: Architectural Decision Required
+## Current Distribution Strategy
 
-Before proceeding, you must choose a distribution strategy. The app's current design (global hotkeys + auto-paste) **conflicts with App Sandbox requirements**.
+Voicey now uses the App Sandbox for both App Store and direct-distribution builds.
 
-### Option A: App Store Distribution (Requires UX Changes)
-- Must enable App Sandbox
-- Auto-paste won't work under sandbox (CGEvent blocked)
-- User will need to manually paste (⌘V) after transcription
+### Shared security posture
+- App Sandbox stays enabled for every bundled app target
+- Outbound networking is reserved for explicit model downloads
+- Model storage stays inside the app-owned container paths
 
-### Option B: Direct Distribution (Notarized, Non-App Store)
-- Keeps full functionality (auto-paste)
-- Distribute via website, Homebrew, etc.
-- No App Store listing
-
-**Current setup supports both:** The codebase builds for either target using different entitlements files.
+### Direct distribution differences
+- Signed and notarized outside the App Store
+- Sparkle updates remain available in the direct build only
+- Same sandbox baseline as the App Store target
 
 ---
 
@@ -44,22 +42,21 @@ Before proceeding, you must choose a distribution strategy. The app's current de
 ```
 
 **Notes:**
-- Models are stored under Application Support; no broad file access entitlements are required.
-- Auto-paste setting exists in UI but won't function under sandbox (CGEvent is blocked).
+- Models are stored under app-owned support directories; no broad file access entitlements are required.
+- App Store builds use network egress for model downloads only; direct Sparkle builds also require update traffic.
 
 ### 2. Output Mechanism
 
 **Status:** ✅ Completed
 
-**Behavior for App Store build:**
+**Behavior:**
 1. Copy transcription to clipboard (works in sandbox)
 2. Show system notification: "Transcription copied! Press ⌘V to paste"
 3. User pastes manually
 
 **Implementation:**
 - `OutputManager` copies to clipboard and shows notification
-- `KeyboardSimulator.swift` exists for direct distribution builds (sandbox disables CGEvent)
-- Auto-paste toggle in settings will prompt for Accessibility but won't work under sandbox
+- Auto-paste may still attempt accessibility-driven insertion, but clipboard/manual paste remains the reliable sandbox-safe path
 
 ### 3. Create App Icon
 
@@ -284,7 +281,7 @@ To test:
 
 ## Alternative: Direct Distribution (Non-App Store)
 
-If you choose to distribute outside the App Store to keep full auto-paste functionality:
+If you choose to distribute outside the App Store:
 
 ### 1. Build with Direct Distribution Entitlements
 
@@ -292,7 +289,7 @@ If you choose to distribute outside the App Store to keep full auto-paste functi
 make bundle-direct
 ```
 
-This uses `VoiceyDirect.entitlements` (sandbox disabled) and `Info.direct.plist`.
+This uses `VoiceyDirect.entitlements` with App Sandbox enabled and `Info.direct.plist`.
 
 ### 2. Sign and Notarize
 
@@ -317,6 +314,7 @@ make dmg \
 - Host on GitHub Releases
 - Add to Homebrew Cask
 - Distribute via your website
+- Keep Sparkle appcast/update hosting in place for direct builds
 
 ---
 
