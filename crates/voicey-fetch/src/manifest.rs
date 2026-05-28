@@ -131,7 +131,8 @@ pub fn list_model_files(
     if !response.status().is_success() {
         return Err(io::Error::other(format!("HTTP {}", response.status())));
     }
-    let entries: Vec<HuggingFaceTreeEntry> = response.json().map_err(io::Error::other)?;
+    let entries: Vec<HuggingFaceTreeEntry> =
+        serde_json::from_reader(response).map_err(io::Error::other)?;
     let file_paths = entries
         .into_iter()
         .filter(|entry| entry.kind == "file")

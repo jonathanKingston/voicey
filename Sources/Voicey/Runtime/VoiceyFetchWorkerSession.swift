@@ -36,7 +36,7 @@ final class VoiceyFetchWorkerSession: @unchecked Sendable {
         "id": UUID().uuidString,
         "model_id": modelID,
         "revision": revision,
-        "patterns": patterns,
+        "patterns": patterns
       ]
     )
     try VoiceyJSONLResponse.ensureSuccess(response, context: "list_model_files")
@@ -59,7 +59,7 @@ final class VoiceyFetchWorkerSession: @unchecked Sendable {
       "model_id": modelID,
       "revision": revision,
       "relative_path": relativePath,
-      "model_root": modelRoot,
+      "model_root": modelRoot
     ]
     if let expectedSHA256 {
       request["expected_sha256"] = expectedSHA256

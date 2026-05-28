@@ -89,9 +89,7 @@ enum VoiceyRuntimeConfiguration {
   }
 
   static func workerBinary(named name: String) -> String? {
-    if let override = ProcessInfo.processInfo.environment["VOICEY_\(name.uppercased())"],
-      !override.isEmpty
-    {
+    if let override = ProcessInfo.processInfo.environment["VOICEY_\(name.uppercased())"], !override.isEmpty {
       return override
     }
     let executableDirectory = URL(fileURLWithPath: voiceyExecutablePath())

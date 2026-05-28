@@ -49,9 +49,7 @@ enum VoiceyRustQwenDownloader {
     }
   }
 
-  private static func listWeightFiles(modelId: String, additionalFiles: [String]) async throws
-    -> [String]
-  {
+  private static func listWeightFiles(modelId: String, additionalFiles: [String]) async throws -> [String] {
     var globs = [requiredConfigFile]
     let hasExplicitWeights = additionalFiles.contains { $0.hasSuffix(".safetensors") }
     if !hasExplicitWeights {
