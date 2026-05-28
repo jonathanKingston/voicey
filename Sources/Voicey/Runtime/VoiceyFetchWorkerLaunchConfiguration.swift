@@ -50,8 +50,7 @@ struct VoiceyFetchWorkerLaunchConfiguration: Sendable {
 
   private static func bundledSandboxProfilePath() -> String? {
     if let resourcePath = Bundle.main.resourceURL?.appendingPathComponent(bundledProfileRelativePath).path,
-      FileManager.default.isReadableFile(atPath: resourcePath)
-    {
+      FileManager.default.isReadableFile(atPath: resourcePath) {
       return resourcePath
     }
 

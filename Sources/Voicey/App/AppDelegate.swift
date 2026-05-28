@@ -321,8 +321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     if selectedModel.isQwenModel,
       VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel),
-      ModelManager.shared.isDownloaded(selectedModel)
-    {
+      ModelManager.shared.isDownloaded(selectedModel) {
       return false
     }
 
@@ -396,8 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       multiprocessInferReady = false
       await VoiceyRuntimeSupervisor.shared.shutdownInferWorkers()
     } else if VoiceyRuntimeConfiguration.usesInferWorker(
-      for: SettingsManager.shared.selectedModel)
-    {
+      for: SettingsManager.shared.selectedModel) {
       qwenEngine?.unloadModel()
     }
   }
@@ -844,8 +842,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if !ModelManager.shared.isDownloaded(selectedModel),
       let fallbackModel = SpeechModel.userFacingModels.first(where: {
         downloadedModels.contains($0)
-      })
-    {
+      }) {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
       SettingsManager.shared.selectedModel = fallbackModel
@@ -1016,8 +1013,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let ocrEnabled = SettingsManager.shared.transcriptionScreenContextOCREnabled
       let screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
       if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, screenCaptureGranted,
-        let windowImage
-      {
+        let windowImage {
         if let ocrSnapshot = await ScreenContextOCR.recognizeText(in: windowImage) {
           snapshot = ScreenContextSnapshotMerger.merging(snapshot, supplemental: ocrSnapshot)
         }
