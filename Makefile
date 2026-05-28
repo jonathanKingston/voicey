@@ -27,6 +27,7 @@ BENCHMARK_COMMON_VOICE_HF_DIR = benchmark-data/common-voice/prepared/$(subst /,_
 BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMARK_COMMON_VOICE_DATASET)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
+QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
 .PHONY: all build build-release release release-direct build-rust build-rust-release ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
@@ -559,6 +560,7 @@ reset-all:
 	@echo "Resetting all app data..."
 	@defaults delete work.voicey.Voicey 2>/dev/null || true
 	@rm -rf ~/Library/Application\ Support/Voicey/Models
+	@rm -rf "$(QWEN_CACHE_DIR)"
 	@echo "Done. App will show onboarding and require model download."
 
 # Reset everything for direct distribution including models
@@ -566,6 +568,7 @@ reset-all-direct:
 	@echo "Resetting all app data for direct distribution..."
 	@defaults delete work.voicey.VoiceyDirect 2>/dev/null || true
 	@rm -rf ~/Library/Application\ Support/Voicey/Models
+	@rm -rf "$(QWEN_CACHE_DIR)"
 	@echo "Done. App will show onboarding and require model download."
 
 # Reset system permissions (microphone, accessibility, login items)

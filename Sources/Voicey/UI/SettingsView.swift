@@ -64,6 +64,10 @@ struct SettingsView: View {
   @ObservedObject private var modelManager = ModelManager.shared
   @State private var microphoneGranted = false
 
+  init(initialTab: Tab? = nil) {
+    _selectedTab = State(initialValue: initialTab ?? .setup)
+  }
+
   /// Whether setup is complete (model downloaded + mic permission)
   private var isSetupComplete: Bool {
     microphoneGranted && modelManager.hasDownloadedModel
@@ -104,6 +108,13 @@ struct SettingsView: View {
         selectedTab = defaultTab
       }
     }
+    .onReceive(NotificationCenter.default.publisher(for: .voiceyOpenSettingsTab)) { notification in
+      guard
+        let rawValue = notification.object as? String,
+        let requestedTab = Tab(rawValue: rawValue)
+      else { return }
+      selectedTab = requestedTab
+    }
   }
 
   @ViewBuilder
@@ -140,6 +151,10 @@ struct SettingsView: View {
       AdvancedSettingsView()
     }
   }
+}
+
+extension Notification.Name {
+  static let voiceyOpenSettingsTab = Notification.Name("voiceyOpenSettingsTab")
 }
 
 private struct SettingsSidebarRow: View {

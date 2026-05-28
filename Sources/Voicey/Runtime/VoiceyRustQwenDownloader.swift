@@ -3,7 +3,12 @@ import Foundation
 
 /// Downloads Qwen MLX weights via `voicey-fetch` (hot path when the worker binary is bundled).
 enum VoiceyRustQwenDownloader {
-  private static let huggingFaceHost = "https://huggingface.co"
+  private static let defaultRevision = "main"
+  private static let requiredConfigFile = "config.json"
+  private static let defaultWeightGlob = "*.safetensors"
+  private static let weightIndexFile = "model.safetensors.index.json"
+  private static let stagingDirectoryName = ".voicey-fetch-staging"
+  private static let stagingContainerPrefix = ".voicey-fetch-download-"
 
   static func downloadWeights(
     modelId: String,
@@ -17,74 +22,74 @@ enum VoiceyRustQwenDownloader {
     }
 
     let fileManager = FileManager.default
-    let stagingRoot = directory.appendingPathComponent(".voicey-fetch-staging", isDirectory: true)
-    try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
-    defer { try? fileManager.removeItem(at: stagingRoot) }
+    let stagingContainer = try makeStagingContainer(for: directory, fileManager: fileManager)
+    let stagedModelRoot = stagingContainer.appendingPathComponent(
+      stagingDirectoryName, isDirectory: true)
+    defer { try? fileManager.removeItem(at: stagingContainer) }
 
     for (index, relativePath) in files.enumerated() {
       let validated = try HuggingFaceDownloader.validatedRemoteFileName(relativePath)
-      let destination = try HuggingFaceDownloader.validatedLocalPath(directory: directory, fileName: validated)
-      let stagingPath = stagingRoot.appendingPathComponent(validated)
-      try fileManager.createDirectory(
-        at: stagingPath.deletingLastPathComponent(),
-        withIntermediateDirectories: true
-      )
+      let stagedDestination = try HuggingFaceDownloader.validatedLocalPath(
+        directory: stagedModelRoot, fileName: validated)
 
-      let url = "\(huggingFaceHost)/\(modelId)/resolve/main/\(validated)"
-      try await VoiceyFetchWorkerSession.shared.downloadHFFile(
-        url: url,
-        stagingPath: stagingPath.path
+      let stagedPath = try await VoiceyFetchWorkerSession.shared.downloadModelFile(
+        modelID: modelId,
+        revision: defaultRevision,
+        relativePath: validated,
+        modelRoot: stagingContainer.path
       )
-
-      if fileManager.fileExists(atPath: destination.path) {
-        try fileManager.removeItem(at: destination)
+      let stagedURL = URL(fileURLWithPath: stagedPath)
+      if stagedURL.standardizedFileURL != stagedDestination.standardizedFileURL {
+        throw DownloadError.failedToDownload("\(modelId): staged path mismatch for \(validated)")
       }
-      try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try fileManager.moveItem(at: stagingPath, to: destination)
 
       progressHandler?(Double(index + 1) / Double(files.count))
     }
-  }
 
-  private struct TreeEntry: Decodable {
-    let path: String
-    let type: String
+    guard fileManager.fileExists(atPath: stagedModelRoot.path) else {
+      throw DownloadError.failedToDownload("\(modelId): staged model root missing")
+    }
+    try promoteStagedModel(from: stagedModelRoot, to: directory, fileManager: fileManager)
   }
 
   private static func listWeightFiles(modelId: String, additionalFiles: [String]) async throws -> [String] {
-    var globs = ["config.json"]
+    var globs = [requiredConfigFile]
     let hasExplicitWeights = additionalFiles.contains { $0.hasSuffix(".safetensors") }
     if !hasExplicitWeights {
-      globs.append("*.safetensors")
-      globs.append("model.safetensors.index.json")
+      globs.append(defaultWeightGlob)
+      globs.append(weightIndexFile)
     }
     for file in additionalFiles where !globs.contains(file) {
       globs.append(file)
     }
 
-    let encodedModel = modelId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? modelId
-    guard let url = URL(string: "\(huggingFaceHost)/api/models/\(encodedModel)/tree/main?recursive=1") else {
-      throw DownloadError.failedToDownload(modelId)
-    }
-
-    var request = URLRequest(url: url)
-    request.setValue("voicey-fetch/1.0", forHTTPHeaderField: "User-Agent")
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-      throw DownloadError.failedToDownload("\(modelId): HF tree HTTP error")
-    }
-
-    let entries = try JSONDecoder().decode([TreeEntry].self, from: data)
-    let filePaths = entries.filter { $0.type == "file" }.map(\.path)
-    return filePaths.filter { path in
-      globs.contains { globMatches(glob: $0, path: path) }
-    }.sorted()
+    return try await VoiceyFetchWorkerSession.shared.listModelFiles(
+      modelID: modelId,
+      revision: defaultRevision,
+      patterns: globs
+    )
   }
 
-  private static func globMatches(glob: String, path: String) -> Bool {
-    if glob == path { return true }
-    if glob.hasPrefix("*."), path.hasSuffix(String(glob.dropFirst())) { return true }
-    if glob == "*.safetensors", path.hasSuffix(".safetensors") { return true }
-    return false
+  private static func makeStagingContainer(for directory: URL, fileManager: FileManager) throws -> URL {
+    let parentDirectory = directory.deletingLastPathComponent()
+    try fileManager.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
+
+    let stagingContainer = parentDirectory.appendingPathComponent(
+      "\(stagingContainerPrefix)\(directory.lastPathComponent)-\(UUID().uuidString)",
+      isDirectory: true
+    )
+    try fileManager.createDirectory(at: stagingContainer, withIntermediateDirectories: true)
+    return stagingContainer
+  }
+
+  private static func promoteStagedModel(
+    from stagedModelRoot: URL,
+    to destination: URL,
+    fileManager: FileManager
+  ) throws {
+    if fileManager.fileExists(atPath: destination.path) {
+      try fileManager.removeItem(at: destination)
+    }
+    try fileManager.moveItem(at: stagedModelRoot, to: destination)
   }
 }

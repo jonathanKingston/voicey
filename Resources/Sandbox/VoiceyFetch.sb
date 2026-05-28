@@ -1,0 +1,39 @@
+(version 1)
+(deny default)
+(import "system.sb")
+
+(define (home-subpath relative)
+  (subpath (string-append (param "HOME") relative)))
+
+;; Basic runtime support for a CLI helper that performs HTTPS downloads into the
+;; Qwen cache. Reads remain broad for compatibility with system trust stores and
+;; dynamically loaded libraries; writes are limited to the qwen3-speech cache.
+(allow signal
+  process-fork
+  process-exec
+  sysctl-read
+  mach-task-name
+  system-socket)
+
+(allow file-read*)
+(allow file-read-metadata)
+
+(allow file-read* file-write*
+  (home-subpath "/Library/Caches/qwen3-speech"))
+
+(allow network-outbound)
+
+(allow mach-lookup
+  (global-name "com.apple.cfprefsd.agent")
+  (global-name "com.apple.securityd")
+  (global-name "com.apple.securityd.xpc")
+  (global-name "com.apple.SecurityServer")
+  (global-name "com.apple.SystemConfiguration.configd")
+  (global-name "com.apple.mDNSResponder")
+  (global-name "com.apple.mDNSResponder.control")
+  (global-name "com.apple.trustd")
+  (global-name "com.apple.trustd.agent")
+  (global-name "com.apple.cfnetwork.cfnetworkagent"))
+
+(allow user-preference-read
+  (preference-domain "kCFPreferencesAnyApplication"))

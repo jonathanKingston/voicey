@@ -6,7 +6,9 @@ enum VoiceyRuntimeConfiguration {
   private static let useRustSupervisorKey = "VOICEY_USE_RUST_SUPERVISOR"
   private static let useRustFetchKey = "VOICEY_USE_RUST_FETCH"
   private static let useRustCaptureKey = "VOICEY_USE_RUST_CAPTURE"
+  private static let useFetchSandboxKey = "VOICEY_USE_FETCH_SANDBOX"
   private static let useXPCServicesKey = "VOICEY_USE_XPC"
+  private static let fetchSandboxProfileKey = "VOICEY_FETCH_SANDBOX_PROFILE"
 
   private static var rustWorkersDisabled: Bool {
     ProcessInfo.processInfo.environment[disableRustWorkersKey] == "1"
@@ -72,6 +74,23 @@ enum VoiceyRuntimeConfiguration {
     ProcessInfo.processInfo.environment[useXPCServicesKey] == "1"
   }
 
+  static var fetchSandboxProfileOverride: String? {
+    let value = ProcessInfo.processInfo.environment[fetchSandboxProfileKey]?.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+    guard let value, !value.isEmpty else { return nil }
+    return value
+  }
+
+  static var usesFetchSandboxByDefault: Bool {
+    #if VOICEY_DIRECT_DISTRIBUTION
+      if ProcessInfo.processInfo.environment[useFetchSandboxKey] == "0" { return false }
+      return true
+    #else
+      return ProcessInfo.processInfo.environment[useFetchSandboxKey] == "1"
+    #endif
+  }
+
   static func voiceyExecutablePath() -> String {
     if let override = ProcessInfo.processInfo.environment["VOICEY_BINARY"], !override.isEmpty {
       return override
@@ -83,7 +102,8 @@ enum VoiceyRuntimeConfiguration {
     if let override = ProcessInfo.processInfo.environment["VOICEY_\(name.uppercased())"], !override.isEmpty {
       return override
     }
-    let executableDirectory = URL(fileURLWithPath: voiceyExecutablePath()).deletingLastPathComponent()
+    let executableDirectory = URL(fileURLWithPath: voiceyExecutablePath())
+      .deletingLastPathComponent()
     let candidate = executableDirectory.appendingPathComponent(name).path
     if FileManager.default.isExecutableFile(atPath: candidate) {
       return candidate
