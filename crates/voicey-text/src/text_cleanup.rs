@@ -65,9 +65,13 @@ pub fn cleanup_spacing_and_punctuation(text: &str) -> String {
     result = result.replace(" ?", "?");
     result = result.replace(" !", "!");
 
-    result = result.replace("..", ".");
+    while result.contains("..") {
+        result = result.replace("..", ".");
+    }
     result = result.replace(",,", ",");
-    result = result.replace("....", "...");
+    while result.contains("....") {
+        result = result.replace("....", "...");
+    }
 
     result = PUNCTUATION_SPACING
         .replace_all(&result, "$1 $2")
