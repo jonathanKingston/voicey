@@ -33,7 +33,7 @@ QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
 all: build
 
-RUST_WORKERS = voicey-capture voicey-fetch voicey-supervisor
+RUST_WORKERS = voicey-capture voicey-fetch voicey-supervisor voicey-text
 
 build-rust:
 	CARGO_TARGET_DIR="$(CURDIR)/target" cargo build
@@ -130,7 +130,7 @@ bundle-debug: build build-rust
 	@mkdir -p $(RESOURCES_DIR)
 	@cp $(BUILD_DIR)/debug/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp $(MLX_METALLIB_DEBUG) $(MACOS_DIR)/mlx.metallib
-	@if [ -f target/debug/voicey-capture ]; then cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor $(MACOS_DIR)/ 2>/dev/null || true; fi
+	@if [ -f target/debug/voicey-capture ]; then cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor target/debug/voicey-text $(MACOS_DIR)/ 2>/dev/null || true; fi
 	@cp Info.plist $(CONTENTS_DIR)/
 	@if [ -f Voicey.entitlements ]; then cp Voicey.entitlements $(CONTENTS_DIR)/; fi
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
@@ -152,7 +152,7 @@ bundle-debug-direct: build-direct build-rust
 	@mkdir -p $(FRAMEWORKS_DIR)
 	@cp $(BUILD_DIR)/debug/Voicey $(MACOS_DIR)/$(APP_NAME)
 	@cp $(MLX_METALLIB_DEBUG) $(MACOS_DIR)/mlx.metallib
-	@if [ -f target/debug/voicey-capture ]; then cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor $(MACOS_DIR)/ 2>/dev/null || true; fi
+	@if [ -f target/debug/voicey-capture ]; then cp target/debug/voicey-capture target/debug/voicey-fetch target/debug/voicey-supervisor target/debug/voicey-text $(MACOS_DIR)/ 2>/dev/null || true; fi
 	@cp Info.direct.plist $(CONTENTS_DIR)/Info.plist
 	@if [ -d Resources ] && [ -n "$$(ls -A Resources 2>/dev/null)" ]; then cp -R Resources/* $(RESOURCES_DIR)/; fi
 	@if [ -z "$(strip $(SWIFTPM_RESOURCES_DEBUG))" ]; then \

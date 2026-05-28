@@ -7,6 +7,7 @@ enum VoiceyRuntimeConfiguration {
   private static let useRustFetchKey = "VOICEY_USE_RUST_FETCH"
   private static let useRustCaptureKey = "VOICEY_USE_RUST_CAPTURE"
   private static let useFetchSandboxKey = "VOICEY_USE_FETCH_SANDBOX"
+  private static let useRustTextKey = "VOICEY_USE_RUST_TEXT"
   private static let useXPCServicesKey = "VOICEY_USE_XPC"
   private static let fetchSandboxProfileKey = "VOICEY_FETCH_SANDBOX_PROFILE"
 
@@ -58,6 +59,14 @@ enum VoiceyRuntimeConfiguration {
     return captureWorkerPath != nil
   }
 
+  /// Default on when `voicey-text` is present — transcription post-processing uses the text worker.
+  static var useRustTextPostProcess: Bool {
+    if rustWorkersDisabled { return false }
+    if ProcessInfo.processInfo.environment[useRustTextKey] == "0" { return false }
+    if ProcessInfo.processInfo.environment[useRustTextKey] == "1" { return true }
+    return textWorkerPath != nil
+  }
+
   static func workerProcessEnvironment() -> [String: String] {
     var environment = ProcessInfo.processInfo.environment
     environment["VOICEY_INFER_WORKER"] = voiceyExecutablePath()
@@ -66,6 +75,9 @@ enum VoiceyRuntimeConfiguration {
     }
     if let fetchPath = fetchWorkerPath {
       environment["VOICEY_FETCH_WORKER"] = fetchPath
+    }
+    if let textPath = textWorkerPath {
+      environment["VOICEY_TEXT_WORKER"] = textPath
     }
     return environment
   }
@@ -131,6 +143,10 @@ enum VoiceyRuntimeConfiguration {
 
   static var fetchWorkerPath: String? {
     workerBinary(named: "voicey-fetch")
+  }
+
+  static var textWorkerPath: String? {
+    workerBinary(named: "voicey-text")
   }
 
   static var rustSupervisorPath: String? {

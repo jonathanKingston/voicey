@@ -22,6 +22,39 @@ final class PostProcessor {
   // MARK: - Processing
 
   func process(_ result: TranscriptionResult) -> String {
+    if VoiceyRuntimeConfiguration.useRustTextPostProcess {
+      if let processed = processViaRustWorker(result) {
+        return processed
+      }
+      AppLogger.transcription.warning(
+        "PostProcessor: Rust text worker failed; falling back to Swift path")
+    }
+    return processInSwift(result)
+  }
+
+  private func processViaRustWorker(_ result: TranscriptionResult) -> String? {
+    let group = DispatchGroup()
+    var processedText: String?
+    group.enter()
+    Task {
+      defer { group.leave() }
+      do {
+        processedText = try await VoiceyTextWorkerSession.shared.postprocess(
+          text: result.text,
+          segments: result.segments,
+          voiceCommandsEnabled: voiceCommandsEnabled,
+          voiceCommands: voiceCommands
+        )
+      } catch {
+        AppLogger.transcription.error(
+          "PostProcessor: Rust text worker error: \(error.localizedDescription, privacy: .public)")
+      }
+    }
+    group.wait()
+    return processedText
+  }
+
+  private func processInSwift(_ result: TranscriptionResult) -> String {
     var text = result.text
 
     AppLogger.transcription.info("PostProcessor: Input text: \"\(text)\"")
