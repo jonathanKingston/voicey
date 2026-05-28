@@ -1,5 +1,0 @@
-{
-  "type": "prewarm_all_workers",
-  "id": "fixture-prewarm-all-001",
-  "model_id": "qwen3-asr-0.6b-6bit"
-}

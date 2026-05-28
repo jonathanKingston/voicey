@@ -20,6 +20,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Rust toolchain (protocol fixture generation)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate protocol fixtures
+        run: cargo run -p voicey-protocol --bin gen-fixtures
+
       - name: Swift toolchain
         uses: swift-actions/setup-swift@v2
         with:

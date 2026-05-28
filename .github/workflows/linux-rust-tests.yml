@@ -23,7 +23,10 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Protocol contract tests (golden fixtures)
+      - name: Generate protocol fixtures
+        run: cargo run -p voicey-protocol --bin gen-fixtures
+
+      - name: Protocol contract tests
         run: cargo test -p voicey-protocol
 
       - name: Build supervisor and fetch workers
@@ -48,6 +51,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+
+      - name: Generate protocol fixtures
+        run: cargo run -p voicey-protocol --bin gen-fixtures
 
       - name: Workspace unit tests
         run: cargo test --workspace

@@ -78,6 +78,14 @@ final class VoiceyProtocolFixtureTests: XCTestCase {
 
   private func fixtureURLs(subdirectory: String) throws -> [URL] {
     let base = fixturesRoot.appendingPathComponent(subdirectory, isDirectory: true)
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: base.path, isDirectory: &isDirectory), isDirectory.boolValue
+    else {
+      XCTFail(
+        "Missing protocol fixtures at \(base.path). Run: make protocol-fixtures"
+      )
+      return []
+    }
     let urls = try FileManager.default.contentsOfDirectory(
       at: base,
       includingPropertiesForKeys: nil

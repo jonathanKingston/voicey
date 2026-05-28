@@ -1,9 +1,0 @@
-{
-  "type": "transcribe",
-  "id": "fixture-transcribe-001",
-  "model_id": "qwen3-asr-0.6b-6bit",
-  "sample_rate": 16000,
-  "shm_name": "voicey-pcm-fixture",
-  "sample_count": 1024,
-  "decoder_context": "Glossary: Voicey"
-}
