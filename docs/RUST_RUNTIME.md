@@ -22,6 +22,7 @@ After `make build-rust` and `make bundle-debug`, workers live in `Voicey.app/Con
 | `VOICEY_USE_RUST_FETCH=0` | Hub-based Qwen downloads |
 | `VOICEY_USE_RUST_CAPTURE=0` | AVAudioEngine mic capture |
 | `VOICEY_RUNTIME=in-process` | Qwen MLX inside main app |
+| `VOICEY_USE_FETCH_SANDBOX=0` | Disable the bundled default seatbelt profile for `voicey-fetch` in direct builds |
 | `VOICEY_FETCH_SANDBOX_PROFILE=/path/to/profile.sb` | Launch `voicey-fetch` via `sandbox-exec -f` with the given seatbelt profile |
 
 Copy runtime diagnostics from **Settings → Advanced** when reporting issues.
@@ -36,6 +37,8 @@ Copy runtime diagnostics from **Settings → Advanced** when reporting issues.
 - the worker rejects absolute paths, traversal, and malformed model IDs.
 
 That keeps the main app off the Qwen listing hot path and narrows the worker's authority versus the older raw `url + staging_path` contract.
+
+In direct-distribution builds, Voicey now defaults `voicey-fetch` to a bundled seatbelt profile unless `VOICEY_USE_FETCH_SANDBOX=0` disables it. `VOICEY_FETCH_SANDBOX_PROFILE` still overrides the profile path for local testing.
 
 ## Build & run
 

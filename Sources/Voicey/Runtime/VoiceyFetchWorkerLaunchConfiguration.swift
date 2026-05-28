@@ -6,6 +6,8 @@ enum VoiceyFetchWorkerLaunchMode: String, Sendable {
 }
 
 struct VoiceyFetchWorkerLaunchConfiguration: Sendable {
+  private static let bundledProfileRelativePath = "Sandbox/VoiceyFetch.sb"
+
   let executablePath: String
   let arguments: [String]
   let environment: [String: String]
@@ -18,10 +20,11 @@ struct VoiceyFetchWorkerLaunchConfiguration: Sendable {
     }
 
     let environment = ProcessInfo.processInfo.environment
-    if let sandboxProfilePath = VoiceyRuntimeConfiguration.fetchSandboxProfileOverride {
+    if let sandboxProfilePath = resolvedSandboxProfilePath() {
+      let homeDirectory = NSHomeDirectory()
       return VoiceyFetchWorkerLaunchConfiguration(
         executablePath: "/usr/bin/sandbox-exec",
-        arguments: ["-f", sandboxProfilePath, workerPath],
+        arguments: ["-D", "HOME=\(homeDirectory)", "-f", sandboxProfilePath, workerPath],
         environment: environment,
         mode: .seatbeltProfile,
         sandboxProfilePath: sandboxProfilePath
@@ -35,5 +38,31 @@ struct VoiceyFetchWorkerLaunchConfiguration: Sendable {
       mode: .directProcess,
       sandboxProfilePath: nil
     )
+  }
+
+  private static func resolvedSandboxProfilePath() -> String? {
+    if let override = VoiceyRuntimeConfiguration.fetchSandboxProfileOverride {
+      return override
+    }
+    guard VoiceyRuntimeConfiguration.usesFetchSandboxByDefault else { return nil }
+    return bundledSandboxProfilePath()
+  }
+
+  private static func bundledSandboxProfilePath() -> String? {
+    if let resourcePath = Bundle.main.resourceURL?.appendingPathComponent(bundledProfileRelativePath).path,
+      FileManager.default.isReadableFile(atPath: resourcePath)
+    {
+      return resourcePath
+    }
+
+    let repoPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent("Resources")
+      .appendingPathComponent(bundledProfileRelativePath)
+      .path
+    if FileManager.default.isReadableFile(atPath: repoPath) {
+      return repoPath
+    }
+
+    return nil
   }
 }
