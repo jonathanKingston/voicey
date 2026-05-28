@@ -238,19 +238,6 @@ struct FetchLineResponse {
 }
 
 impl WorkerProcesses {
-    pub fn fetch_ping(&mut self) -> Result<(), String> {
-        let worker = self.ensure_fetch()?;
-        let line = serde_json::json!({"type":"ping","id":new_id()}).to_string();
-        let response: FetchLineResponse = write_fetch_json(worker, &line)?;
-        if response.kind == "pong" {
-            Ok(())
-        } else {
-            Err(response
-                .message
-                .unwrap_or_else(|| "fetch ping failed".into()))
-        }
-    }
-
     #[allow(dead_code)]
     pub fn fetch_download_model_file(
         &mut self,
