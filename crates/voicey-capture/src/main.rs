@@ -1,5 +1,6 @@
 mod ipc;
 mod recording;
+mod trim;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use recording::{live_input_level, LiveRecorder};
@@ -168,8 +169,9 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
 fn stop_live_recording() -> Result<(String, usize), String> {
     let mut recorder = live_recorder().lock().expect("recorder lock");
     let samples = recorder.stop()?;
-    let shm_name = voicey_pcm::write_f32_samples(&samples).map_err(|error| error.to_string())?;
-    Ok((shm_name, samples.len()))
+    let trimmed = trim::trim_trailing_low_energy(&samples);
+    let shm_name = voicey_pcm::write_f32_samples(&trimmed).map_err(|error| error.to_string())?;
+    Ok((shm_name, trimmed.len()))
 }
 
 fn prewarm_device() -> std::io::Result<()> {
