@@ -5,6 +5,7 @@ members = [
   "crates/voicey-supervisor",
   "crates/voicey-fetch",
   "crates/voicey-capture",
+  "crates/voicey-text",
 ]
 
 [workspace.package]
