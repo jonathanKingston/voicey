@@ -153,15 +153,48 @@ impl WorkerProcesses {
         ))
     }
 
-    pub fn fetch_download_placeholder(
+    pub fn fetch_download_model(
         &mut self,
         model_id: &str,
         destination_root: &str,
     ) -> Result<String, String> {
-        self.fetch_ping()?;
-        let path = std::path::PathBuf::from(destination_root).join(model_id);
-        std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-        Ok(path.display().to_string())
+        use std::fs;
+        use std::path::PathBuf;
+
+        let hf_id = voicey_fetch::hf::hf_model_id(model_id)?;
+        let files = voicey_fetch::hf::list_weight_files(model_id)?;
+        let model_dir = PathBuf::from(destination_root).join(model_id);
+        fs::create_dir_all(&model_dir).map_err(|error| error.to_string())?;
+        let staging_root = model_dir.join(".voicey-fetch-staging");
+        if staging_root.exists() {
+            fs::remove_dir_all(&staging_root).map_err(|error| error.to_string())?;
+        }
+        fs::create_dir_all(&staging_root).map_err(|error| error.to_string())?;
+
+        for relative_path in files {
+            let staging_path = staging_root.join(&relative_path);
+            if let Some(parent) = staging_path.parent() {
+                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            self.fetch_download_model_file(
+                model_id,
+                &relative_path,
+                model_dir.to_str().ok_or("invalid path")?,
+                None,
+            )?;
+
+            let final_path = model_dir.join(&relative_path);
+            if let Some(parent) = final_path.parent() {
+                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            if final_path.exists() {
+                fs::remove_file(&final_path).map_err(|error| error.to_string())?;
+            }
+            fs::rename(staging_path, &final_path).map_err(|error| error.to_string())?;
+        }
+
+        let _ = fs::remove_dir_all(&staging_root);
+        Ok(model_dir.display().to_string())
     }
 
     fn ensure_infer(&mut self) -> Result<&mut ManagedWorker, String> {
