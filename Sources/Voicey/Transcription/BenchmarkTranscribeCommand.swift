@@ -19,6 +19,10 @@ enum BenchmarkTranscribeCommand {
         return 0
       }
 
+      if options.model.isQwenModel {
+        try BenchmarkRustRequirements.requireTranscribeBenchmarkStack()
+      }
+
       let samples = try AudioFileSamples.load16kMonoFloatSamples(from: options.audioURL)
       let result = try await withStdoutRedirectedToStderr {
         try await TranscriptionRuntime.transcribe(
@@ -28,7 +32,12 @@ enum BenchmarkTranscribeCommand {
           warmupCount: options.warmupCount
         )
       }
-      let text = options.postProcess ? PostProcessor().process(result) : result.text
+      let text: String
+      if options.postProcess {
+        text = try await BenchmarkPostProcessor.process(result)
+      } else {
+        text = result.text
+      }
 
       if options.outputJSON {
         try printJSON(
@@ -113,17 +122,18 @@ private struct Options {
   static let helpText = """
     Usage:
       Voicey benchmark-transcribe --model MODEL --audio PATH [--json] [--post-process] \\
-        [--runtime in-process|multiprocess] [--warmup N]
+        [--runtime multiprocess] [--warmup N]
 
-    Runs a single audio file through Voicey's real model wrapper code without launching the app UI.
+    Runs a single audio file through Voicey's multiprocess Rust runtime (supervisor + infer worker).
+    Post-processing uses the voicey-text worker when --post-process is set.
 
     Options:
-      --model MODEL       SpeechModel raw value, for example qwen3-asr-0.6b-6bit or large-v3_turbo.
+      --model MODEL       SpeechModel raw value, for example qwen3-asr-0.6b-6bit.
       --audio PATH        Audio file readable by AVFoundation. It is converted to 16 kHz mono float samples.
-      --runtime MODE      in-process (default) or multiprocess (Qwen infer worker + prewarm).
-      --warmup N          Discard N transcribes after load before the timed run (default: 1 for multiprocess, 0 for in-process).
+      --runtime MODE      multiprocess (default). in-process is rejected for Qwen benchmarks.
+      --warmup N          Discard N transcribes after load before the timed run (default: 1).
       --json              Print a single JSON object instead of plain transcript text.
-      --post-process      Apply Voicey's PostProcessor before printing text.
+      --post-process      Apply voicey-text post-processing before printing text.
       --help              Show this help.
     """
 
@@ -148,7 +158,7 @@ private struct Options {
     self.postProcess = state.postProcess
     self.showHelp = state.showHelp
     self.runtime = state.runtime
-    self.warmupCount = state.warmupCount ?? (state.runtime == .multiprocess ? 1 : 0)
+    self.warmupCount = state.warmupCount ?? 1
 
     if state.showHelp {
       self.model = ModelManager.defaultModel
@@ -160,6 +170,10 @@ private struct Options {
     guard let audioURL = state.audioURL else { throw BenchmarkTranscribeError.requiredArgument("--audio") }
     guard FileManager.default.fileExists(atPath: audioURL.path) else {
       throw BenchmarkTranscribeError.audioFileMissing(audioURL.path)
+    }
+
+    if model.isQwenModel, state.runtime == .inProcess {
+      throw BenchmarkTranscribeError.inProcessRejectedForQwen
     }
 
     self.model = model
@@ -237,7 +251,7 @@ private struct OptionsState {
   var outputJSON = false
   var postProcess = false
   var showHelp = false
-  var runtime: TranscriptionRuntimeKind = .inProcess
+  var runtime: TranscriptionRuntimeKind = .multiprocess
   var warmupCount: Int?
 }
 
@@ -342,10 +356,13 @@ enum BenchmarkTranscribeError: LocalizedError {
   case requiredArgument(String)
   case stdoutRedirectionFailed
   case unknownArgument(String)
+  case inProcessRejectedForQwen
   case unsupportedAudioFormat
 
   var errorDescription: String? {
     switch self {
+    case .inProcessRejectedForQwen:
+      return "Qwen benchmarks require --runtime multiprocess and make build-rust (Swift in-process path removed from benchmarks)"
     case .audioBufferAllocationFailed:
       return "Unable to allocate an audio buffer"
     case .audioConversionFailed:

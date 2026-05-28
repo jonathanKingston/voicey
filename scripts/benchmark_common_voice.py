@@ -958,6 +958,7 @@ def voicey_runners(models: Sequence[str], binary: Path) -> list[Runner]:
       name=model,
       command_template=(
         f"{binary_command} benchmark-transcribe --model {shlex.quote(model)} "
+        f"--runtime multiprocess --post-process "
         f"--audio {MODEL_COMMAND_PLACEHOLDER}"
       ),
     )
