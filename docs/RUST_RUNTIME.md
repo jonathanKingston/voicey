@@ -32,7 +32,7 @@ Copy runtime diagnostics from **Settings → Advanced** when reporting issues.
 
 - the app asks the worker to list matching repo files for a model;
 - the worker constructs the Hugging Face URLs itself;
-- downloads are staged under `<model-root>/.voicey-fetch-staging/`;
+- downloads are staged under an isolated temp root and only promoted into the live model cache once the full tree is present;
 - the worker rejects absolute paths, traversal, and malformed model IDs.
 
 That keeps the main app off the Qwen listing hot path and narrows the worker's authority versus the older raw `url + staging_path` contract.

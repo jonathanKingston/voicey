@@ -8,6 +8,7 @@ enum VoiceyRustQwenDownloader {
   private static let defaultWeightGlob = "*.safetensors"
   private static let weightIndexFile = "model.safetensors.index.json"
   private static let stagingDirectoryName = ".voicey-fetch-staging"
+  private static let stagingContainerPrefix = ".voicey-fetch-download-"
 
   static func downloadWeights(
     modelId: String,
@@ -21,32 +22,34 @@ enum VoiceyRustQwenDownloader {
     }
 
     let fileManager = FileManager.default
-    let stagingRoot = directory.appendingPathComponent(stagingDirectoryName, isDirectory: true)
-    try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
-    defer { try? fileManager.removeItem(at: stagingRoot) }
+    let stagingContainer = try makeStagingContainer(for: directory, fileManager: fileManager)
+    let stagedModelRoot = stagingContainer.appendingPathComponent(
+      stagingDirectoryName, isDirectory: true)
+    defer { try? fileManager.removeItem(at: stagingContainer) }
 
     for (index, relativePath) in files.enumerated() {
       let validated = try HuggingFaceDownloader.validatedRemoteFileName(relativePath)
-      let destination = try HuggingFaceDownloader.validatedLocalPath(
-        directory: directory, fileName: validated)
+      let stagedDestination = try HuggingFaceDownloader.validatedLocalPath(
+        directory: stagedModelRoot, fileName: validated)
 
       let stagedPath = try await VoiceyFetchWorkerSession.shared.downloadModelFile(
         modelID: modelId,
         revision: defaultRevision,
         relativePath: validated,
-        modelRoot: directory.path
+        modelRoot: stagingContainer.path
       )
       let stagedURL = URL(fileURLWithPath: stagedPath)
-
-      if fileManager.fileExists(atPath: destination.path) {
-        try fileManager.removeItem(at: destination)
+      if stagedURL.standardizedFileURL != stagedDestination.standardizedFileURL {
+        throw DownloadError.failedToDownload("\(modelId): staged path mismatch for \(validated)")
       }
-      try fileManager.createDirectory(
-        at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try fileManager.moveItem(at: stagedURL, to: destination)
 
       progressHandler?(Double(index + 1) / Double(files.count))
     }
+
+    guard fileManager.fileExists(atPath: stagedModelRoot.path) else {
+      throw DownloadError.failedToDownload("\(modelId): staged model root missing")
+    }
+    try promoteStagedModel(from: stagedModelRoot, to: directory, fileManager: fileManager)
   }
 
   private static func listWeightFiles(modelId: String, additionalFiles: [String]) async throws -> [String] {
@@ -65,5 +68,28 @@ enum VoiceyRustQwenDownloader {
       revision: defaultRevision,
       patterns: globs
     )
+  }
+
+  private static func makeStagingContainer(for directory: URL, fileManager: FileManager) throws -> URL {
+    let parentDirectory = directory.deletingLastPathComponent()
+    try fileManager.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
+
+    let stagingContainer = parentDirectory.appendingPathComponent(
+      "\(stagingContainerPrefix)\(directory.lastPathComponent)-\(UUID().uuidString)",
+      isDirectory: true
+    )
+    try fileManager.createDirectory(at: stagingContainer, withIntermediateDirectories: true)
+    return stagingContainer
+  }
+
+  private static func promoteStagedModel(
+    from stagedModelRoot: URL,
+    to destination: URL,
+    fileManager: FileManager
+  ) throws {
+    if fileManager.fileExists(atPath: destination.path) {
+      try fileManager.removeItem(at: destination)
+    }
+    try fileManager.moveItem(at: stagedModelRoot, to: destination)
   }
 }

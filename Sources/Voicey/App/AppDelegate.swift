@@ -24,8 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let sparkleUpdater = SparkleUpdater.shared
   #endif
 
-  // Keep strong reference to prevent deallocation while visible
-  private var modelDownloadWindow: NSWindow?
   private var loadingWindow: NSWindow?
   private var settingsWindow: NSWindow?
 
@@ -189,14 +187,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Clean up
     transcriptionOverlay = nil
-    modelDownloadWindow = nil
   }
 
   // MARK: - Onboarding (now uses Settings window with Setup tab)
 
   private func showOnboarding() {
     // Open settings window - the Setup tab provides onboarding experience
-    openSettings()
+    openSettings(targetTab: .setup)
 
     // Start model loading in background
     checkModelStatusAndPreload(showUI: false)
@@ -324,7 +321,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     if selectedModel.isQwenModel,
       VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel),
-      ModelManager.shared.isDownloaded(selectedModel) {
+      ModelManager.shared.isDownloaded(selectedModel)
+    {
       return false
     }
 
@@ -398,7 +396,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       multiprocessInferReady = false
       await VoiceyRuntimeSupervisor.shared.shutdownInferWorkers()
     } else if VoiceyRuntimeConfiguration.usesInferWorker(
-      for: SettingsManager.shared.selectedModel) {
+      for: SettingsManager.shared.selectedModel)
+    {
       qwenEngine?.unloadModel()
     }
   }
@@ -588,13 +587,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await waitForDownloadAndPreload(showUI: showUI)
       }
     } else {
-      // No model and no download - show downloader (returning user scenario)
+      // No model and no download - route users to settings instead of a separate modal.
       appState.modelStatus = .notDownloaded
-      debugPrint("📥 No model downloaded, opening downloader", category: "MODEL")
+      debugPrint("📥 No model downloaded, opening settings on Model tab", category: "MODEL")
       if showUI {
         Task { @MainActor in
           try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 seconds
-          self.openModelDownloader()
+          self.openSettings(targetTab: .model)
         }
       }
     }
@@ -835,8 +834,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     guard ModelManager.shared.hasDownloadedModel else {
-      AppLogger.general.warning("startRecording: No models downloaded, opening downloader")
-      openModelDownloader()
+      AppLogger.general.warning(
+        "startRecording: No models downloaded, opening settings on Model tab")
+      openSettings(targetTab: .model)
       return
     }
 
@@ -844,7 +844,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if !ModelManager.shared.isDownloaded(selectedModel),
       let fallbackModel = SpeechModel.userFacingModels.first(where: {
         downloadedModels.contains($0)
-      }) {
+      })
+    {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
       SettingsManager.shared.selectedModel = fallbackModel
@@ -1015,7 +1016,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let ocrEnabled = SettingsManager.shared.transcriptionScreenContextOCREnabled
       let screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
       if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, screenCaptureGranted,
-        let windowImage {
+        let windowImage
+      {
         if let ocrSnapshot = await ScreenContextOCR.recognizeText(in: windowImage) {
           snapshot = ScreenContextSnapshotMerger.merging(snapshot, supplemental: ocrSnapshot)
         }
@@ -1289,16 +1291,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   // MARK: - Public Actions
 
-  func openSettings() {
-    // Reuse existing settings window if it's still open
-    if let existingWindow = settingsWindow, existingWindow.isVisible {
+  func openSettings(targetTab: SettingsView.Tab? = nil) {
+    // Reuse an existing settings window when possible, even if it was hidden.
+    if let existingWindow = settingsWindow {
       existingWindow.makeKeyAndOrderFront(nil)
+      if let targetTab {
+        NotificationCenter.default.post(
+          name: .voiceyOpenSettingsTab,
+          object: targetTab.rawValue
+        )
+      }
       NSApp.activate(ignoringOtherApps: true)
       return
     }
 
     // Create settings window manually since SwiftUI Settings scene doesn't work well with accessory apps
-    let settingsView = SettingsView()
+    let settingsView = SettingsView(initialTab: targetTab)
       .environmentObject(appState)
 
     let hostingController = NSHostingController(rootView: settingsView)
@@ -1346,45 +1354,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     window.setFrameOrigin(snappedOrigin)
-  }
-
-  func openModelDownloader() {
-    // Create model download view
-    let downloadView = ModelDownloadView { [weak self] in
-      self?.modelDownloadWindow?.close()
-      self?.modelDownloadWindow = nil
-      // Refresh model status and preload
-      ModelManager.shared.loadDownloadedModels()
-
-      // Preload the model after download
-      self?.appState.modelStatus = .loading
-      Task { [weak self] in
-        guard let self else { return }
-        let preloadSucceeded = await self.preloadSelectedModel()
-        await MainActor.run { [weak self] in
-          guard let self else { return }
-          let model = SettingsManager.shared.selectedModel
-          if preloadSucceeded && self.isActiveEngineLoaded {
-            self.appState.modelStatus = .ready
-          } else {
-            self.appState.modelStatus = .failed(self.modelLoadFailureMessage(for: model))
-          }
-        }
-      }
-    }
-
-    let hostingController = NSHostingController(rootView: downloadView)
-
-    let window = NSWindow(contentViewController: hostingController)
-    window.title = "Download Models"
-    window.styleMask = [.titled, .closable]
-    window.setContentSize(NSSize(width: 450, height: 500))
-    window.center()
-
-    modelDownloadWindow = window
-
-    window.makeKeyAndOrderFront(nil)
-    NSApp.activate(ignoringOtherApps: true)
   }
 
   func showAbout() {
