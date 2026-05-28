@@ -27,7 +27,7 @@ final class VoiceyFetchWorkerSession: @unchecked Sendable {
 
   func listModelFiles(
     modelID: String,
-    revision: String = Self.defaultRevision,
+    revision: String = VoiceyFetchWorkerSession.defaultRevision,
     patterns: [String]
   ) async throws -> [String] {
     let response = try await client().send(
@@ -48,7 +48,7 @@ final class VoiceyFetchWorkerSession: @unchecked Sendable {
 
   func downloadModelFile(
     modelID: String,
-    revision: String = Self.defaultRevision,
+    revision: String = VoiceyFetchWorkerSession.defaultRevision,
     relativePath: String,
     modelRoot: String,
     expectedSHA256: String? = nil
