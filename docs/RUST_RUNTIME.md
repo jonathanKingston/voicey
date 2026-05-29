@@ -10,7 +10,7 @@ System map and code ownership: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 |------|---------------------------------------------------|-------------------|
 | `voicey-protocol` fixtures + serde contract | Yes | — |
 | Supervisor + stub workers (infer/capture/fetch) | Yes | — |
-| `voicey-fetch` HTTP listing/download (wiremock) | Yes | — |
+| `voicey-fetch` HTTP listing/download (local test server) | Yes | — |
 | `voicey-text` / `VoiceyCore` unit tests | Yes (Rust + Swift) | — |
 | Full SwiftUI app compile (`make build`) | No | Yes (`build.yml`) |
 | MLX Qwen infer-worker, WER/RTF parity | No | Yes (`make run-multiprocess`, benchmark targets) |
