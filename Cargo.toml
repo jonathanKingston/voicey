@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "crates/voicey-protocol",
+  "crates/voicey-pcm",
   "crates/voicey-supervisor",
   "crates/voicey-fetch",
   "crates/voicey-capture",

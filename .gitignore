@@ -19,6 +19,9 @@ xcuserdata/
 Package.resolved
 /target/
 
+# Generated from voicey-protocol types (see: make protocol-fixtures)
+crates/voicey-protocol/fixtures/
+
 # macOS
 .DS_Store
 .AppleDouble
