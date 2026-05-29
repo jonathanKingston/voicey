@@ -109,7 +109,7 @@ fn handle_request(line: &str, workers: &mut process::WorkerProcesses) -> HostRes
             id,
             model_id,
             destination_root,
-        } => match workers.fetch_download_placeholder(&model_id, &destination_root) {
+        } => match workers.fetch_download_model(&model_id, &destination_root) {
             Ok(path) => HostResponse::DownloadComplete {
                 id,
                 model_id,
