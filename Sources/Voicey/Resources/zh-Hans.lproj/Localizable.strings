@@ -103,6 +103,13 @@
 "model.recommended" = "推荐";
 "model.download" = "下载";
 "model.delete" = "删除";
+"model.checkForUpdates" = "检查";
+"model.checkingForUpdates" = "正在检查模型更新...";
+"model.update" = "更新";
+"model.updating" = "正在更新...";
+"model.updateAvailable" = "有可用更新";
+"model.upToDate" = "已是最新";
+"model.revisionUnknown" = "版本未知；更新以确保使用最新模型";
 "model.failedToDelete" = "删除模型失败";
 "model.ok" = "确定";
 "model.unknownError" = "未知错误";

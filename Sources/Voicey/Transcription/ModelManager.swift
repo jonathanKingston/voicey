@@ -1,8 +1,12 @@
-import Combine
 import AudioCommon
+import Combine
 import Foundation
 import WhisperKit
 import os
+
+// ModelManager owns download, update, and revision-tracking responsibilities.
+// Keep size warnings disabled until these concerns are split into focused types.
+// swiftlint:disable type_body_length file_length
 
 /// Available speech model variants
 enum SpeechModel: String, CaseIterable, Identifiable {
@@ -93,7 +97,8 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 
   var description: String {
     switch self {
-    case .graniteSpeech: return "#1 on OpenASR leaderboard, multilingual, ~1GB (requires Python + mlx-audio)"
+    case .graniteSpeech:
+      return "#1 on OpenASR leaderboard, multilingual, ~1GB (requires Python + mlx-audio)"
     case .qwen3Small:
       return "Native Swift MLX, multilingual auto-detect, fast startup (~400MB)"
     case .qwen3Large:
@@ -190,6 +195,63 @@ enum SpeechModel: String, CaseIterable, Identifiable {
 /// Backward compatibility alias
 typealias WhisperModel = SpeechModel
 
+/// Callback for when a background model upgrade completes
+typealias ModelUpgradeCallback = (SpeechModel) -> Void
+
+enum ModelUpdateStatus: Equatable {
+  case checking
+  case upToDate
+  case updateAvailable
+  case failed(String)
+}
+
+struct ModelRevisionMetadata: Codable, Equatable {
+  let sourceIdentifier: String
+  let fingerprint: String
+  let recordedAt: Date
+}
+
+private struct RemoteModelRevision {
+  let source: ModelRevisionSource
+  let fingerprint: String
+  let files: [HuggingFaceTreeItem]
+
+  var sourceIdentifier: String {
+    source.sourceIdentifier
+  }
+}
+
+private struct ModelRevisionSource {
+  let repositoryID: String
+  let pathPrefix: String?
+
+  var sourceIdentifier: String {
+    if let pathPrefix {
+      return "\(repositoryID):\(pathPrefix)"
+    }
+    return repositoryID
+  }
+}
+
+private struct HuggingFaceTreeItem: Decodable {
+  struct LFSInfo: Decodable {
+    let oid: String?
+  }
+
+  let type: String
+  let oid: String
+  let size: Int64?
+  let path: String
+  let lfs: LFSInfo?
+
+  var isFile: Bool {
+    type == "file"
+  }
+
+  var remoteFingerprintPart: String {
+    "\(path):\(oid):\(lfs?.oid ?? ""):\(size ?? 0)"
+  }
+}
 /// Manages downloading, storing, and selecting speech models
 final class ModelManager: ObservableObject, @unchecked Sendable {
   static let shared = ModelManager()
@@ -197,17 +259,27 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   @Published var downloadProgress: [SpeechModel: Double] = [:]
   @Published var downloadedModels: Set<SpeechModel> = []
   @Published var isDownloading: [SpeechModel: Bool] = [:]
+  @Published var isUpdating: [SpeechModel: Bool] = [:]
   @Published var downloadError: String?
+  @Published private(set) var modelRevisionMetadata: [SpeechModel: ModelRevisionMetadata] = [:]
+  @Published private(set) var modelUpdateStatus: [SpeechModel: ModelUpdateStatus] = [:]
 
   /// Model queued for automatic switch when idle (e.g. default model migration)
   @Published var pendingUpgradeModel: SpeechModel?
 
   private let fileManager = FileManager.default
+  private let metadataDefaults = SettingsManager.defaultsStore
   private var downloadTasks: [SpeechModel: Task<Void, Never>] = [:]
   private var graniteDownloadProcesses: [SpeechModel: Process] = [:]
   private var cancelledDownloads: Set<SpeechModel> = []
 
+  private static let huggingFaceAPIBaseURL = "https://huggingface.co/api/models"
+  private static let huggingFaceRevision = "main"
+  private static let whisperKitRepositoryID = "argmaxinc/whisperkit-coreml"
+  private static let revisionMetadataDefaultsKey = "modelRevisionMetadata.v1"
+
   private init() {
+    loadRevisionMetadata()
     loadDownloadedModels()
   }
 
@@ -237,14 +309,15 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     // Check if the AudioEncoder has a compiled data file (coremldata.bin)
     // This is created after first successful load
-    let audioEncoderCompiled = modelURL
+    let audioEncoderCompiled =
+      modelURL
       .appendingPathComponent("AudioEncoder.mlmodelc/coremldata.bin")
 
     if fileManager.fileExists(atPath: audioEncoderCompiled.path) {
       // Check file size - compiled models have substantial coremldata.bin files
       if let attrs = try? fileManager.attributesOfItem(atPath: audioEncoderCompiled.path),
-         let size = attrs[.size] as? Int64,
-         size > 1_000_000 {  // > 1MB suggests it's been compiled
+        let size = attrs[.size] as? Int64,
+        size > 1_000_000 {  // > 1MB suggests it's been compiled
         return true
       }
     }
@@ -399,6 +472,127 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     return directorySize(at: URL(fileURLWithPath: path))
   }
 
+  func hasKnownRevision(for model: SpeechModel) -> Bool {
+    modelRevisionMetadata[model] != nil
+  }
+
+  func checkForUpdatesForDownloadedModels() {
+    for model in downloadedModels {
+      checkForModelUpdate(model)
+    }
+  }
+
+  func checkForModelUpdate(_ model: SpeechModel) {
+    guard isDownloaded(model), isUpdating[model, default: false] == false else { return }
+
+    modelUpdateStatus[model] = .checking
+
+    Task {
+      do {
+        let remoteRevision = try await fetchRemoteRevision(for: model)
+        await MainActor.run {
+          guard self.isDownloaded(model) else {
+            self.modelUpdateStatus[model] = nil
+            return
+          }
+
+          if let storedMetadata = self.modelRevisionMetadata[model] {
+            self.modelUpdateStatus[model] =
+              self.statusForKnownRevision(storedMetadata, remoteRevision: remoteRevision)
+          } else if self.localFilesMatchRemoteRevision(remoteRevision, for: model) {
+            self.recordRevision(remoteRevision, for: model)
+            self.modelUpdateStatus[model] = .upToDate
+          } else {
+            self.modelUpdateStatus[model] = .updateAvailable
+          }
+        }
+      } catch {
+        await MainActor.run {
+          self.modelUpdateStatus[model] = .failed(Self.classifyDownloadError(error))
+        }
+      }
+    }
+  }
+
+  func updateDownloadedModel(_ model: SpeechModel) {
+    guard !isUpdating[model, default: false],
+      !isDownloading[model, default: false],
+      let existingPath = modelPath(for: model)
+    else {
+      return
+    }
+
+    isUpdating[model] = true
+    modelUpdateStatus[model] = .checking
+    downloadError = nil
+    let hasStoredRevision = modelRevisionMetadata[model] != nil
+
+    let existingURL = URL(fileURLWithPath: existingPath)
+    let backupURL =
+      existingURL
+      .deletingLastPathComponent()
+      .appendingPathComponent(
+        "\(existingURL.lastPathComponent).voicey-update-backup-\(UUID().uuidString)")
+
+    Task {
+      do {
+        if !hasStoredRevision {
+          let remoteRevision = try await fetchRemoteRevision(for: model)
+          if localFilesMatchRemoteRevision(remoteRevision, for: model) {
+            await MainActor.run {
+              self.recordRevision(remoteRevision, for: model)
+              self.modelUpdateStatus[model] = .upToDate
+              self.isUpdating[model] = false
+            }
+            return
+          }
+        }
+
+        try fileManager.moveItem(at: existingURL, to: backupURL)
+
+        await MainActor.run {
+          self.downloadModel(model)
+        }
+
+        while await isModelDownloading(model) {
+          try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        guard modelPath(for: model) != nil else {
+          restoreBackup(for: model, from: backupURL, to: existingURL)
+          throw ModelDownloadError.verificationFailed
+        }
+
+        try? fileManager.removeItem(at: backupURL)
+        let recordedRevision = await recordDownloadedRevisionIfAvailable(for: model)
+
+        await MainActor.run {
+          self.loadDownloadedModels()
+          self.isUpdating[model] = false
+          if recordedRevision {
+            self.modelUpdateStatus[model] = .upToDate
+          }
+        }
+      } catch {
+        restoreBackup(for: model, from: backupURL, to: existingURL)
+
+        await MainActor.run {
+          self.loadDownloadedModels()
+          self.isUpdating[model] = false
+          let errorMessage = Self.classifyDownloadError(error)
+          self.downloadError = errorMessage
+          self.modelUpdateStatus[model] = .failed(errorMessage)
+        }
+      }
+    }
+  }
+
+  private func isModelDownloading(_ model: SpeechModel) async -> Bool {
+    await MainActor.run {
+      self.isDownloading[model, default: false]
+    }
+  }
+
   private func directorySize(at url: URL) -> Int64 {
     var size: Int64 = 0
     let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey])
@@ -466,6 +660,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
             downloadTasks[model] = nil
             NotificationManager.shared.showModelDownloadComplete(model: model)
           }
+          await recordDownloadedRevisionIfAvailable(for: model)
         } else {
           // Download seemed to complete but files are missing
           AppLogger.model.error(
@@ -545,6 +740,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
           downloadTasks[model] = nil
           NotificationManager.shared.showModelDownloadComplete(model: model)
         }
+        await recordDownloadedRevisionIfAvailable(for: model)
       } catch is CancellationError {
         await MainActor.run {
           cleanupIncompleteDownload(model)
@@ -558,7 +754,8 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
           cleanupIncompleteDownload(model)
           loadDownloadedModels()
           let errorMessage = Self.classifyDownloadError(error)
-          AppLogger.model.error("Qwen model download failed: \(errorMessage) (underlying: \(error))")
+          AppLogger.model.error(
+            "Qwen model download failed: \(errorMessage) (underlying: \(error))")
           downloadError = errorMessage
           isDownloading[model] = false
           downloadProgress[model] = 0
@@ -692,13 +889,17 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
             if exitCode == 0 && managerRef.modelPath(for: modelRef) != nil {
               AppLogger.model.info("Granite model \(modelRef.displayName) downloaded successfully")
+              Task {
+                await managerRef.recordDownloadedRevisionIfAvailable(for: modelRef)
+              }
               managerRef.loadDownloadedModels()
               managerRef.downloadProgress[modelRef] = 1.0
               managerRef.isDownloading[modelRef] = false
               managerRef.downloadTasks[modelRef] = nil
               NotificationManager.shared.showModelDownloadComplete(model: modelRef)
             } else {
-              let errorMessage = errorOutput.isEmpty
+              let errorMessage =
+                errorOutput.isEmpty
                 ? "Failed to download Granite model. Ensure Python 3 and huggingface_hub are installed (pip3 install huggingface_hub)."
                 : errorOutput
               AppLogger.model.error("Granite model download failed: \(errorMessage)")
@@ -784,9 +985,16 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
       return "Permission denied. Please check app permissions."
     }
 
-    // Check if it's our verification error
-    if error is ModelDownloadError {
-      return "Download incomplete. Please try again."
+    // Check if it's one of our model-management errors
+    if let modelError = error as? ModelDownloadError {
+      switch modelError {
+      case .verificationFailed:
+        return "Download incomplete. Please try again."
+      case .networkUnavailable:
+        return "Network is unavailable. Please check your connection and try again."
+      case .serverError(let statusCode):
+        return "Model server returned HTTP \(statusCode). Please try again later."
+      }
     }
 
     return "Download failed: \(error.localizedDescription)"
@@ -796,6 +1004,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   enum ModelDownloadError: LocalizedError {
     case verificationFailed
     case networkUnavailable
+    case serverError(Int)
 
     var errorDescription: String? {
       switch self {
@@ -803,6 +1012,8 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
         return "Model download verification failed"
       case .networkUnavailable:
         return "Network is unavailable"
+      case .serverError(let statusCode):
+        return "Model server returned HTTP \(statusCode)"
       }
     }
   }
@@ -828,16 +1039,16 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     if model.isGraniteModel {
       // For Granite models, just remove the directory if marker is missing
       if let dir = graniteModelDirectory(for: model),
-         fileManager.fileExists(atPath: dir.path),
-         !fileManager.fileExists(atPath: dir.appendingPathComponent(".download_complete").path) {
+        fileManager.fileExists(atPath: dir.path),
+        !fileManager.fileExists(atPath: dir.appendingPathComponent(".download_complete").path) {
         try? fileManager.removeItem(at: dir)
       }
       return
     }
     if model.isQwenModel {
       if let dir = qwenModelDirectory(for: model),
-         fileManager.fileExists(atPath: dir.path),
-         !isQwenModelComplete(at: dir) {
+        fileManager.fileExists(atPath: dir.path),
+        !isQwenModelComplete(at: dir) {
         try? fileManager.removeItem(at: dir)
       }
       return
@@ -880,20 +1091,22 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   func deleteModel(_ model: SpeechModel) throws {
     if model.isGraniteModel {
       if let dir = graniteModelDirectory(for: model),
-         fileManager.fileExists(atPath: dir.path) {
+        fileManager.fileExists(atPath: dir.path) {
         try fileManager.removeItem(at: dir)
       }
       downloadedModels.remove(model)
       downloadProgress[model] = 0
+      removeRevisionMetadata(for: model)
       return
     }
     if model.isQwenModel {
       if let dir = qwenModelDirectory(for: model),
-         fileManager.fileExists(atPath: dir.path) {
+        fileManager.fileExists(atPath: dir.path) {
         try fileManager.removeItem(at: dir)
       }
       downloadedModels.remove(model)
       downloadProgress[model] = 0
+      removeRevisionMetadata(for: model)
       return
     }
 
@@ -916,8 +1129,239 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     downloadedModels.remove(model)
     downloadProgress[model] = 0
+    removeRevisionMetadata(for: model)
   }
 
+  private func loadRevisionMetadata() {
+    guard let data = metadataDefaults.data(forKey: Self.revisionMetadataDefaultsKey) else {
+      modelRevisionMetadata = [:]
+      return
+    }
+
+    do {
+      let storedMetadata = try JSONDecoder().decode(
+        [String: ModelRevisionMetadata].self, from: data)
+      modelRevisionMetadata = storedMetadata.reduce(into: [:]) { result, element in
+        guard let model = SpeechModel(rawValue: element.key) else { return }
+        result[model] = element.value
+      }
+    } catch {
+      AppLogger.model.error("Failed to decode model revision metadata: \(error)")
+      modelRevisionMetadata = [:]
+    }
+  }
+
+  private func saveRevisionMetadata() {
+    let storedMetadata = modelRevisionMetadata.reduce(into: [String: ModelRevisionMetadata]()) { result, element in
+      result[element.key.rawValue] = element.value
+    }
+
+    do {
+      let data = try JSONEncoder().encode(storedMetadata)
+      metadataDefaults.set(data, forKey: Self.revisionMetadataDefaultsKey)
+    } catch {
+      AppLogger.model.error("Failed to encode model revision metadata: \(error)")
+    }
+  }
+
+  private func removeRevisionMetadata(for model: SpeechModel) {
+    modelRevisionMetadata[model] = nil
+    modelUpdateStatus[model] = nil
+    saveRevisionMetadata()
+  }
+
+  @discardableResult
+  private func recordDownloadedRevisionIfAvailable(for model: SpeechModel) async -> Bool {
+    do {
+      let remoteRevision = try await fetchRemoteRevision(for: model)
+      await MainActor.run {
+        self.modelRevisionMetadata[model] = ModelRevisionMetadata(
+          sourceIdentifier: remoteRevision.sourceIdentifier,
+          fingerprint: remoteRevision.fingerprint,
+          recordedAt: Date()
+        )
+        self.modelUpdateStatus[model] = .upToDate
+        self.saveRevisionMetadata()
+      }
+      return true
+    } catch {
+      await MainActor.run {
+        AppLogger.model.error(
+          "Failed to record remote revision for \(model.displayName): \(error)"
+        )
+        self.modelUpdateStatus[model] = .failed(Self.classifyDownloadError(error))
+      }
+      return false
+    }
+  }
+
+  private func fetchRemoteRevision(for model: SpeechModel) async throws -> RemoteModelRevision {
+    let source = try revisionSource(for: model)
+    let url = try huggingFaceTreeURL(for: source)
+    var request = URLRequest(url: url)
+    request.timeoutInterval = 20
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw ModelDownloadError.verificationFailed
+    }
+    guard (200..<300).contains(httpResponse.statusCode) else {
+      throw ModelDownloadError.serverError(httpResponse.statusCode)
+    }
+
+    let treeItems = try JSONDecoder().decode([HuggingFaceTreeItem].self, from: data)
+    let fileFingerprints =
+      treeItems
+      .filter(\.isFile)
+      .map(\.remoteFingerprintPart)
+      .sorted()
+
+    guard !fileFingerprints.isEmpty else {
+      throw ModelDownloadError.verificationFailed
+    }
+
+    return RemoteModelRevision(
+      source: source,
+      fingerprint: Self.stableFingerprint(for: fileFingerprints),
+      files: treeItems.filter(\.isFile)
+    )
+  }
+
+  private func statusForKnownRevision(
+    _ storedMetadata: ModelRevisionMetadata,
+    remoteRevision: RemoteModelRevision
+  ) -> ModelUpdateStatus {
+    remoteRevision.sourceIdentifier == storedMetadata.sourceIdentifier
+      && remoteRevision.fingerprint == storedMetadata.fingerprint
+      ? .upToDate
+      : .updateAvailable
+  }
+
+  private func recordRevision(_ remoteRevision: RemoteModelRevision, for model: SpeechModel) {
+    modelRevisionMetadata[model] = ModelRevisionMetadata(
+      sourceIdentifier: remoteRevision.sourceIdentifier,
+      fingerprint: remoteRevision.fingerprint,
+      recordedAt: Date()
+    )
+    saveRevisionMetadata()
+  }
+
+  private func localFilesMatchRemoteRevision(
+    _ remoteRevision: RemoteModelRevision,
+    for model: SpeechModel
+  ) -> Bool {
+    guard let modelPath = modelPath(for: model) else { return false }
+
+    let modelURL = URL(fileURLWithPath: modelPath)
+    guard !remoteRevision.files.isEmpty else { return false }
+
+    for item in remoteRevision.files {
+      guard
+        let relativePath = localRelativePath(
+          forRemotePath: item.path,
+          source: remoteRevision.source
+        )
+      else {
+        return false
+      }
+
+      let localURL = modelURL.appendingPathComponent(relativePath)
+      guard let expectedSize = item.size,
+        localFileSize(at: localURL) == expectedSize
+      else {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  private func localRelativePath(
+    forRemotePath remotePath: String,
+    source: ModelRevisionSource
+  ) -> String? {
+    guard let pathPrefix = source.pathPrefix else {
+      return remotePath
+    }
+
+    let prefixWithSeparator = "\(pathPrefix)/"
+    if remotePath.hasPrefix(prefixWithSeparator) {
+      return String(remotePath.dropFirst(prefixWithSeparator.count))
+    }
+
+    return remotePath == pathPrefix ? "" : nil
+  }
+
+  private func localFileSize(at url: URL) -> Int64? {
+    guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+      let size = attrs[.size] as? Int64
+    else {
+      return nil
+    }
+    return size
+  }
+
+  private func revisionSource(for model: SpeechModel) throws -> ModelRevisionSource {
+    if let whisperKitModelId = model.whisperKitModelId {
+      return ModelRevisionSource(
+        repositoryID: Self.whisperKitRepositoryID,
+        pathPrefix: whisperKitModelId
+      )
+    }
+
+    guard let huggingFaceModelId = model.huggingFaceModelId else {
+      throw ModelDownloadError.verificationFailed
+    }
+
+    return ModelRevisionSource(repositoryID: huggingFaceModelId, pathPrefix: nil)
+  }
+
+  private func huggingFaceTreeURL(for source: ModelRevisionSource) throws -> URL {
+    var urlString =
+      "\(Self.huggingFaceAPIBaseURL)/\(source.repositoryID)/tree/\(Self.huggingFaceRevision)"
+    if let pathPrefix = source.pathPrefix {
+      let allowedCharacters = CharacterSet.urlPathAllowed.subtracting(
+        CharacterSet(charactersIn: "?#"))
+      guard
+        let encodedPath = pathPrefix.addingPercentEncoding(withAllowedCharacters: allowedCharacters)
+      else {
+        throw ModelDownloadError.verificationFailed
+      }
+      urlString += "/\(encodedPath)"
+    }
+    urlString += "?recursive=true"
+
+    guard let url = URL(string: urlString) else {
+      throw ModelDownloadError.verificationFailed
+    }
+    return url
+  }
+
+  private func restoreBackup(for model: SpeechModel, from backupURL: URL, to originalURL: URL) {
+    guard fileManager.fileExists(atPath: backupURL.path) else { return }
+
+    if fileManager.fileExists(atPath: originalURL.path) {
+      try? fileManager.removeItem(at: originalURL)
+    }
+
+    do {
+      try fileManager.moveItem(at: backupURL, to: originalURL)
+    } catch {
+      AppLogger.model.error("Failed to restore \(model.displayName) after update failure: \(error)")
+    }
+  }
+
+  private static func stableFingerprint(for parts: [String]) -> String {
+    var hash: UInt64 = 14_695_981_039_346_656_037
+    let prime: UInt64 = 1_099_511_628_211
+
+    for byte in parts.joined(separator: "\n").utf8 {
+      hash ^= UInt64(byte)
+      hash = hash &* prime
+    }
+
+    return String(format: "%016llx", hash)
+  }
   // MARK: - Formatting
 
   static func formatSize(_ bytes: Int64) -> String {
@@ -926,6 +1370,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     return formatter.string(fromByteCount: bytes)
   }
 }
+// swiftlint:enable type_body_length
 
 private actor GraniteDownloadOutputBuffer {
   private var stdout = ""

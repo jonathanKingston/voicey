@@ -103,6 +103,13 @@
 "model.recommended" = "Recommended";
 "model.download" = "Download";
 "model.delete" = "Delete";
+"model.updating" = "Updating…";
+"model.update" = "Update";
+"model.checkForUpdates" = "Check for Updates";
+"model.revisionUnknown" = "Revision unknown";
+"model.checkingForModelUpdates" = "Checking for updates…";
+"model.upToDate" = "Up to date";
+"model.updateAvailable" = "Update available";
 "model.failedToDelete" = "Failed to Delete Model";
 "model.ok" = "OK";
 "model.unknownError" = "Unknown error";

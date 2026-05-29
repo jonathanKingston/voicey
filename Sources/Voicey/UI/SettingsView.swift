@@ -4,6 +4,10 @@ import KeyboardShortcuts
 import SwiftUI
 import VoiceyCore
 
+// Settings UI aggregates many panes in one file. Keep the file-length warning
+// disabled until the panes are extracted into separate views.
+// swiftlint:disable file_length
+
 /// Main settings view with sidebar navigation
 struct SettingsView: View {
   static let windowSize = CGSize(width: 760, height: 580)
@@ -556,6 +560,7 @@ struct ModelSettingsView: View {
       if !SpeechModel.userFacingModels.contains(where: { $0.rawValue == selectedModel }) {
         selectedModel = ModelManager.defaultModel.rawValue
       }
+      modelManager.checkForUpdatesForDownloadedModels()
       if let model = SpeechModel(rawValue: selectedModel) {
         appState.currentModel = model
       }
@@ -679,11 +684,26 @@ struct ModelRowView: View {
         Text(ModelManager.formatSize(model.diskSize))
           .font(.caption)
           .foregroundStyle(.secondary)
+
+        if let updateStatusText {
+          Text(updateStatusText)
+            .font(.caption2)
+            .foregroundStyle(updateStatusColor)
+        }
       }
 
       Spacer()
 
-      if modelManager.isDownloading[model, default: false] {
+      if modelManager.isUpdating[model, default: false] {
+        HStack(spacing: 8) {
+          ProgressView()
+            .controlSize(.small)
+
+          Text(L10n.Model.updating)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      } else if modelManager.isDownloading[model, default: false] {
         HStack(spacing: 8) {
           ProgressView()
             .controlSize(.small)
@@ -699,6 +719,8 @@ struct ModelRowView: View {
         HStack(spacing: 8) {
           Image(systemName: "checkmark.circle.fill")
             .foregroundStyle(.green)
+
+          updateActionButton
 
           Button(L10n.Model.delete) {
             do {
@@ -723,6 +745,70 @@ struct ModelRowView: View {
       Button(L10n.Model.ok, role: .cancel) {}
     } message: {
       Text(deleteError ?? L10n.Model.unknownError)
+    }
+  }
+
+  @ViewBuilder
+  private var updateActionButton: some View {
+    if case .checking = modelUpdateStatus {
+      ProgressView()
+        .controlSize(.small)
+    } else if shouldOfferUpdate {
+      Button(L10n.Model.update) {
+        modelManager.updateDownloadedModel(model)
+      }
+      .buttonStyle(.borderless)
+    } else {
+      Button(L10n.Model.checkForUpdates) {
+        modelManager.checkForModelUpdate(model)
+      }
+      .buttonStyle(.borderless)
+    }
+  }
+
+  private var modelUpdateStatus: ModelUpdateStatus? {
+    modelManager.modelUpdateStatus[model]
+  }
+
+  private var shouldOfferUpdate: Bool {
+    if !modelManager.hasKnownRevision(for: model) { return true }
+    if case .updateAvailable = modelUpdateStatus { return true }
+    return false
+  }
+
+  private var updateStatusText: String? {
+    guard modelManager.isDownloaded(model) else { return nil }
+
+    if !modelManager.hasKnownRevision(for: model) {
+      return L10n.Model.revisionUnknown
+    }
+
+    switch modelUpdateStatus {
+    case .some(.checking):
+      return L10n.Model.checkingForModelUpdates
+    case .some(.upToDate):
+      return L10n.Model.upToDate
+    case .some(.updateAvailable):
+      return L10n.Model.updateAvailable
+    case .some(.failed(let message)):
+      return message
+    case .none:
+      return nil
+    }
+  }
+
+  private var updateStatusColor: Color {
+    if !modelManager.hasKnownRevision(for: model) {
+      return .orange
+    }
+
+    switch modelUpdateStatus {
+    case .some(.updateAvailable):
+      return .orange
+    case .some(.failed):
+      return .red
+    default:
+      return .secondary
     }
   }
 }

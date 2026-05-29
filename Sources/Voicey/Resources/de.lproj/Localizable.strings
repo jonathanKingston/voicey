@@ -103,6 +103,13 @@
 "model.recommended" = "Empfohlen";
 "model.download" = "Herunterladen";
 "model.delete" = "Löschen";
+"model.checkForUpdates" = "Prüfen";
+"model.checkingForUpdates" = "Suche nach Modellupdates...";
+"model.update" = "Aktualisieren";
+"model.updating" = "Aktualisiere...";
+"model.updateAvailable" = "Update verfügbar";
+"model.upToDate" = "Aktuell";
+"model.revisionUnknown" = "Revision unbekannt; aktualisieren, um das neueste Modell zu verwenden";
 "model.failedToDelete" = "Modell konnte nicht gelöscht werden";
 "model.ok" = "OK";
 "model.unknownError" = "Unbekannter Fehler";

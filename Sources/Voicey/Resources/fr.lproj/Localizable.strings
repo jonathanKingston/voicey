@@ -103,6 +103,13 @@
 "model.recommended" = "Recommandé";
 "model.download" = "Télécharger";
 "model.delete" = "Supprimer";
+"model.checkForUpdates" = "Vérifier";
+"model.checkingForUpdates" = "Recherche des mises à jour du modèle...";
+"model.update" = "Mettre à jour";
+"model.updating" = "Mise à jour...";
+"model.updateAvailable" = "Mise à jour disponible";
+"model.upToDate" = "À jour";
+"model.revisionUnknown" = "Révision inconnue ; mettez à jour pour obtenir le dernier modèle";
 "model.failedToDelete" = "Échec de la suppression du modèle";
 "model.ok" = "OK";
 "model.unknownError" = "Erreur inconnue";
