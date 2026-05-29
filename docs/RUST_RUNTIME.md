@@ -31,7 +31,7 @@ Tracking issues:
 |-------|------|------------------------------|
 | Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` fallback (`VOICEY_USE_RUST_CAPTURE=0`, dev disable) |
 | Fetch | `voicey-fetch` | `HuggingFaceDownloader` fallback |
-| Post-process | `voicey-text` crate (parity/tests; #63 open) | `PostProcessor` / `NoiseFilter` in host hot path |
+| Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` fallback on worker error / `VOICEY_USE_RUST_TEXT=0` |
 | Text / glossary | `voicey-text` | `VoiceyCore` in host |
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
