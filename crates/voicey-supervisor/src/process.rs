@@ -186,7 +186,13 @@ impl WorkerProcesses {
             .ok_or_else(|| "invalid staging container path".to_string())?;
 
         for relative_path in files {
-            self.fetch_download_model_file(hf_id, &relative_path, model_root, None)?;
+            if let Err(error) =
+                self.fetch_download_model_file(hf_id, &relative_path, model_root, None)
+            {
+                // Never leave a partial download container behind on failure.
+                let _ = fs::remove_dir_all(&staging_container);
+                return Err(error);
+            }
         }
 
         let staged_model_root = staging_container.join(FETCH_STAGING_DIRECTORY_NAME);

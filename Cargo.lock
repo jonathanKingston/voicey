@@ -1615,7 +1615,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
- "voicey-fetch",
+ "tempfile",
  "voicey-protocol",
 ]
 

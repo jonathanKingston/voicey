@@ -8,8 +8,10 @@ use std::path::{Component, Path, PathBuf};
 const HUGGING_FACE_BASE_URL: &str = "https://huggingface.co";
 const DEFAULT_REVISION: &str = "main";
 const FETCH_USER_AGENT: &str = "voicey-fetch/0.1";
-const STAGING_DIRECTORY_NAME: &str = ".voicey-fetch-staging";
 const DOWNLOAD_BUFFER_SIZE_BYTES: usize = 256 * 1024;
+
+/// Single source of truth for the staging subdirectory name, shared with the supervisor.
+use voicey_protocol::FETCH_STAGING_DIRECTORY_NAME as STAGING_DIRECTORY_NAME;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
