@@ -1,0 +1,27 @@
+[package]
+name = "voicey-worker-stubs"
+version.workspace = true
+edition.workspace = true
+description = "Test-only JSONL worker stubs for Linux supervisor integration tests"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "voicey-infer-stub"
+path = "src/bin/infer.rs"
+
+[[bin]]
+name = "voicey-capture-stub"
+path = "src/bin/capture.rs"
+
+[[bin]]
+name = "voicey-fetch-stub"
+path = "src/bin/fetch.rs"
+
+[dependencies]
+voicey-protocol = { path = "../voicey-protocol" }
+voicey-pcm = { path = "../voicey-pcm" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
