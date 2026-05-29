@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var qwenEngine: QwenEngine?
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
-  private var incrementalTranscriptionCoordinator: IncrementalTranscriptionCoordinator?
+  var incrementalTranscriptionCoordinator: IncrementalTranscriptionCoordinator?
 
   // The app that was frontmost when recording started (used for optional auto-paste)
   private var recordingTargetPID: pid_t?
