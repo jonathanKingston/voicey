@@ -3,6 +3,32 @@ import XCTest
 @testable import VoiceyCore
 
 final class HandsFreeSpeechDetectorTests: XCTestCase {
+  func testSpeechStartIncludesOnsetBeforeHardThresholdDuringCalibration() {
+    var detector = HandsFreeSpeechDetector(
+      configuration: HandsFreeRecordingConfiguration(
+        sampleRate: 16_000,
+        preRollDuration: 0.25,
+        speechStartThreshold: 0.09,
+        speechEndThreshold: 0.045,
+        minimumSpeechDuration: 0.18,
+        silenceHangoverDuration: 0.8,
+        waitTimeoutDuration: 8.0,
+        minimumCalibrationDuration: 0.35
+      )
+    )
+
+    _ = detector.consume(level: 0.02, totalSamplesCaptured: 800)
+    _ = detector.consume(level: 0.11, totalSamplesCaptured: 4_800)
+    let events = detector.consume(level: 0.35, totalSamplesCaptured: 8_000)
+
+    XCTAssertEqual(events.count, 1)
+    guard case let .speechStarted(startSampleIndex) = events[0] else {
+      return XCTFail("Expected speechStarted")
+    }
+    XCTAssertLessThan(startSampleIndex, 4_800 - 1_600)
+    XCTAssertEqual(detector.phase, .recording)
+  }
+
   func testSpeechStartIncludesConfiguredPreRoll() {
     var detector = HandsFreeSpeechDetector(
       configuration: HandsFreeRecordingConfiguration(
@@ -86,10 +112,10 @@ final class HandsFreeSpeechDetectorTests: XCTestCase {
     XCTAssertEqual(startEvents, [.speechStarted(startSampleIndex: 5_600)])
 
     for sampleCount in stride(from: 14_400, through: 19_200, by: 1_600) {
-      _ = detector.consume(level: 0.12, totalSamplesCaptured: sampleCount)
+      _ = detector.consume(level: 0.08, totalSamplesCaptured: sampleCount)
     }
 
-    let endEvents = detector.consume(level: 0.12, totalSamplesCaptured: 28_800)
+    let endEvents = detector.consume(level: 0.08, totalSamplesCaptured: 28_800)
     XCTAssertEqual(endEvents, [.speechEnded(endSampleIndex: 12_800)])
     XCTAssertEqual(detector.phase, .speechEnded)
   }

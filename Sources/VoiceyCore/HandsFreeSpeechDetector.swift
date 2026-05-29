@@ -98,6 +98,8 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
   private var noiseFloor: Float
   private var peakLevelWhileRecording: Float = 0
   private var samplesObservedWhileWaiting: Int = 0
+  /// Speech onset captured during the initial calibration window (first utterance pre-roll).
+  private var preCalibrationSpeechCandidateSampleIndex: Int?
 
   public init(configuration: HandsFreeRecordingConfiguration = .default) {
     self.configuration = configuration
@@ -128,10 +130,20 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
       adaptNoiseFloor(toward: level)
       samplesObservedWhileWaiting += sampleDelta
       let startThreshold = effectiveStartThreshold()
+      notePreCalibrationSpeechCandidateIfNeeded(
+        level: level,
+        startThreshold: startThreshold,
+        normalizedTotalSamples: normalizedTotalSamples,
+        sampleDelta: sampleDelta
+      )
 
       guard samplesObservedWhileWaiting >= configuration.minimumCalibrationSamples else {
         consecutiveSpeechSamples = 0
         return []
+      }
+
+      if consecutiveSpeechSamples == 0, level < startThreshold {
+        preCalibrationSpeechCandidateSampleIndex = nil
       }
 
       guard level >= startThreshold else {
@@ -144,9 +156,9 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
         return []
       }
 
-      let speechStartIndex = max(
-        0,
-        normalizedTotalSamples - consecutiveSpeechSamples - configuration.preRollSamples
+      let speechStartIndex = resolvedSpeechStartSampleIndex(
+        normalizedTotalSamples: normalizedTotalSamples,
+        consecutiveSpeechSamples: consecutiveSpeechSamples
       )
       speechStartSampleIndex = speechStartIndex
       lastSpeechSampleIndex = normalizedTotalSamples
@@ -201,6 +213,7 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
     consecutiveSpeechSamples = 0
     consecutiveSilenceSamples = 0
     peakLevelWhileRecording = 0
+    preCalibrationSpeechCandidateSampleIndex = nil
   }
 
   /// Closes an in-progress utterance when the user ends the session mid-phrase.
@@ -213,8 +226,45 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
   }
 
   private mutating func adaptNoiseFloor(toward level: Float) {
+    let startThreshold = effectiveStartThreshold()
+    let ambientAdaptCeiling =
+      configuration.speechStartThreshold + configuration.speechStartMarginAboveNoise
+    // Track sustained ambient noise, but do not chase loud speech levels (clips first words).
+    guard level <= startThreshold || level < ambientAdaptCeiling else { return }
     let smoothing = configuration.noiseFloorSmoothingFactor
     noiseFloor += smoothing * (level - noiseFloor)
+  }
+
+  private mutating func notePreCalibrationSpeechCandidateIfNeeded(
+    level: Float,
+    startThreshold: Float,
+    normalizedTotalSamples: Int,
+    sampleDelta: Int
+  ) {
+    guard samplesObservedWhileWaiting < configuration.minimumCalibrationSamples else { return }
+    let softThreshold = noiseFloor + configuration.speechStartMarginAboveNoise * 0.45
+    guard level >= softThreshold || level >= startThreshold else { return }
+    let chunkStart = max(0, normalizedTotalSamples - sampleDelta)
+    if let existing = preCalibrationSpeechCandidateSampleIndex {
+      preCalibrationSpeechCandidateSampleIndex = min(existing, chunkStart)
+    } else {
+      preCalibrationSpeechCandidateSampleIndex = chunkStart
+    }
+  }
+
+  private func resolvedSpeechStartSampleIndex(
+    normalizedTotalSamples: Int,
+    consecutiveSpeechSamples: Int
+  ) -> Int {
+    let thresholdBasedStart = max(
+      0,
+      normalizedTotalSamples - consecutiveSpeechSamples - configuration.preRollSamples
+    )
+    guard let candidateStart = preCalibrationSpeechCandidateSampleIndex else {
+      return thresholdBasedStart
+    }
+    let candidateWithPreRoll = max(0, candidateStart - configuration.preRollSamples)
+    return min(thresholdBasedStart, candidateWithPreRoll)
   }
 
   private func effectiveStartThreshold() -> Float {

@@ -59,12 +59,14 @@ final class AudioCaptureManager {
     if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
       usesRustCaptureWorker = true
       AppLogger.audio.info("AudioCapture: Starting voicey-capture worker...")
-      Task {
-        do {
+      do {
+        try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.startRecording(mode: mode)
-        } catch {
-          AppLogger.audio.error("voicey-capture start failed: \(error.localizedDescription)")
         }
+      } catch {
+        AppLogger.audio.error("voicey-capture start failed: \(error.localizedDescription)")
+        resetCaptureState()
+        return
       }
       levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
         guard let self else { return }
