@@ -1047,7 +1047,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     stopRecording()
   }
 
-  private func stopRecording() {
+  func stopRecording() {
     guard appState.isRecording else { return }
     cancelHandsFreeWaitTimeout()
 

@@ -22,7 +22,12 @@ fn live_recorder() -> &'static Mutex<LiveRecorder> {
 enum CaptureRequest {
     Ping { id: String },
     Prewarm { id: String },
-    StartRecording { id: String, mode: Option<String> },
+    StartRecording {
+        id: String,
+        #[serde(default)]
+        #[allow(dead_code)]
+        mode: Option<String>,
+    },
     StopRecording { id: String },
     GetLevel { id: String },
     RecordFixture { id: String, duration_seconds: f64 },
