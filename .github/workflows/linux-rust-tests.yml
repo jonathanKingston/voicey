@@ -29,10 +29,16 @@ jobs:
       - name: Protocol contract tests
         run: cargo test -p voicey-protocol
 
+      - name: Install ALSA build dependencies (capture worker)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+
       - name: Supervisor integration tests (stub workers)
         run: |
           cargo build -p voicey-worker-stubs --bins
           cargo test -p voicey-supervisor --test supervisor_integration
+
+      - name: Capture worker IPC tests (fixture path, no microphone)
+        run: cargo test -p voicey-capture --test capture_ipc
 
       - name: Build supervisor and fetch workers
         run: cargo build -p voicey-supervisor -p voicey-fetch
