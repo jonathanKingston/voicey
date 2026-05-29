@@ -113,6 +113,13 @@ fn host_request_rejects_unknown_type() {
 }
 
 #[test]
+fn infer_worker_response_rejects_infer_ready_extra_ok_field() {
+    reject_fixture::<InferWorkerResponse>(
+        &fixtures_root().join("reject/infer_worker_response_infer_ready_extra_ok.json"),
+    );
+}
+
+#[test]
 fn protocol_version_is_documented() {
     assert_eq!(crate::PROTOCOL_VERSION, 1);
 }
