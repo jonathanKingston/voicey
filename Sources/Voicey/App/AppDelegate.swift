@@ -409,6 +409,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     whisperEngine?.onLoadingStateChanged = { [weak self] isLoading in
       if isLoading {
         self?.appState.transcriptionState = .loadingModel
+      } else if self?.appState.transcriptionState == .loadingModel {
+        self?.appState.transcriptionState = .idle
       }
     }
 
@@ -421,6 +423,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     graniteEngine?.onLoadingStateChanged = { [weak self] isLoading in
       if isLoading {
         self?.appState.transcriptionState = .loadingModel
+      } else if self?.appState.transcriptionState == .loadingModel {
+        self?.appState.transcriptionState = .idle
       }
     }
     graniteEngine?.onPerformanceIssue = { [weak self] metrics in
@@ -431,6 +435,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     qwenEngine?.onLoadingStateChanged = { [weak self] isLoading in
       if isLoading {
         self?.appState.transcriptionState = .loadingModel
+      } else if self?.appState.transcriptionState == .loadingModel {
+        self?.appState.transcriptionState = .idle
       }
     }
     qwenEngine?.onPerformanceIssue = { [weak self] metrics in

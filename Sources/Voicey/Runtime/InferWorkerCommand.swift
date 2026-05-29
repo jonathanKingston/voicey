@@ -31,7 +31,7 @@ enum InferWorkerCommand {
       await handleLoadModel(id: id, json: json, engine: engine)
     case "unload_model":
       engine.unloadModel()
-      writeResponse(["type": "infer_ready", "id": id, "model_id": "", "ok": true])
+      writeResponse(["type": "infer_ready", "id": id, "model_id": ""])
     case "transcribe":
       await handleTranscribe(id: id, json: json, engine: engine)
     case "shutdown":
@@ -53,7 +53,7 @@ enum InferWorkerCommand {
     }
     do {
       try await engine.loadModel(variant: model.rawValue)
-      writeResponse(["type": "infer_ready", "id": id, "model_id": model.rawValue, "ok": true])
+      writeResponse(["type": "infer_ready", "id": id, "model_id": model.rawValue])
     } catch {
       writeResponse(["type": "error", "id": id, "message": error.localizedDescription])
     }
