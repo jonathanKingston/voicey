@@ -1216,6 +1216,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  @MainActor
+  private func registerHandsFreeBackgroundTranscriptionJobIfNeeded(
+    model: SpeechModel,
+    audioBuffer: [Float],
+    durationSec: Double
+  ) -> UUID? {
+    guard model.isQwenModel else { return nil }
+    let envelope = AudioWaveformEnvelope.normalizedBars(from: audioBuffer)
+    let estimatedRTF = estimatedTranscriptionRTF(for: model)
+    return appState.addHandsFreeBackgroundTranscriptionJob(
+      envelope: envelope,
+      audioDuration: durationSec,
+      estimatedRTF: estimatedRTF
+    )
+  }
+
+  @MainActor
+  private func transcriptionPasteTargetPID(pasteToCurrentFrontmost: Bool) -> pid_t? {
+    if pasteToCurrentFrontmost || appState.handsFreeSessionActive {
+      return nil
+    }
+    return recordingTargetPID
+  }
+
   private func processTranscription(
     audioBuffer: [Float],
     continueHandsFreeSession: Bool = false,
@@ -1227,15 +1251,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var backgroundJobID: UUID?
     if continueHandsFreeSession {
       await MainActor.run {
-        if selectedModel.isQwenModel {
-          let envelope = AudioWaveformEnvelope.normalizedBars(from: audioBuffer)
-          let estimatedRTF = self.estimatedTranscriptionRTF(for: selectedModel)
-          backgroundJobID = self.appState.addHandsFreeBackgroundTranscriptionJob(
-            envelope: envelope,
-            audioDuration: durationSec,
-            estimatedRTF: estimatedRTF
-          )
-        }
+        backgroundJobID = self.registerHandsFreeBackgroundTranscriptionJobIfNeeded(
+          model: selectedModel,
+          audioBuffer: audioBuffer,
+          durationSec: durationSec
+        )
         self.transcriptionOverlay?.syncLayout(to: self.appState)
       }
     }
@@ -1324,12 +1344,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           self.handsFreeSeparateNextPasteWithSpace = true
         }
 
-        let pasteTargetPID: pid_t? = {
-          if pasteToCurrentFrontmost || self.appState.handsFreeSessionActive {
-            return nil
-          }
-          return self.recordingTargetPID
-        }()
+        let pasteTargetPID = self.transcriptionPasteTargetPID(
+          pasteToCurrentFrontmost: pasteToCurrentFrontmost
+        )
 
         // Deliver text to clipboard and optionally auto-paste
         outputManager?.deliver(
