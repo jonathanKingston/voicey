@@ -2,6 +2,7 @@
 //! Schema version 1 — bump `PROTOCOL_VERSION` when breaking changes ship.
 //!
 //! Shared PCM audio buffers use the `voicey-pcm` crate spec (temp-dir `.pcm` files).
+//! Golden JSON fixtures live under `fixtures/`; see `docs/RUST_PROTOCOL.md`.
 
 pub const PROTOCOL_VERSION: u32 = 1;
 
@@ -39,8 +40,8 @@ pub enum RuntimeKind {
     Multiprocess,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum HostRequest {
     Ping { id: String },
     PrewarmAllWorkers { id: String, model_id: String },
@@ -54,7 +55,7 @@ pub enum HostRequest {
         sample_rate: u32,
         shm_name: String,
         sample_count: usize,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         decoder_context: Option<String>,
     },
     DownloadModel {
@@ -71,8 +72,8 @@ pub enum HostRequest {
     },
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum HostResponse {
     Pong { id: String },
     Ready { id: String },
@@ -110,8 +111,8 @@ pub enum HostResponse {
     Error { id: String, message: String },
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum InferWorkerRequest {
     Ping { id: String },
     LoadModel { id: String, model_id: String },
@@ -122,14 +123,14 @@ pub enum InferWorkerRequest {
         sample_rate: u32,
         shm_name: String,
         sample_count: usize,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         decoder_context: Option<String>,
     },
     Shutdown { id: String },
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum InferWorkerResponse {
     Pong { id: String },
     Ready { id: String },
@@ -147,32 +148,4 @@ pub enum InferWorkerResponse {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn host_request_prewarm_roundtrip() {
-        let req = HostRequest::PrewarmInfer {
-            id: "1".into(),
-            model_id: "qwen3-asr-0.6b-6bit".into(),
-        };
-        let json = serde_json::to_string(&req).unwrap();
-        let back: HostRequest = serde_json::from_str(&json).unwrap();
-        assert!(matches!(back, HostRequest::PrewarmInfer { .. }));
-    }
-
-    #[test]
-    fn host_request_transcribe_roundtrip() {
-        let req = HostRequest::Transcribe {
-            id: "1".into(),
-            model_id: "qwen3-asr-0.6b-6bit".into(),
-            sample_rate: 16_000,
-            shm_name: "voicey-pcm-test".into(),
-            sample_count: 1024,
-            decoder_context: Some("Glossary: Voicey".into()),
-        };
-        let json = serde_json::to_string(&req).unwrap();
-        let back: HostRequest = serde_json::from_str(&json).unwrap();
-        assert!(matches!(back, HostRequest::Transcribe { .. }));
-    }
-}
+mod fixture_tests;
