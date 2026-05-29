@@ -61,6 +61,8 @@ Stub behavior overrides: `VOICEY_INFER_STUB_MODE` (`fail_load`, `fail_transcribe
 
 Rust enums use `deny_unknown_fields` so extra JSON keys fail deserialization during tests (and at runtime).
 
+The Swift **infer-worker** subprocess must emit JSON that matches `InferWorkerResponse` (e.g. `infer_ready` has only `id` and `model_id` — not `ok`; use `transcribe_result` for success/failure flags).
+
 ## Fixture layout (generated)
 
 ```
