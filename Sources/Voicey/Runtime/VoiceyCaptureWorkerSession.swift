@@ -41,9 +41,13 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     try VoiceyJSONLResponse.ensureSuccess(response, context: "start_recording")
   }
 
-  func stopRecording() async throws -> [Float] {
+  func stopRecording(applyTrailingTrim: Bool = true) async throws -> [Float] {
     let response = try await client().send(
-      request: ["type": "stop_recording", "id": UUID().uuidString],
+      request: [
+        "type": "stop_recording",
+        "id": UUID().uuidString,
+        "apply_trailing_trim": applyTrailingTrim
+      ],
       timeout: 120
     )
     try VoiceyJSONLResponse.ensureSuccess(response, context: "stop_recording")

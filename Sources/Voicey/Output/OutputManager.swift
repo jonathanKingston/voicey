@@ -118,11 +118,11 @@ final class OutputManager: @unchecked Sendable {
               ? Self.clipboardPasteRestoreDelayNanoseconds
               : Self.directInsertionRestoreDelayNanoseconds
             AppLogger.output.info(
-              "Auto-paste: Waiting \(restoreDelay / 1_000_000)ms before restoring clipboard"
+              "Auto-paste: Waiting \(restoreDelay / 1_000_000)ms before restoring clipboard (\(savedClipboard.count) saved item(s))"
             )
             try? await Task.sleep(nanoseconds: restoreDelay)
             self.clipboardManager.restoreContents(savedClipboard)
-          } else if restoreClipboardEnabled {
+          } else if restoreClipboardEnabled && preferKeyboardPaste {
             AppLogger.output.info(
               "Auto-paste: Preserving transcription on clipboard for terminal/TUI target"
             )
