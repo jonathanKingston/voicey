@@ -14,7 +14,7 @@ const TARGET_SAMPLE_RATE: f64 = 16_000.0;
 static LIVE_RECORDER: OnceLock<Mutex<LiveRecorder>> = OnceLock::new();
 
 fn live_recorder() -> &'static Mutex<LiveRecorder> {
-  LIVE_RECORDER.get_or_init(|| Mutex::new(LiveRecorder::new()))
+    LIVE_RECORDER.get_or_init(|| Mutex::new(LiveRecorder::new()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -22,13 +22,25 @@ fn live_recorder() -> &'static Mutex<LiveRecorder> {
 enum CaptureRequest {
     Ping { id: String },
     Prewarm { id: String },
-    StartRecording { id: String },
+    StartRecording {
+        id: String,
+        #[serde(default)]
+        #[allow(dead_code)]
+        mode: Option<String>,
+    },
     StopRecording {
         id: String,
         #[serde(default = "default_apply_trailing_trim")]
         apply_trailing_trim: bool,
     },
     GetLevel { id: String },
+    DrainHandsFreeUtterance {
+        id: String,
+        start_sample_index: usize,
+        end_sample_index: usize,
+        #[serde(default = "default_apply_trailing_trim")]
+        apply_trailing_trim: bool,
+    },
     RecordFixture { id: String, duration_seconds: f64 },
     Shutdown { id: String },
 }
@@ -36,8 +48,12 @@ enum CaptureRequest {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum CaptureResponse {
-    Pong { id: String },
-    CaptureReady { id: String },
+    Pong {
+        id: String,
+    },
+    CaptureReady {
+        id: String,
+    },
     CaptureFixtureResult {
         id: String,
         ok: bool,
@@ -49,8 +65,12 @@ enum CaptureResponse {
     CaptureLevel {
         id: String,
         level: f32,
+        sample_count: usize,
     },
-    Error { id: String, message: String },
+    Error {
+        id: String,
+        message: String,
+    },
 }
 
 fn main() {
@@ -73,9 +93,8 @@ fn run(mut input: impl BufRead, mut output: impl Write) -> std::io::Result<()> {
             continue;
         }
         let response = handle_request(trimmed, &mut warmed);
-        let json = serde_json::to_string(&response).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?;
+        let json = serde_json::to_string(&response)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         writeln!(output, "{json}")?;
         output.flush()?;
     }
@@ -95,19 +114,17 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
 
     match request {
         CaptureRequest::Ping { id } => CaptureResponse::Pong { id },
-        CaptureRequest::Prewarm { id } => {
-            match prewarm_device() {
-                Ok(()) => {
-                    *warmed = true;
-                    CaptureResponse::CaptureReady { id }
-                }
-                Err(error) => CaptureResponse::Error {
-                    id,
-                    message: error.to_string(),
-                },
+        CaptureRequest::Prewarm { id } => match prewarm_device() {
+            Ok(()) => {
+                *warmed = true;
+                CaptureResponse::CaptureReady { id }
             }
-        }
-        CaptureRequest::StartRecording { id } => {
+            Err(error) => CaptureResponse::Error {
+                id,
+                message: error.to_string(),
+            },
+        },
+        CaptureRequest::StartRecording { id, mode: _ } => {
             let mut recorder = live_recorder().lock().expect("recorder lock");
             match recorder.start() {
                 Ok(()) => CaptureResponse::CaptureReady { id },
@@ -137,8 +154,49 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
         CaptureRequest::GetLevel { id } => CaptureResponse::CaptureLevel {
             id,
             level: live_input_level(),
+            sample_count: live_recorder().lock().expect("recorder lock").sample_count(),
         },
-        CaptureRequest::RecordFixture { id, duration_seconds } => {
+        CaptureRequest::DrainHandsFreeUtterance {
+            id,
+            start_sample_index,
+            end_sample_index,
+            apply_trailing_trim,
+        } => match live_recorder()
+            .lock()
+            .expect("recorder lock")
+            .drain_utterance(start_sample_index, end_sample_index, apply_trailing_trim)
+        {
+            Ok(samples) => match voicey_pcm::write_f32_samples(&samples) {
+                Ok(shm_name) => CaptureResponse::CaptureFixtureResult {
+                    id,
+                    ok: true,
+                    shm_name: Some(shm_name),
+                    sample_count: Some(samples.len()),
+                    sample_rate: Some(TARGET_SAMPLE_RATE as u32),
+                    error: None,
+                },
+                Err(error) => CaptureResponse::CaptureFixtureResult {
+                    id,
+                    ok: false,
+                    shm_name: None,
+                    sample_count: None,
+                    sample_rate: None,
+                    error: Some(error.to_string()),
+                },
+            },
+            Err(message) => CaptureResponse::CaptureFixtureResult {
+                id,
+                ok: false,
+                shm_name: None,
+                sample_count: None,
+                sample_rate: None,
+                error: Some(message),
+            },
+        },
+        CaptureRequest::RecordFixture {
+            id,
+            duration_seconds,
+        } => {
             if duration_seconds <= 0.0 || duration_seconds > 30.0 {
                 return CaptureResponse::CaptureFixtureResult {
                     id,
@@ -266,7 +324,10 @@ fn resample_to_16k(input: Vec<f32>, input_rate: f64) -> std::io::Result<Vec<f32>
     let mut output = Vec::with_capacity(output_len);
     for index in 0..output_len {
         let src_index = (index as f64 * input_rate / TARGET_SAMPLE_RATE) as usize;
-        let sample = input.get(src_index.min(input.len() - 1)).copied().unwrap_or(0.0);
+        let sample = input
+            .get(src_index.min(input.len() - 1))
+            .copied()
+            .unwrap_or(0.0);
         output.push(sample);
     }
     Ok(output)

@@ -24,6 +24,9 @@ packages:
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit.git
     from: "1.0.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle.git
+    from: "2.6.0"
 
 targets:
   # App Store / TestFlight target
@@ -68,7 +71,7 @@ targets:
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
 
-  # Direct distribution target (non-sandboxed, has auto-paste)
+  # Direct distribution target (non-sandboxed: auto-paste; Sparkle updates)
   VoiceyDirect:
     type: application
     platform: macOS
@@ -85,6 +88,7 @@ targets:
     dependencies:
       - package: KeyboardShortcuts
       - package: WhisperKit
+      - package: Sparkle
       - sdk: AVFoundation.framework
       - sdk: CoreAudio.framework
       - sdk: Accelerate.framework

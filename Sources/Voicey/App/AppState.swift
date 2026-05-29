@@ -1,6 +1,14 @@
 import Combine
 import Foundation
 
+struct HandsFreeBackgroundTranscriptionJob: Identifiable, Equatable {
+  let id: UUID
+  let envelope: [Float]
+  let startedAt: Date
+  let audioDuration: TimeInterval
+  let estimatedRTF: Double
+}
+
 /// Represents the current state of the transcription process
 enum TranscriptionState: Equatable {
   /// No transcription in progress
@@ -8,6 +16,9 @@ enum TranscriptionState: Equatable {
 
   /// Loading the Whisper model (first-time warmup)
   case loadingModel
+
+  /// Armed and waiting for the user to begin speaking.
+  case waitingForSpeech(startTime: Date)
 
   /// Currently recording audio
   /// - Parameter startTime: When recording started (for duration tracking)
@@ -32,6 +43,12 @@ enum TranscriptionState: Equatable {
     return false
   }
 
+  /// Whether we're armed and waiting for speech in hands-free mode
+  var isWaitingForSpeech: Bool {
+    if case .waitingForSpeech = self { return true }
+    return false
+  }
+
   /// Whether we're currently processing
   var isProcessing: Bool {
     if case .processing = self { return true }
@@ -44,12 +61,22 @@ enum TranscriptionState: Equatable {
     return false
   }
 
-  /// Whether we're in an active state (loading, recording or processing)
+  /// Whether we're in an active state (loading, waiting, recording or processing)
   var isActive: Bool {
     switch self {
-    case .loadingModel, .recording, .processing:
+    case .loadingModel, .waitingForSpeech, .recording, .processing:
       return true
     case .idle, .completed, .error:
+      return false
+    }
+  }
+
+  /// Whether microphone capture is currently engaged.
+  var isCaptureEngaged: Bool {
+    switch self {
+    case .waitingForSpeech, .recording:
+      return true
+    case .idle, .loadingModel, .processing, .completed, .error:
       return false
     }
   }
@@ -69,6 +96,8 @@ enum TranscriptionState: Equatable {
       return L10n.State.ready
     case .loadingModel:
       return L10n.State.loadingModel
+    case .waitingForSpeech:
+      return L10n.State.waitingForSpeech
     case .recording:
       return L10n.State.listening
     case .processing:
@@ -111,6 +140,11 @@ enum ModelStatus: Equatable {
 /// Holds the observable application state
 final class AppState: ObservableObject {
   @Published var transcriptionState: TranscriptionState = .idle
+  /// Hands-free hotkey session: mic stays open across utterances until cancelled.
+  @Published var handsFreeSessionActive: Bool = false
+  /// In-flight utterance transcriptions while the mic stays open in hands-free mode.
+  @Published private(set) var handsFreeBackgroundTranscriptionJobs: [HandsFreeBackgroundTranscriptionJob] =
+    []
   @Published var audioLevel: Float = 0.0
   @Published var currentModel: SpeechModel = SettingsManager.shared.selectedModel
   @Published var lastTranscription: String = ""
@@ -140,6 +174,43 @@ final class AppState: ObservableObject {
   /// Whether we're currently recording (delegates to transcriptionState)
   var isRecording: Bool {
     transcriptionState.isRecording
+  }
+
+  var isWaitingForSpeech: Bool {
+    transcriptionState.isWaitingForSpeech
+  }
+
+  var isCaptureEngaged: Bool {
+    handsFreeSessionActive || transcriptionState.isCaptureEngaged
+  }
+
+  var isHandsFreeBackgroundTranscribing: Bool {
+    handsFreeSessionActive && !handsFreeBackgroundTranscriptionJobs.isEmpty
+  }
+
+  @discardableResult
+  func addHandsFreeBackgroundTranscriptionJob(
+    envelope: [Float],
+    audioDuration: TimeInterval,
+    estimatedRTF: Double
+  ) -> UUID {
+    let job = HandsFreeBackgroundTranscriptionJob(
+      id: UUID(),
+      envelope: envelope,
+      startedAt: Date(),
+      audioDuration: audioDuration,
+      estimatedRTF: max(estimatedRTF, 0.05)
+    )
+    handsFreeBackgroundTranscriptionJobs.append(job)
+    return job.id
+  }
+
+  func removeHandsFreeBackgroundTranscriptionJob(id: UUID) {
+    handsFreeBackgroundTranscriptionJobs.removeAll { $0.id == id }
+  }
+
+  func resetHandsFreeBackgroundTranscriptionJobs() {
+    handsFreeBackgroundTranscriptionJobs = []
   }
 
   /// Whether the app is ready to record (model loaded and permissions granted)

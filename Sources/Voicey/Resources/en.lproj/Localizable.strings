@@ -7,6 +7,9 @@
 /* Transcription States */
 "state.ready" = "Ready";
 "state.loadingModel" = "Loading model...";
+"state.waitingForSpeech" = "Waiting for speech...";
+"state.waitingForSpeechWhileTranscribing" = "Waiting · transcribing…";
+"state.listeningWhileTranscribing" = "Listening · transcribing…";
 "state.listening" = "Listening...";
 "state.transcribing" = "Transcribing...";
 "state.done" = "Done";
@@ -93,6 +96,12 @@
 "audio.testInput" = "Test Input";
 "audio.testing" = "Testing...";
 "audio.testDescription" = "Speak into your microphone to verify it's working.";
+"audio.recordingMode" = "Recording Mode";
+"audio.recordingModeDescription" = "Choose how Voicey starts and stops capture.";
+"audio.recordingModeManual" = "Manual";
+"audio.recordingModeHandsFree" = "Hands-Free";
+"audio.recordingModeManualDescription" = "Press once to start, press again to stop and transcribe.";
+"audio.recordingModeHandsFreeDescription" = "Press once. Voicey waits for you to speak, starts automatically, and transcribes after you pause.";
 
 /* Model Settings */
 "model.selectedModel" = "Selected Model";
@@ -100,9 +109,18 @@
 "model.availableModels" = "Available Models";
 "model.performance" = "Performance";
 "model.performanceDescription" = "GPU acceleration is automatically enabled via Metal on Apple Silicon.";
+"model.sizeFootnote" = "%@ on disk · ~%@ RAM when loaded";
+"model.memoryFootnoteMultiprocess" = "Qwen runs in a helper process; Activity Monitor may show the total across Voicey processes.";
 "model.recommended" = "Recommended";
 "model.download" = "Download";
 "model.delete" = "Delete";
+"model.updating" = "Updating…";
+"model.update" = "Update";
+"model.checkForUpdates" = "Check for Updates";
+"model.revisionUnknown" = "Revision unknown";
+"model.checkingForModelUpdates" = "Checking for updates…";
+"model.upToDate" = "Up to date";
+"model.updateAvailable" = "Update available";
 "model.failedToDelete" = "Failed to Delete Model";
 "model.ok" = "OK";
 "model.unknownError" = "Unknown error";

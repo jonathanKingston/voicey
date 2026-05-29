@@ -34,6 +34,7 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
   private var processingTask: Task<Void, Never>?
   private var isProcessingChunk = false
   private var firstError: Error?
+  private var publishSnapshotTask: Task<Void, Never>?
 
   init(
     configuration: IncrementalTranscriptionConfiguration = .default,
@@ -308,7 +309,8 @@ private extension IncrementalTranscriptionCoordinator {
       isCatchingUp: isProcessingChunk || !pendingChunks.isEmpty
     )
 
-    Task {
+    publishSnapshotTask = Task { [publishSnapshotTask] in
+      _ = await publishSnapshotTask?.value
       await onUpdate(snapshot)
     }
   }

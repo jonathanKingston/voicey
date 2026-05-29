@@ -1,5 +1,9 @@
 # Rust worker CI on Ubuntu: protocol tests, worker builds, and benchmark script checks.
 # macOS-only paths (Swift infer worker, CoreAudio) stay in build.yml.
+#
+# Tier 1 (`rust-core`): fast PR signal — protocol, in-process supervisor mapping tests,
+# stub integration, capture IPC, worker builds, benchmark script smoke.
+# Tier 2 (`rust-workspace`): full workspace `cargo test` + clippy (ALSA, all crates).
 name: Linux Rust tests
 
 on:
@@ -21,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.86.0
 
       - name: Generate protocol fixtures
         run: cargo run -p voicey-protocol --bin gen-fixtures
@@ -29,10 +33,19 @@ jobs:
       - name: Protocol contract tests
         run: cargo test -p voicey-protocol
 
+      - name: Supervisor in-process mapping tests (no child processes)
+        run: cargo test -p voicey-supervisor --bin voicey-supervisor
+
+      - name: Install ALSA build dependencies (capture worker)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+
       - name: Supervisor integration tests (stub workers)
         run: |
           cargo build -p voicey-worker-stubs --bins
           cargo test -p voicey-supervisor --test supervisor_integration
+
+      - name: Capture worker IPC tests (fixture path, no microphone)
+        run: cargo test -p voicey-capture --test capture_ipc
 
       - name: Build supervisor and fetch workers
         run: cargo build -p voicey-supervisor -p voicey-fetch
@@ -53,7 +66,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
 
       - name: Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.86.0
         with:
           components: clippy
 

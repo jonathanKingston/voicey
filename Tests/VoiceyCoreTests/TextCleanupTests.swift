@@ -37,6 +37,12 @@ final class TextCleanupTests: XCTestCase {
     XCTAssertNil(defaultCustomReplacement(for: "that is"))
   }
 
+  func testAppendingInterUtteranceSpacingIfNeeded() {
+    XCTAssertEqual(TextCleanup.appendingInterUtteranceSpacingIfNeeded("Hello."), "Hello. ")
+    XCTAssertEqual(TextCleanup.appendingInterUtteranceSpacingIfNeeded("Hi "), "Hi ")
+    XCTAssertEqual(TextCleanup.appendingInterUtteranceSpacingIfNeeded(""), "")
+  }
+
   private func defaultCustomReplacement(for phrase: String) -> String? {
     let command = VoiceCommand.defaults.first { $0.phrase == phrase }
     guard case .custom(let replacement) = command?.action else {

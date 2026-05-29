@@ -24,6 +24,7 @@ CI runs this before Rust and Swift protocol tests. Run it locally before `swift 
 
 - **Rust:** generate fixtures → `cargo test -p voicey-protocol` — [`.github/workflows/linux-rust-tests.yml`](../.github/workflows/linux-rust-tests.yml)
 - **Supervisor (M2):** build `voicey-worker-stubs` binaries → `cargo test -p voicey-supervisor --test supervisor_integration` (same workflow, Tier 1)
+- **Supervisor (M3):** `cargo test -p voicey-supervisor --bin voicey-supervisor` — in-process `process.rs` unit tests for infer/capture response mapping (no child processes; Tier 1)
 - **Swift:** generate fixtures → `VoiceyProtocolFixtureTests` — [`.github/workflows/linux-core-tests.yml`](../.github/workflows/linux-core-tests.yml)
 
 ## Test worker stubs (M2)
@@ -38,6 +39,7 @@ Linux integration tests spawn `voicey-supervisor` with stub workers (no MLX, mic
 
 ```bash
 make test-supervisor-integration
+cargo test -p voicey-capture --test capture_ipc
 ```
 
 Stub behavior overrides: `VOICEY_INFER_STUB_MODE` (`fail_load`, `fail_transcribe`, `malformed_response`, `exit_on_first_request`, `exit_on_start`).

@@ -7,6 +7,7 @@
 /* Transcription States */
 "state.ready" = "準備完了";
 "state.loadingModel" = "モデル読み込み中...";
+"state.waitingForSpeech" = "Waiting for speech...";
 "state.listening" = "聞いています...";
 "state.transcribing" = "文字起こし中...";
 "state.done" = "完了";
@@ -93,6 +94,12 @@
 "audio.testInput" = "入力をテスト";
 "audio.testing" = "テスト中...";
 "audio.testDescription" = "マイクに向かって話して、動作を確認してください。";
+"audio.recordingMode" = "Recording Mode";
+"audio.recordingModeDescription" = "Choose how Voicey starts and stops capture.";
+"audio.recordingModeManual" = "Manual";
+"audio.recordingModeHandsFree" = "Hands-Free";
+"audio.recordingModeManualDescription" = "Press once to start, press again to stop and transcribe.";
+"audio.recordingModeHandsFreeDescription" = "Press once. Voicey waits for you to speak, starts automatically, and transcribes after you pause.";
 
 /* Model Settings */
 "model.selectedModel" = "選択されたモデル";
@@ -103,6 +110,13 @@
 "model.recommended" = "推奨";
 "model.download" = "ダウンロード";
 "model.delete" = "削除";
+"model.checkForUpdates" = "確認";
+"model.checkingForUpdates" = "モデルの更新を確認中...";
+"model.update" = "更新";
+"model.updating" = "更新中...";
+"model.updateAvailable" = "更新があります";
+"model.upToDate" = "最新です";
+"model.revisionUnknown" = "リビジョン不明。最新モデルに更新してください";
 "model.failedToDelete" = "モデルの削除に失敗しました";
 "model.ok" = "OK";
 "model.unknownError" = "不明なエラー";

@@ -3,6 +3,11 @@ import ServiceManagement
 import VoiceyCore
 import os
 
+enum RecordingMode: String, CaseIterable, Sendable {
+  case manual
+  case handsFree
+}
+
 /// Manages user settings and preferences
 final class SettingsManager: SettingsProviding, @unchecked Sendable {
   static let shared = SettingsManager()
@@ -34,6 +39,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.selectedModel: ModelManager.defaultModel.rawValue,
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
+      Keys.recordingMode: RecordingMode.manual.rawValue,
       Keys.autoPasteEnabled: false,  // Disabled by default - advanced feature requiring Accessibility
       Keys.restoreClipboardAfterPaste: true,  // Restore original clipboard after paste
       Keys.pauseMediaDuringTranscription: true,
@@ -54,6 +60,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let lastAppliedDefaultModel = "lastAppliedDefaultModel"
     static let launchAtLogin = "launchAtLogin"
     static let showDockIcon = "showDockIcon"
+    static let recordingMode = "recordingMode"
     static let autoPasteEnabled = "autoPasteEnabled"
     static let restoreClipboardAfterPaste = "restoreClipboardAfterPaste"
     static let pauseMediaDuringTranscription = "pauseMediaDuringTranscription"
@@ -116,6 +123,14 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var showDockIcon: Bool {
     get { defaults.bool(forKey: Keys.showDockIcon) }
     set { defaults.set(newValue, forKey: Keys.showDockIcon) }
+  }
+
+  var recordingMode: RecordingMode {
+    get {
+      let rawValue = defaults.string(forKey: Keys.recordingMode) ?? RecordingMode.manual.rawValue
+      return RecordingMode(rawValue: rawValue) ?? .manual
+    }
+    set { defaults.set(newValue.rawValue, forKey: Keys.recordingMode) }
   }
 
   /// When enabled, Voicey attempts to auto-paste the transcription into the active app.

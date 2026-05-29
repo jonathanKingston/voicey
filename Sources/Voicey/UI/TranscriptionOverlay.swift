@@ -49,10 +49,12 @@ final class TranscriptionOverlayController {
     }
     guard let window else { return }
     window.orderFront(nil)
-    // Keep the panel as first responder so it receives Escape without AppKit
-    // auto-highlighting the close button when the overlay becomes key.
-    window.makeKey()
-    _ = window.makeFirstResponder(window)
+    if appState?.handsFreeSessionActive != true {
+      // Keep the panel as first responder so it receives Escape without AppKit
+      // auto-highlighting the close button when the overlay becomes key.
+      window.makeKey()
+      _ = window.makeFirstResponder(window)
+    }
   }
 
   func hide() {
@@ -116,6 +118,20 @@ final class TranscriptionOverlayController {
 
     // Position on the target screen
     positionWindow(on: screen ?? NSScreen.main)
+    syncLayout(to: appState)
+  }
+
+  func syncLayout(to appState: AppState) {
+    guard let window, let hostingView = window.contentView as? NSHostingView<TranscriptionOverlayView> else {
+      return
+    }
+    let jobCount = appState.handsFreeBackgroundTranscriptionJobs.count
+    let size = TranscriptionOverlayView.hostWindowSize(backgroundJobCount: jobCount)
+    hostingView.frame = NSRect(x: 0, y: 0, width: size.width, height: size.height)
+    window.setContentSize(NSSize(width: size.width, height: size.height))
+    if let screen = window.screen ?? NSScreen.main {
+      positionWindow(on: screen)
+    }
   }
 }
 
@@ -134,13 +150,26 @@ struct TranscriptionOverlayView: View {
   /// Inset around the card so drop shadows are not clipped by the borderless panel bounds.
   private static let shadowPadding = EdgeInsets(top: 14, leading: 26, bottom: 34, trailing: 26)
   private static let cardWidth: CGFloat = 454
-  private static let cardHeight: CGFloat = 68
+  private static let compactCardHeight: CGFloat = 68
+  private static let backgroundJobStripHeight: CGFloat = 32
+  private static let backgroundJobStripSpacing: CGFloat = 8
 
-  static var hostWindowSize: CGSize {
-    CGSize(
+  static func cardHeight(backgroundJobCount: Int) -> CGFloat {
+    guard backgroundJobCount > 0 else { return compactCardHeight }
+    return compactCardHeight + backgroundJobStripSpacing
+      + (backgroundJobStripHeight * CGFloat(backgroundJobCount))
+  }
+
+  static func hostWindowSize(backgroundJobCount: Int = 0) -> CGSize {
+    let cardHeight = cardHeight(backgroundJobCount: backgroundJobCount)
+    return CGSize(
       width: cardWidth + shadowPadding.leading + shadowPadding.trailing,
       height: cardHeight + shadowPadding.top + shadowPadding.bottom
     )
+  }
+
+  static var hostWindowSize: CGSize {
+    hostWindowSize(backgroundJobCount: 0)
   }
 
   var body: some View {
@@ -150,12 +179,13 @@ struct TranscriptionOverlayView: View {
   }
 
   private var cardContent: some View {
-    HStack(alignment: .center, spacing: 14) {
-      stateIcon
+    VStack(alignment: .leading, spacing: Self.backgroundJobStripSpacing) {
+      HStack(alignment: .center, spacing: 14) {
+        stateIcon
 
-      activitySlot
+        activitySlot
 
-      Text(statusText)
+        Text(statusText)
         .font(.system(size: 14, weight: .medium, design: .rounded))
         .foregroundStyle(.primary)
         .lineLimit(1)
@@ -183,15 +213,47 @@ struct TranscriptionOverlayView: View {
       .buttonStyle(.plain)
       .focusEffectDisabled()
       .help(L10n.Overlay.cancelHelp)
+      }
+
+      if !appState.handsFreeBackgroundTranscriptionJobs.isEmpty {
+        VStack(spacing: 6) {
+          ForEach(appState.handsFreeBackgroundTranscriptionJobs) { job in
+            HStack(spacing: 8) {
+              Text(L10n.State.transcribing)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+              ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                  .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.05))
+                CapturedWaveformProgressView(
+                  envelope: job.envelope,
+                  startedAt: job.startedAt,
+                  audioDuration: job.audioDuration,
+                  estimatedRTF: job.estimatedRTF
+                )
+                .frame(height: 22)
+                .padding(.horizontal, 4)
+              }
+              .frame(height: Self.backgroundJobStripHeight)
+            }
+          }
+        }
+      }
     }
     .padding(.horizontal, 18)
     .padding(.vertical, 14)
-    .frame(width: Self.cardWidth, height: Self.cardHeight, alignment: .center)
+    .frame(
+      width: Self.cardWidth,
+      height: Self.cardHeight(backgroundJobCount: appState.handsFreeBackgroundTranscriptionJobs.count),
+      alignment: .center
+    )
     .background { glassFill }
     .overlay { glassRim }
     .compositingGroup()
     .clipShape(cardShape)
     .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.12), radius: 16, y: 8)
+    .animation(.easeInOut(duration: 0.22), value: appState.handsFreeBackgroundTranscriptionJobs.count)
   }
 
   private var cardShape: RoundedRectangle {
@@ -240,6 +302,8 @@ struct TranscriptionOverlayView: View {
     switch appState.transcriptionState {
     case .idle:
       return 0
+    case .waitingForSpeech:
+      return colorScheme == .dark ? 0.18 : 0.12
     case .recording, .error:
       return colorScheme == .dark ? 0.22 : 0.16
     case .processing:
@@ -285,13 +349,16 @@ struct TranscriptionOverlayView: View {
         .frame(width: 100, height: 26)
     }
     .frame(width: 108, height: 32)
-    .animation(.easeInOut(duration: 0.2), value: appState.transcriptionState.isRecording)
+    .animation(.easeInOut(duration: 0.2), value: appState.transcriptionState.isCaptureEngaged)
     .clipped()
   }
 
   @ViewBuilder
   private var activitySlotContent: some View {
-    if appState.transcriptionState.isRecording {
+    if appState.transcriptionState.isWaitingForSpeech {
+      WaveformView(level: appState.audioLevel)
+        .opacity(0.55)
+    } else if appState.transcriptionState.isRecording {
       WaveformView(level: appState.audioLevel)
     } else if appState.transcriptionState.isProcessing,
               !appState.recordingWaveformEnvelope.isEmpty,
@@ -331,10 +398,12 @@ struct TranscriptionOverlayView: View {
   }
 
   private var statusText: String {
+    if appState.isWaitingForSpeech, appState.isHandsFreeBackgroundTranscribing {
+      return L10n.State.waitingForSpeechWhileTranscribing
+    }
     if appState.transcriptionState.isRecording && appState.isCatchingUpTranscription {
       return L10n.State.transcribing
     }
-
     return appState.transcriptionState.displayText
   }
 
@@ -342,6 +411,8 @@ struct TranscriptionOverlayView: View {
     switch appState.transcriptionState {
     case .loadingModel:
       return "arrow.down.circle"
+    case .waitingForSpeech:
+      return "mic.fill"
     case .recording:
       return "mic.fill"
     case .processing:
@@ -359,6 +430,8 @@ struct TranscriptionOverlayView: View {
     switch appState.transcriptionState {
     case .loadingModel:
       return .blue
+    case .waitingForSpeech:
+      return .orange
     case .recording:
       return .red
     case .processing:
@@ -377,15 +450,19 @@ struct TranscriptionOverlayView: View {
   }
 }
 
-#Preview {
-  TranscriptionOverlayView(onCancel: { print("Cancelled") })
-    .environmentObject(
-      {
-        let state = AppState()
-        state.transcriptionState = .recording(startTime: Date())
-        state.audioLevel = 0.5
-        return state
-      }()
-    )
-    .padding()
+#if DEBUG
+struct TranscriptionOverlayView_Previews: PreviewProvider {
+  static var previews: some View {
+    TranscriptionOverlayView(onCancel: { print("Cancelled") })
+      .environmentObject(
+        {
+          let state = AppState()
+          state.transcriptionState = .recording(startTime: Date())
+          state.audioLevel = 0.5
+          return state
+        }()
+      )
+      .padding()
+  }
 }
+#endif

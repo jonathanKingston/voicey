@@ -7,6 +7,7 @@
 /* Transcription States */
 "state.ready" = "Listo";
 "state.loadingModel" = "Cargando modelo...";
+"state.waitingForSpeech" = "Waiting for speech...";
 "state.listening" = "Escuchando...";
 "state.transcribing" = "Transcribiendo...";
 "state.done" = "Hecho";
@@ -93,6 +94,12 @@
 "audio.testInput" = "Probar entrada";
 "audio.testing" = "Probando...";
 "audio.testDescription" = "Habla en tu micrófono para verificar que funciona.";
+"audio.recordingMode" = "Recording Mode";
+"audio.recordingModeDescription" = "Choose how Voicey starts and stops capture.";
+"audio.recordingModeManual" = "Manual";
+"audio.recordingModeHandsFree" = "Hands-Free";
+"audio.recordingModeManualDescription" = "Press once to start, press again to stop and transcribe.";
+"audio.recordingModeHandsFreeDescription" = "Press once. Voicey waits for you to speak, starts automatically, and transcribes after you pause.";
 
 /* Model Settings */
 "model.selectedModel" = "Modelo seleccionado";
@@ -103,6 +110,13 @@
 "model.recommended" = "Recomendado";
 "model.download" = "Descargar";
 "model.delete" = "Eliminar";
+"model.checkForUpdates" = "Comprobar";
+"model.checkingForUpdates" = "Buscando actualizaciones del modelo...";
+"model.update" = "Actualizar";
+"model.updating" = "Actualizando...";
+"model.updateAvailable" = "Actualización disponible";
+"model.upToDate" = "Actualizado";
+"model.revisionUnknown" = "Revisión desconocida; actualiza para asegurar el modelo más reciente";
 "model.failedToDelete" = "Error al eliminar modelo";
 "model.ok" = "Aceptar";
 "model.unknownError" = "Error desconocido";

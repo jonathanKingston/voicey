@@ -77,6 +77,92 @@ actor VoiceyRuntimeSupervisor {
   }
 
   func transcribe(
+    capturedAudio: CapturedAudio,
+    model: SpeechModel,
+    warmupAlreadyDone: Bool,
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
+    if !warmupAlreadyDone || inferReadyModel != model {
+      try await prewarmInfer(model: model)
+    }
+    guard model.isQwenModel else {
+      throw VoiceyRuntimeError.unsupportedModel(model.rawValue)
+    }
+    defer {
+      capturedAudio.removeSharedBufferIfNeeded()
+    }
+    do {
+      switch capturedAudio {
+      case .sharedBuffer(let handle):
+        if usesRustSupervisor {
+          return try await rustSupervisor.transcribe(
+            pcmHandle: handle,
+            model: model,
+            decoderContext: decoderContext
+          )
+        }
+        return try await inferClient.transcribe(
+          pcmHandle: handle,
+          model: model,
+          decoderContext: decoderContext
+        )
+      case .inMemory(let samples):
+        if usesRustSupervisor {
+          return try await rustSupervisor.transcribe(
+            samples: samples,
+            model: model,
+            decoderContext: decoderContext
+          )
+        }
+        return try await inferClient.transcribe(
+          samples: samples,
+          model: model,
+          decoderContext: decoderContext
+        )
+      }
+    } catch {
+      AppLogger.runtime.warning(
+        "Infer transcribe failed, retrying once: \(error.localizedDescription, privacy: .public)"
+      )
+      if usesRustSupervisor {
+        rustSupervisor.stop()
+      } else {
+        inferClient.stop()
+      }
+      inferReadyModel = nil
+      try await prewarmInfer(model: model)
+      switch capturedAudio {
+      case .sharedBuffer(let handle):
+        if usesRustSupervisor {
+          return try await rustSupervisor.transcribe(
+            pcmHandle: handle,
+            model: model,
+            decoderContext: decoderContext
+          )
+        }
+        return try await inferClient.transcribe(
+          pcmHandle: handle,
+          model: model,
+          decoderContext: decoderContext
+        )
+      case .inMemory(let samples):
+        if usesRustSupervisor {
+          return try await rustSupervisor.transcribe(
+            samples: samples,
+            model: model,
+            decoderContext: decoderContext
+          )
+        }
+        return try await inferClient.transcribe(
+          samples: samples,
+          model: model,
+          decoderContext: decoderContext
+        )
+      }
+    }
+  }
+
+  func transcribe(
     samples: [Float],
     model: SpeechModel,
     warmupAlreadyDone: Bool,

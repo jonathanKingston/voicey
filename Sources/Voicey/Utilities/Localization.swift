@@ -149,6 +149,13 @@ enum L10n {
     enum State {
         static var ready: String { L10n.string("state.ready") }
         static var loadingModel: String { L10n.string("state.loadingModel") }
+        static var waitingForSpeech: String { L10n.string("state.waitingForSpeech") }
+        static var waitingForSpeechWhileTranscribing: String {
+            L10n.string("state.waitingForSpeechWhileTranscribing")
+        }
+        static var listeningWhileTranscribing: String {
+            L10n.string("state.listeningWhileTranscribing")
+        }
         static var listening: String { L10n.string("state.listening") }
         static var transcribing: String { L10n.string("state.transcribing") }
         static var done: String { L10n.string("state.done") }
@@ -271,6 +278,16 @@ enum L10n {
         static var microphone: String { L10n.string("audio.microphone") }
         static var systemDefault: String { L10n.string("audio.systemDefault") }
         static var inputDeviceDescription: String { L10n.string("audio.inputDeviceDescription") }
+        static var recordingMode: String { L10n.string("audio.recordingMode") }
+        static var recordingModeDescription: String { L10n.string("audio.recordingModeDescription") }
+        static var recordingModeManual: String { L10n.string("audio.recordingModeManual") }
+        static var recordingModeHandsFree: String { L10n.string("audio.recordingModeHandsFree") }
+        static var recordingModeManualDescription: String {
+            L10n.string("audio.recordingModeManualDescription")
+        }
+        static var recordingModeHandsFreeDescription: String {
+            L10n.string("audio.recordingModeHandsFreeDescription")
+        }
         static var testMicrophone: String { L10n.string("audio.testMicrophone") }
         static var testInput: String { L10n.string("audio.testInput") }
         static var testing: String { L10n.string("audio.testing") }
@@ -285,9 +302,22 @@ enum L10n {
         static var availableModels: String { L10n.string("model.availableModels") }
         static var performance: String { L10n.string("model.performance") }
         static var performanceDescription: String { L10n.string("model.performanceDescription") }
+        static func sizeFootnote(disk: String, memory: String) -> String {
+            L10n.string("model.sizeFootnote", disk, memory)
+        }
+        static var memoryFootnoteMultiprocess: String {
+            L10n.string("model.memoryFootnoteMultiprocess")
+        }
         static var recommended: String { L10n.string("model.recommended") }
         static var download: String { L10n.string("model.download") }
         static var delete: String { L10n.string("model.delete") }
+        static var updating: String { L10n.string("model.updating") }
+        static var update: String { L10n.string("model.update") }
+        static var checkForUpdates: String { L10n.string("model.checkForUpdates") }
+        static var revisionUnknown: String { L10n.string("model.revisionUnknown") }
+        static var checkingForModelUpdates: String { L10n.string("model.checkingForModelUpdates") }
+        static var upToDate: String { L10n.string("model.upToDate") }
+        static var updateAvailable: String { L10n.string("model.updateAvailable") }
         static var failedToDelete: String { L10n.string("model.failedToDelete") }
         static var ok: String { L10n.string("model.ok") }
         static var unknownError: String { L10n.string("model.unknownError") }

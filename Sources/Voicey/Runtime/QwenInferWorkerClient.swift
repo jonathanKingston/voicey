@@ -114,6 +114,58 @@ final class QwenInferWorkerClient: @unchecked Sendable {
   }
 
   func transcribe(
+    pcmHandle: PCMBufferHandle,
+    model: SpeechModel,
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
+    try startIfNeeded()
+
+    var request: [String: Any] = [
+      "type": "transcribe",
+      "id": UUID().uuidString,
+      "model_id": model.rawValue,
+      "sample_rate": pcmHandle.sampleRate,
+      "shm_name": pcmHandle.shmName,
+      "sample_count": pcmHandle.sampleCount
+    ]
+    if pcmHandle.sampleOffset > 0 {
+      request["sample_offset"] = pcmHandle.sampleOffset
+    }
+    if let decoderContext, !decoderContext.isEmpty {
+      request["decoder_context"] = decoderContext
+    }
+
+    let response = try await send(
+      request: request,
+      timeout: Self.transcribeTimeoutSeconds(sampleCount: pcmHandle.sampleCount)
+    )
+
+    guard response.ok else {
+      let message = response.error ?? "unknown infer worker error"
+      VoiceyRuntimeDiagnostics.recordInferWorkerError(message)
+      throw InferWorkerError.workerFailed(message)
+    }
+
+    let rawText = response.rawText ?? ""
+    let processingTime = response.processingSeconds ?? 0
+    let audioDuration = response.audioSeconds ?? pcmHandle.durationSeconds
+    let rtf = audioDuration > 0 ? processingTime / audioDuration : 0
+
+    return TranscriptionResult(
+      text: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
+      segments: [],
+      language: response.language ?? "auto",
+      processingTime: processingTime,
+      performanceMetrics: PerformanceMetrics(
+        realTimeFactor: rtf,
+        audioDuration: audioDuration,
+        processingTime: processingTime,
+        thermalState: ProcessInfo.processInfo.thermalState
+      )
+    )
+  }
+
+  func transcribe(
     samples: [Float],
     model: SpeechModel,
     decoderContext: String? = nil

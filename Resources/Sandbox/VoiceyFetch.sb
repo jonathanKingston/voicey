@@ -7,7 +7,7 @@
 
 ;; Basic runtime support for a CLI helper that performs HTTPS downloads into the
 ;; Qwen cache. Reads remain broad for compatibility with system trust stores and
-;; dynamically loaded libraries; writes are limited to the qwen3-speech cache.
+;; dynamically loaded libraries; writes are limited to the app-managed Qwen cache.
 (allow signal
   process-fork
   process-exec
@@ -19,6 +19,7 @@
 (allow file-read-metadata)
 
 (allow file-read* file-write*
+  (home-subpath "/Library/Application Support/Voicey/Models/qwen3-speech")
   (home-subpath "/Library/Caches/qwen3-speech"))
 
 (allow network-outbound)
