@@ -213,8 +213,7 @@ fn apply_scratch_that(command: &VoiceCommand, text: &str) -> String {
     let before_command = &text[..start_byte];
     if let Some((sentence_byte, punct)) = before_command
         .char_indices()
-        .filter(|(_, character)| ".!?".contains(*character))
-        .next_back()
+        .rfind(|(_, character)| ".!?".contains(*character))
     {
         let after_sentence_byte = sentence_byte + punct.len_utf8();
         format!("{}{}", &text[..after_sentence_byte], &text[end_byte..])
