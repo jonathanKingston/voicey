@@ -1,5 +1,7 @@
 # Voicey Rust runtime (macOS)
 
+IPC message shapes and contract tests: [`RUST_PROTOCOL.md`](RUST_PROTOCOL.md).
+
 Multi-process core for Voicey on macOS:
 
 | Component | Binary | Hot path (default when bundled) |
