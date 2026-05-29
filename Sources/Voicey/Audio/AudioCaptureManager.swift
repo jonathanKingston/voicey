@@ -131,7 +131,7 @@ final class AudioCaptureManager {
     }
   }
 
-  func stopCapture(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
+  func stopCapture(applyTrailingTrimHeuristic: Bool = true) -> CapturedAudio? {
     defer { resetCaptureState() }
 
     if usesRustCaptureWorker {
@@ -140,16 +140,28 @@ final class AudioCaptureManager {
       levelTimer = nil
       delegate?.audioCaptureManager(self, didUpdateLevel: 0)
       do {
-        var samples = try runSynchronously {
+        let handle = try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.stopRecording(
             applyTrailingTrim: applyTrailingTrimHeuristic)
         }
-        samples = boundedSamplesIfNeeded(from: samples)
-        let durationSec = Double(samples.count) / targetSampleRate
+        if recordingMode == .handsFree, let handsFreeDetector {
+          let fullSamples = try SharedMemoryPCM.read(
+            name: handle.shmName,
+            sampleCount: handle.sampleCount
+          )
+          handle.remove()
+          let bounded = handsFreeDetector.boundedSamples(from: fullSamples)
+          let durationSec = Double(bounded.count) / targetSampleRate
+          AppLogger.audio.info(
+            "AudioCapture (voicey-capture, hands-free): \(bounded.count) samples (~\(String(format: "%.1f", durationSec))s)"
+          )
+          return .inMemory(bounded)
+        }
+        let durationSec = handle.durationSeconds
         AppLogger.audio.info(
-          "AudioCapture (voicey-capture): \(samples.count) samples (~\(String(format: "%.1f", durationSec))s)"
+          "AudioCapture (voicey-capture): \(handle.sampleCount) samples (~\(String(format: "%.1f", durationSec))s)"
         )
-        return samples
+        return .sharedBuffer(handle)
       } catch {
         AppLogger.audio.error("voicey-capture stop failed: \(error.localizedDescription)")
         return nil
@@ -185,7 +197,7 @@ final class AudioCaptureManager {
       "AudioCapture: Stopped. Got \(sampleCount) samples (~\(String(format: "%.1f", durationSec))s of audio)"
     )
 
-    return result
+    return result.map { .inMemory($0) }
   }
 
   private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {

@@ -41,7 +41,7 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     try VoiceyJSONLResponse.ensureSuccess(response, context: "start_recording")
   }
 
-  func stopRecording(applyTrailingTrim: Bool = true) async throws -> [Float] {
+  func stopRecording(applyTrailingTrim: Bool = true) async throws -> PCMBufferHandle {
     let response = try await client().send(
       request: [
         "type": "stop_recording",
@@ -56,8 +56,8 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     else {
       throw VoiceyCaptureWorkerError.invalidResponse
     }
-    defer { SharedMemoryPCM.remove(name: shmName) }
-    return try SharedMemoryPCM.read(name: shmName, sampleCount: sampleCount)
+    let sampleRate = response["sample_rate"] as? Int ?? 16_000
+    return PCMBufferHandle(shmName: shmName, sampleCount: sampleCount, sampleRate: sampleRate)
   }
 
   func prewarm() async throws {

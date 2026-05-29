@@ -47,4 +47,11 @@ final class MultiprocessRuntimeTests: XCTestCase {
     let read = try SharedMemoryPCM.read(name: name, sampleCount: samples.count)
     XCTAssertEqual(read, samples)
   }
+
+  func testCapturedAudioSharedBufferDuration() {
+    let handle = PCMBufferHandle(shmName: "voicey_pcm_test", sampleCount: 16_000, sampleRate: 16_000)
+    let captured = CapturedAudio.sharedBuffer(handle)
+    XCTAssertEqual(captured.sampleCount, 16_000)
+    XCTAssertEqual(captured.durationSeconds, 1.0, accuracy: 0.001)
+  }
 }
