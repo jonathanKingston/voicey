@@ -63,9 +63,19 @@ enum SpeechModel: String, CaseIterable, Identifiable {
     isQwenModel
   }
 
+  /// Legacy Whisper/Granite models kept for benchmark CLI tooling only.
+  var isBenchmarkModel: Bool {
+    !isUserFacing
+  }
+
   /// Models shown in settings and download UI
   static var userFacingModels: [SpeechModel] {
     [.qwen3Large, .qwen3Small]
+  }
+
+  /// Whisper and Granite models used by benchmark commands and parity harnesses.
+  static var benchmarkModels: [SpeechModel] {
+    allCases.filter(\.isBenchmarkModel)
   }
 
   var displayName: String {
@@ -596,6 +606,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
   // MARK: - Download
 
+  /// Downloads a model. Qwen models are used by the app; Whisper/Granite paths serve benchmark CLI tooling.
   func downloadModel(_ model: SpeechModel) {
     guard !isDownloading[model, default: false] else { return }
     cancelledDownloads.remove(model)
