@@ -26,6 +26,11 @@ final class GraniteEngine: @unchecked Sendable {
   private let lowAudioBoostThresholdRMS: Float = 0.012
   private let targetInputRMS: Float = 0.03
   private let maxInputGain: Float = 4.0
+  private static let requiredPythonModules = [
+    ("mlx_audio", "mlx-audio"),
+    ("huggingface_hub", "huggingface_hub"),
+    ("numpy", "numpy")
+  ]
 
   /// Average RTF over recent transcriptions
   var averageRTF: Double {
@@ -99,7 +104,10 @@ final class GraniteEngine: @unchecked Sendable {
       AppLogger.model.info("GraniteEngine: Model ready at \(path)")
     } catch {
       AppLogger.model.error("GraniteEngine: Failed to verify Python environment: \(error)")
-      debugPrint("❌ GraniteEngine: Python deps setup failed. Install with: python3 -m pip install --user mlx-audio huggingface_hub", category: "MODEL")
+      debugPrint(
+        "❌ GraniteEngine: Missing Granite Python dependencies. Bundle or install them before using Granite.",
+        category: "MODEL"
+      )
     }
   }
 
@@ -280,9 +288,7 @@ final class GraniteEngine: @unchecked Sendable {
     let extraPaths = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
-      "\(NSHomeDirectory())/.local/bin",
-      "\(NSHomeDirectory())/Library/Python/3.11/bin",
-      "\(NSHomeDirectory())/Library/Python/3.12/bin"
+      "/usr/bin"
     ]
     if let existingPath = env["PATH"] {
       env["PATH"] = extraPaths.joined(separator: ":") + ":" + existingPath
@@ -292,38 +298,20 @@ final class GraniteEngine: @unchecked Sendable {
     return env
   }
 
-  /// Ensure required Python packages are installed and importable.
+  /// Ensure the required Python packages are already available.
+  /// Runtime package installation stays disabled so Granite does not add PyPI egress.
   private func ensurePythonDependencies() async throws {
     if dependenciesReady { return }
 
     let bootstrapScript = """
       import importlib.util
-      import subprocess
-      import sys
 
-      required = [
-          ("mlx_audio", "mlx-audio"),
-          ("huggingface_hub", "huggingface_hub"),
-          ("numpy", "numpy"),
-      ]
+      required = [\(Self.requiredPythonModules.map { "[\"\($0.0)\", \"\($0.1)\"]" }.joined(separator: ", "))]
 
       missing = [pip_name for module_name, pip_name in required if importlib.util.find_spec(module_name) is None]
 
       if missing:
-          print("Installing Python dependencies: " + ", ".join(missing))
-          cmd = [
-              sys.executable,
-              "-m",
-              "pip",
-              "install",
-              "--user",
-              "--disable-pip-version-check",
-          ] + missing
-          subprocess.check_call(cmd)
-
-      for module_name, _ in required:
-          if importlib.util.find_spec(module_name) is None:
-              raise RuntimeError(f"Missing required Python module after install: {module_name}")
+          raise RuntimeError("Missing Granite Python dependencies: " + ", ".join(missing))
 
       print("OK")
       """
@@ -685,7 +673,7 @@ enum GraniteError: LocalizedError {
     case .pythonError(let message):
       return "Python error: \(message)"
     case .pythonNotFound:
-      return "Python 3 not found. Install Python 3 and mlx-audio (pip3 install mlx-audio)"
+      return "Python 3 not found. Install Python 3 and the Granite dependencies before selecting Granite."
     case .pythonTimedOut(let seconds):
       return "Python transcription timed out after \(Int(seconds))s"
     }

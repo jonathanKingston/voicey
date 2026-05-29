@@ -287,6 +287,8 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
   /// Use the smaller Qwen model on machines with less than 16 GB RAM.
   private static let largeQwenMemoryThresholdBytes: UInt64 = 16 * 1024 * 1024 * 1024
+  private static let qwenModelsDirectoryName = "qwen3-speech"
+  private var didMigrateLegacyQwenCache = false
 
   /// The default/recommended model - native Qwen3 MLX, chosen by available RAM.
   static var defaultModel: SpeechModel {
@@ -333,10 +335,66 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     // Create directory if needed
     if !fileManager.fileExists(atPath: voiceyDir.path) {
-      try? fileManager.createDirectory(at: voiceyDir, withIntermediateDirectories: true)
+      do {
+        try fileManager.createDirectory(at: voiceyDir, withIntermediateDirectories: true)
+      } catch {
+        AppLogger.model.error("Failed to create models directory at \(voiceyDir.path): \(error)")
+      }
     }
 
     return voiceyDir
+  }
+
+  private var legacyQwenCachesDirectory: URL {
+    let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+    return caches.appendingPathComponent(Self.qwenModelsDirectoryName, isDirectory: true)
+  }
+
+  /// Move Qwen weights from the legacy `~/Library/Caches/qwen3-speech` layout when present.
+  private func migrateLegacyQwenCacheIfNeeded() {
+    guard !didMigrateLegacyQwenCache else { return }
+    didMigrateLegacyQwenCache = true
+
+    let legacy = legacyQwenCachesDirectory
+    guard fileManager.fileExists(atPath: legacy.path),
+      let legacyEntries = try? fileManager.contentsOfDirectory(atPath: legacy.path),
+      !legacyEntries.isEmpty
+    else {
+      return
+    }
+
+    let destination = modelsDirectory.appendingPathComponent(Self.qwenModelsDirectoryName, isDirectory: true)
+    do {
+      try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+    } catch {
+      AppLogger.model.error("Failed to prepare Qwen models directory at \(destination.path): \(error)")
+      return
+    }
+
+    for entry in legacyEntries where !entry.hasPrefix(".") {
+      let source = legacy.appendingPathComponent(entry)
+      let target = destination.appendingPathComponent(entry)
+      guard !fileManager.fileExists(atPath: target.path) else { continue }
+      do {
+        try fileManager.moveItem(at: source, to: target)
+        AppLogger.model.info("Migrated Qwen cache entry to app-managed models directory: \(entry)")
+      } catch {
+        AppLogger.model.error("Failed to migrate Qwen cache entry \(entry): \(error)")
+      }
+    }
+  }
+
+  private var qwenModelsDirectory: URL {
+    migrateLegacyQwenCacheIfNeeded()
+    let directory = modelsDirectory.appendingPathComponent(Self.qwenModelsDirectoryName, isDirectory: true)
+    if !fileManager.fileExists(atPath: directory.path) {
+      do {
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+      } catch {
+        AppLogger.model.error("Failed to create Qwen models directory at \(directory.path): \(error)")
+      }
+    }
+    return directory
   }
 
   /// Returns the path to a model if it exists and is complete
@@ -391,7 +449,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   /// Directory for Qwen model storage
   func qwenModelDirectory(for model: SpeechModel) -> URL? {
     guard let hfId = model.huggingFaceModelId, model.isQwenModel else { return nil }
-    return try? HuggingFaceDownloader.getCacheDirectory(for: hfId)
+    return try? HuggingFaceDownloader.getCacheDirectory(for: hfId, basePath: qwenModelsDirectory)
   }
 
   private func isQwenModelComplete(at modelDir: URL) -> Bool {
@@ -784,18 +842,16 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
           throw ModelDownloadError.verificationFailed
         }
 
-        // Create directory
-        try? fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: modelDir, withIntermediateDirectories: true)
 
-        // Use Python to download the model via huggingface_hub
+        // Granite downloads stay limited to the model fetch itself. We do not
+        // bootstrap Python packages here because that would add PyPI egress.
         let downloadScript = """
           import sys
-          import subprocess
           import importlib.util
           try:
               if importlib.util.find_spec("huggingface_hub") is None:
-                  print("Installing huggingface_hub...", file=sys.stderr)
-                  subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "huggingface_hub"])
+                  raise RuntimeError("Missing Python module 'huggingface_hub'. Install it before downloading Granite models.")
 
               from huggingface_hub import snapshot_download
               snapshot_download(
@@ -898,9 +954,8 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
               managerRef.downloadTasks[modelRef] = nil
               NotificationManager.shared.showModelDownloadComplete(model: modelRef)
             } else {
-              let errorMessage =
-                errorOutput.isEmpty
-                ? "Failed to download Granite model. Ensure Python 3 and huggingface_hub are installed (pip3 install huggingface_hub)."
+              let errorMessage = errorOutput.isEmpty
+                ? "Failed to download Granite model. Granite downloads require Python 3 with huggingface_hub preinstalled."
                 : errorOutput
               AppLogger.model.error("Granite model download failed: \(errorMessage)")
               if !outputLog.isEmpty {
