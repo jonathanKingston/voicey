@@ -1249,36 +1249,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
-    let selectedModel = SettingsManager.shared.selectedModel
+    let selectedModel = userFacingSelectedModel()
     let decoderContext = TranscriptionSteeringContext.make()
-    switch selectedModel.backendKind {
-    case .granitePython:
-      guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer) else {
-        throw TranscriptionError.transcriptionFailed("No result from Granite engine")
-      }
-      return graniteResult
-    case .qwenMLX:
-      if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
-        return try await VoiceyRuntimeSupervisor.shared.transcribe(
-          samples: audioBuffer,
-          model: selectedModel,
-          warmupAlreadyDone: multiprocessInferReady,
-          decoderContext: decoderContext
-        )
-      }
-      guard let qwenResult = try await qwenEngine?.transcribe(
+    if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
+      return try await VoiceyRuntimeSupervisor.shared.transcribe(
+        samples: audioBuffer,
+        model: selectedModel,
+        warmupAlreadyDone: multiprocessInferReady,
+        decoderContext: decoderContext
+      )
+    }
+    guard
+      let qwenResult = try await qwenEngine?.transcribe(
         audioBuffer: audioBuffer,
         decoderContext: decoderContext
-      ) else {
-        throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
-      }
-      return qwenResult
-    case .whisperKit:
-      guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer) else {
-        throw TranscriptionError.transcriptionFailed("No result from Whisper engine")
-      }
-      return whisperResult
+      )
+    else {
+      throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
     }
+    return qwenResult
   }
 
   private func handleTranscriptionResult(_ result: TranscriptionResult) async {
