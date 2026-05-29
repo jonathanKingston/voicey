@@ -1,7 +1,10 @@
 use serde::Deserialize;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
-use voicey_protocol::{InferWorkerRequest, InferWorkerResponse};
+use voicey_protocol::{
+    hugging_face_repo_id, qwen_weight_list_patterns, InferWorkerRequest, InferWorkerResponse,
+    FETCH_STAGING_CONTAINER_PREFIX, FETCH_STAGING_DIRECTORY_NAME,
+};
 
 pub struct WorkerProcesses {
     infer: Option<ManagedWorker>,
@@ -161,40 +164,69 @@ impl WorkerProcesses {
         use std::fs;
         use std::path::PathBuf;
 
-        let hf_id = voicey_fetch::hf::hf_model_id(model_id)?;
-        let files = voicey_fetch::hf::list_weight_files(model_id)?;
-        let model_dir = PathBuf::from(destination_root).join(model_id);
-        fs::create_dir_all(&model_dir).map_err(|error| error.to_string())?;
-        let staging_root = model_dir.join(".voicey-fetch-staging");
-        if staging_root.exists() {
-            fs::remove_dir_all(&staging_root).map_err(|error| error.to_string())?;
+        // Host `DownloadModel` uses Voicey ids; fetch worker IPC requires org/repo HF ids.
+        let hf_id = hugging_face_repo_id(model_id)?;
+        let files = self.fetch_list_model_files(hf_id, &qwen_weight_list_patterns())?;
+        if files.is_empty() {
+            return Err(format!("{model_id}: no files matched"));
         }
-        fs::create_dir_all(&staging_root).map_err(|error| error.to_string())?;
+
+        let destination = PathBuf::from(destination_root);
+        fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
+
+        let model_dir = destination.join(model_id);
+        let staging_container = destination.join(format!(
+            "{FETCH_STAGING_CONTAINER_PREFIX}{model_id}-{}",
+            new_id()
+        ));
+        fs::create_dir_all(&staging_container).map_err(|error| error.to_string())?;
+
+        let model_root = staging_container
+            .to_str()
+            .ok_or_else(|| "invalid staging container path".to_string())?;
 
         for relative_path in files {
-            let staging_path = staging_root.join(&relative_path);
-            if let Some(parent) = staging_path.parent() {
-                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            self.fetch_download_model_file(
-                model_id,
-                &relative_path,
-                model_dir.to_str().ok_or("invalid path")?,
-                None,
-            )?;
-
-            let final_path = model_dir.join(&relative_path);
-            if let Some(parent) = final_path.parent() {
-                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            if final_path.exists() {
-                fs::remove_file(&final_path).map_err(|error| error.to_string())?;
-            }
-            fs::rename(staging_path, &final_path).map_err(|error| error.to_string())?;
+            self.fetch_download_model_file(hf_id, &relative_path, model_root, None)?;
         }
 
-        let _ = fs::remove_dir_all(&staging_root);
+        let staged_model_root = staging_container.join(FETCH_STAGING_DIRECTORY_NAME);
+        if !staged_model_root.is_dir() {
+            let _ = fs::remove_dir_all(&staging_container);
+            return Err(format!("{model_id}: staged model root missing"));
+        }
+
+        if model_dir.exists() {
+            fs::remove_dir_all(&model_dir).map_err(|error| error.to_string())?;
+        }
+        fs::rename(&staged_model_root, &model_dir).map_err(|error| error.to_string())?;
+        let _ = fs::remove_dir_all(&staging_container);
+
         Ok(model_dir.display().to_string())
+    }
+
+    fn fetch_list_model_files(
+        &mut self,
+        hf_model_id: &str,
+        patterns: &[String],
+    ) -> Result<Vec<String>, String> {
+        let worker = self.ensure_fetch()?;
+        let payload = serde_json::json!({
+            "type": "list_model_files",
+            "id": new_id(),
+            "model_id": hf_model_id,
+            "revision": "main",
+            "patterns": patterns,
+        });
+        let response: FetchListFilesResponse =
+            write_fetch_json(worker, &payload.to_string())?;
+        match response.kind.as_str() {
+            "listed_model_files" => response
+                .files
+                .ok_or_else(|| "missing files in list response".to_string()),
+            _ => Err(response
+                .message
+                .unwrap_or_else(|| "fetch list_model_files failed".to_string())),
+        }
     }
 
     fn ensure_infer(&mut self) -> Result<&mut ManagedWorker, String> {
@@ -229,6 +261,14 @@ impl WorkerProcesses {
 }
 
 #[derive(Debug, Deserialize)]
+struct FetchListFilesResponse {
+    #[serde(rename = "type")]
+    kind: String,
+    files: Option<Vec<String>>,
+    message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct FetchLineResponse {
     #[serde(rename = "type")]
     kind: String,
@@ -238,7 +278,6 @@ struct FetchLineResponse {
 }
 
 impl WorkerProcesses {
-    #[allow(dead_code)]
     pub fn fetch_download_model_file(
         &mut self,
         model_id: &str,
