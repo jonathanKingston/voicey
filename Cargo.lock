@@ -1720,6 +1720,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "voicey-text"
+version = "0.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "voicey-worker-stubs"
 version = "0.1.0"
 dependencies = [
@@ -1727,13 +1734,6 @@ dependencies = [
  "serde_json",
  "voicey-pcm",
  "voicey-protocol",
-]
-
-[[package]]
-name = "voicey-text"
-version = "0.1.0"
-dependencies = [
- "regex",
 ]
 
 [[package]]

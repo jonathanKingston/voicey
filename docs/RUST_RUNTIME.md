@@ -2,6 +2,32 @@
 
 IPC message shapes and contract tests: [`RUST_PROTOCOL.md`](RUST_PROTOCOL.md).
 
+System map and code ownership: [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Linux CI vs macOS validation
+
+| Area | Linux CI (`linux-rust-tests`, `linux-core-tests`) | macOS CI / manual |
+|------|---------------------------------------------------|-------------------|
+| `voicey-protocol` fixtures + serde contract | Yes | — |
+| Supervisor + stub workers (infer/capture/fetch) | Yes | — |
+| `voicey-fetch` HTTP listing/download (wiremock) | Yes | — |
+| `voicey-text` / `VoiceyCore` unit tests | Yes (Rust + Swift) | — |
+| Full SwiftUI app compile (`make build`) | No | Yes (`build.yml`) |
+| MLX Qwen infer-worker, WER/RTF parity | No | Yes (`make run-multiprocess`, benchmark targets) |
+| Mic capture (CoreAudio), TCC, auto-paste | No | Yes |
+| Codesign, bundle, Sparkle, seatbelt on device | No | Yes |
+
+Tracking issue: [#74](https://github.com/jonathanKingston/voicey/issues/74).
+
+## CI tiers (Rust on Ubuntu)
+
+| Tier | Job | Purpose |
+|------|-----|---------|
+| **1** | `rust-core` | Fast signal: protocol fixtures, supervisor integration (stubs), worker builds, benchmark script smoke tests |
+| **2** | `rust-workspace` | Full `cargo test --workspace`, `clippy -D warnings` (includes `voicey-capture` ALSA deps) |
+
+Workflow: [`.github/workflows/linux-rust-tests.yml`](../.github/workflows/linux-rust-tests.yml). Rust toolchain is pinned in [`rust-toolchain.toml`](../rust-toolchain.toml) (currently **1.86.0**).
+
 Multi-process core for Voicey on macOS:
 
 | Component | Binary | Hot path (default when bundled) |
@@ -26,6 +52,7 @@ After `make build-rust` and `make bundle-debug`, workers live in `Voicey.app/Con
 | `VOICEY_RUNTIME=in-process` | Qwen MLX inside main app |
 | `VOICEY_USE_FETCH_SANDBOX=0` | Disable the bundled default seatbelt profile for `voicey-fetch` in direct builds |
 | `VOICEY_FETCH_SANDBOX_PROFILE=/path/to/profile.sb` | Launch `voicey-fetch` via `sandbox-exec -f` with the given seatbelt profile |
+| `VOICEY_FETCH_HF_BASE_URL` | Override Hugging Face API base URL (tests and local debugging only; production uses `https://huggingface.co`) |
 
 Copy runtime diagnostics from **Settings → Advanced** when reporting issues.
 

@@ -64,8 +64,9 @@ bundled Rust workers: [`CHANGELOG.md`](../CHANGELOG.md) /
 - Package split: [`Package.swift`](../Package.swift) builds only `VoiceyCore` on
   Linux; the full app target requires macOS 15, SwiftUI/AppKit, AVFoundation,
   Metal, CoreML, MLX, and optional Sparkle for direct builds.
-- CI: macOS build, Linux `VoiceyCore` tests, Rust workspace tests, strict SwiftLint
-  in [`.github/workflows/`](../.github/workflows/).
+- CI: macOS build, Linux `VoiceyCore` tests, Rust workspace tests (toolchain pinned in
+  [`rust-toolchain.toml`](../rust-toolchain.toml)), strict SwiftLint in
+  [`.github/workflows/`](../.github/workflows/).
 
 ## Performance and quality guardrails
 
