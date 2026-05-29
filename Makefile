@@ -29,7 +29,7 @@ BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SO
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
-.PHONY: all build build-release release release-direct build-rust build-rust-release ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
+.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
 
@@ -50,6 +50,12 @@ build-rust-release:
 		fi; \
 	done
 	@cp $(addprefix target/release/,$(RUST_WORKERS)) $(RELEASE_DIR)/
+
+protocol-fixtures:
+	cargo run -p voicey-protocol --bin gen-fixtures
+
+test-protocol: protocol-fixtures
+	cargo test -p voicey-protocol
 
 benchmark-golden-fixtures:
 	python3 scripts/generate_golden_fixtures.py
