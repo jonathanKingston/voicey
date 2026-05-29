@@ -92,3 +92,43 @@ fn handle_line(line: &str) -> FetchResponse {
         FetchRequest::Shutdown { id } => FetchResponse::Ok { id },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_model_files_rejects_voicey_slug_model_id() {
+        let response = handle_line(
+            r#"{"type":"list_model_files","id":"1","model_id":"qwen3-asr-0.6b-6bit","revision":"main","patterns":["config.json"]}"#,
+        );
+        assert!(matches!(response, FetchResponse::Error { .. }));
+    }
+
+    #[test]
+    fn download_model_file_rejects_voicey_slug_model_id() {
+        let response = handle_line(
+            r#"{"type":"download_model_file","id":"1","model_id":"qwen3-asr-0.6b-6bit","relative_path":"config.json","model_root":"/tmp/models"}"#,
+        );
+        assert!(matches!(response, FetchResponse::Error { .. }));
+    }
+
+    #[test]
+    fn download_model_file_accepts_hf_repo_id_format() {
+        let hf_id = voicey_protocol::hugging_face_repo_id("qwen3-asr-0.6b-6bit").expect("hf id");
+        let response = handle_line(&format!(
+            r#"{{"type":"download_model_file","id":"1","model_id":"{hf_id}","relative_path":"config.json","model_root":"/tmp/models"}}"#
+        ));
+        // Network may fail; ensure we got past model_id validation (not invalid model_id).
+        match response {
+            FetchResponse::Error { message, .. } => {
+                assert!(
+                    !message.contains("invalid model_id"),
+                    "unexpected validation error: {message}"
+                );
+            }
+            FetchResponse::DownloadedModelFile { .. } => {}
+            other => panic!("unexpected response: {other:?}"),
+        }
+    }
+}

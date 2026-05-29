@@ -205,7 +205,16 @@ fn download_model_completes_with_stub_fetch() {
         HostResponse::DownloadComplete { id, model_id, path } => {
             assert_eq!(id, "dl-1");
             assert_eq!(model_id, "qwen3-asr-0.6b-6bit");
-            assert!(Path::new(&path).exists());
+            let model_dir = Path::new(&path);
+            assert!(model_dir.is_dir(), "model dir missing at {path}");
+            assert!(
+                model_dir.join("config.json").is_file(),
+                "config.json not promoted"
+            );
+            assert!(
+                model_dir.join("model.safetensors").is_file(),
+                "model.safetensors not promoted"
+            );
         }
         other => panic!("unexpected download response: {other:?}"),
     }
