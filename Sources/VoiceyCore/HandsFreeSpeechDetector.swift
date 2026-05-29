@@ -128,9 +128,17 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
   }
 
   public func boundedSamples(from samples: [Float]) -> [Float] {
-    guard let speechStartSampleIndex else { return [] }
-    let startIndex = min(max(speechStartSampleIndex, 0), samples.count)
-    let endIndex = min(max(speechEndSampleIndex ?? samples.count, startIndex), samples.count)
-    return Array(samples[startIndex..<endIndex])
+    guard let slice = boundedSlice(in: samples.count) else { return [] }
+    return Array(samples[slice.offset..<(slice.offset + slice.count)])
+  }
+
+  /// Sample range within a capture buffer for hands-free mode (no PCM load required).
+  public func boundedSlice(in totalSampleCount: Int) -> (offset: Int, count: Int)? {
+    guard let speechStartSampleIndex else { return nil }
+    let startIndex = min(max(speechStartSampleIndex, 0), totalSampleCount)
+    let endIndex = min(max(speechEndSampleIndex ?? totalSampleCount, startIndex), totalSampleCount)
+    let count = endIndex - startIndex
+    guard count > 0 else { return nil }
+    return (startIndex, count)
   }
 }

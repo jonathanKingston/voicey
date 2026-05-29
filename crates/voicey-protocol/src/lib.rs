@@ -55,6 +55,8 @@ pub enum HostRequest {
         sample_rate: u32,
         shm_name: String,
         sample_count: usize,
+        #[serde(default)]
+        sample_offset: usize,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         decoder_context: Option<String>,
     },
@@ -123,6 +125,8 @@ pub enum InferWorkerRequest {
         sample_rate: u32,
         shm_name: String,
         sample_count: usize,
+        #[serde(default)]
+        sample_offset: usize,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         decoder_context: Option<String>,
     },

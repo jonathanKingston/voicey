@@ -58,17 +58,7 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
     model: SpeechModel,
     decoderContext: String? = nil
   ) async throws -> TranscriptionResult {
-    var request: [String: Any] = [
-      "type": "transcribe",
-      "id": UUID().uuidString,
-      "model_id": model.rawValue,
-      "sample_rate": pcmHandle.sampleRate,
-      "shm_name": pcmHandle.shmName,
-      "sample_count": pcmHandle.sampleCount
-    ]
-    if let decoderContext, !decoderContext.isEmpty {
-      request["decoder_context"] = decoderContext
-    }
+    var request = Self.transcribeRequest(pcmHandle: pcmHandle, model: model, decoderContext: decoderContext)
 
     let response = try await client().send(request: request)
     try VoiceyJSONLResponse.ensureSuccess(response, context: "transcribe")
@@ -90,6 +80,28 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
         thermalState: ProcessInfo.processInfo.thermalState
       )
     )
+  }
+
+  private static func transcribeRequest(
+    pcmHandle: PCMBufferHandle,
+    model: SpeechModel,
+    decoderContext: String?
+  ) -> [String: Any] {
+    var request: [String: Any] = [
+      "type": "transcribe",
+      "id": UUID().uuidString,
+      "model_id": model.rawValue,
+      "sample_rate": pcmHandle.sampleRate,
+      "shm_name": pcmHandle.shmName,
+      "sample_count": pcmHandle.sampleCount
+    ]
+    if pcmHandle.sampleOffset > 0 {
+      request["sample_offset"] = pcmHandle.sampleOffset
+    }
+    if let decoderContext, !decoderContext.isEmpty {
+      request["decoder_context"] = decoderContext
+    }
+    return request
   }
 
   func transcribe(

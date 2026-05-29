@@ -34,16 +34,29 @@ pub fn write_f32_samples(samples: &[f32]) -> io::Result<String> {
 }
 
 pub fn read_f32_samples(name: &str, sample_count: usize) -> io::Result<Vec<f32>> {
+    read_f32_samples_slice(name, 0, sample_count)
+}
+
+/// Reads `sample_count` mono f32 samples starting at `sample_offset` within the PCM file.
+pub fn read_f32_samples_slice(
+    name: &str,
+    sample_offset: usize,
+    sample_count: usize,
+) -> io::Result<Vec<f32>> {
     let path = file_path(name);
     let bytes = fs::read(path)?;
-    let expected = sample_count * std::mem::size_of::<f32>();
-    if bytes.len() < expected {
+    let sample_size = std::mem::size_of::<f32>();
+    let byte_offset = sample_offset.saturating_mul(sample_size);
+    let expected = sample_count.saturating_mul(sample_size);
+    if bytes.len() < byte_offset.saturating_add(expected) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "pcm buffer too small",
         ));
     }
-    Ok(bytes_to_f32_slice(&bytes[..expected]))
+    Ok(bytes_to_f32_slice(
+        &bytes[byte_offset..byte_offset + expected],
+    ))
 }
 
 pub fn remove(name: &str) {
@@ -99,6 +112,15 @@ mod tests {
         fs::write(&path, [0u8; 3]).expect("write short");
         let error = read_f32_samples(&name, 2).expect_err("too small");
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        remove(&name);
+    }
+
+    #[test]
+    fn read_slice_returns_middle_segment() {
+        let samples = vec![0.0_f32, 0.25, -0.5, 1.0, 0.75];
+        let name = write_f32_samples(&samples).expect("write");
+        let slice = read_f32_samples_slice(&name, 1, 3).expect("read slice");
+        assert_eq!(slice, vec![0.25, -0.5, 1.0]);
         remove(&name);
     }
 }
