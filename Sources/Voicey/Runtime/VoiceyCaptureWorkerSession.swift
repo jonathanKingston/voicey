@@ -17,17 +17,50 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
   }
 
   func currentInputLevel() async throws -> Float {
+    let snapshot = try await currentCaptureLevelSnapshot()
+    return snapshot.level
+  }
+
+  func currentCaptureLevelSnapshot() async throws -> (level: Float, sampleCount: Int) {
     let response = try await client().send(
       request: ["type": "get_level", "id": UUID().uuidString],
       timeout: 2
     )
-    if let level = response["level"] as? Double {
-      return Float(level)
+    let level: Float
+    if let value = response["level"] as? Double {
+      level = Float(value)
+    } else if let value = response["level"] as? Float {
+      level = value
+    } else {
+      level = 0
     }
-    if let level = response["level"] as? Float {
-      return level
+    let sampleCount = response["sample_count"] as? Int ?? 0
+    return (level, sampleCount)
+  }
+
+  func drainHandsFreeUtterance(
+    startSampleIndex: Int,
+    endSampleIndex: Int,
+    applyTrailingTrim: Bool = true
+  ) async throws -> [Float] {
+    let response = try await client().send(
+      request: [
+        "type": "drain_hands_free_utterance",
+        "id": UUID().uuidString,
+        "start_sample_index": startSampleIndex,
+        "end_sample_index": endSampleIndex,
+        "apply_trailing_trim": applyTrailingTrim
+      ],
+      timeout: 120
+    )
+    try VoiceyJSONLResponse.ensureSuccess(response, context: "drain_hands_free_utterance")
+    guard let shmName = response["shm_name"] as? String,
+      let sampleCount = response["sample_count"] as? Int
+    else {
+      throw VoiceyCaptureWorkerError.invalidResponse
     }
-    return 0
+    defer { SharedMemoryPCM.remove(name: shmName) }
+    return try SharedMemoryPCM.read(name: shmName, sampleCount: sampleCount)
   }
 
   func startRecording(mode: RecordingMode = .manual) async throws {

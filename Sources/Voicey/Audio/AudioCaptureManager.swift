@@ -70,8 +70,11 @@ final class AudioCaptureManager {
         guard let self else { return }
         Task {
           do {
-            let level = try await VoiceyCaptureWorkerSession.shared.currentInputLevel()
-            self.handleCaptureLevel(level, totalSamplesCaptured: self.approximateWorkerSampleCount())
+            let snapshot = try await VoiceyCaptureWorkerSession.shared.currentCaptureLevelSnapshot()
+            self.handleCaptureLevel(
+              snapshot.level,
+              totalSamplesCaptured: snapshot.sampleCount
+            )
           } catch {
             // Worker may still be starting; keep last level.
           }
@@ -129,6 +132,107 @@ final class AudioCaptureManager {
     } catch {
       AppLogger.audio.error("Failed to start audio engine: \(error)")
     }
+  }
+
+  /// Ends the current hands-free utterance without stopping capture (continuous session).
+  func finalizeHandsFreeUtterance(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
+    guard recordingMode == .handsFree else { return nil }
+    return finalizeHandsFreeUtteranceAfterEnsuringBounds(applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+  }
+
+  /// Finalizes the open utterance when exiting hands-free (hotkey / cancel), including mid-phrase capture.
+  func finalizeHandsFreeUtteranceForSessionEnd(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
+    guard recordingMode == .handsFree else { return nil }
+    closeOpenHandsFreeUtteranceIfNeeded()
+    return finalizeHandsFreeUtteranceAfterEnsuringBounds(applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+  }
+
+  func recoverHandsFreeDetectorForNextUtterance() {
+    guard recordingMode == .handsFree else { return }
+    let baseline = currentHandsFreeSampleCount()
+    bufferQueue.sync {
+      guard var detector = self.handsFreeDetector else { return }
+      detector.prepareForNextUtterance(sampleBaseline: baseline)
+      self.handsFreeDetector = detector
+    }
+  }
+
+  private func finalizeHandsFreeUtteranceAfterEnsuringBounds(
+    applyTrailingTrimHeuristic: Bool
+  ) -> [Float]? {
+    guard let detector = handsFreeDetector else { return nil }
+    guard let startIndex = detector.speechStartSampleIndex,
+      let endIndex = detector.speechEndSampleIndex
+    else {
+      AppLogger.audio.warning("Hands-Free: Cannot finalize utterance without speech bounds")
+      recoverHandsFreeDetectorForNextUtterance()
+      return nil
+    }
+
+    if usesRustCaptureWorker {
+      do {
+        let samples = try runSynchronously {
+          try await VoiceyCaptureWorkerSession.shared.drainHandsFreeUtterance(
+            startSampleIndex: startIndex,
+            endSampleIndex: endIndex,
+            applyTrailingTrim: applyTrailingTrimHeuristic
+          )
+        }
+        let remainingSamples = try runSynchronously {
+          try await VoiceyCaptureWorkerSession.shared.currentCaptureLevelSnapshot().sampleCount
+        }
+        bufferQueue.sync {
+          guard var detector = self.handsFreeDetector else { return }
+          detector.prepareForNextUtterance(sampleBaseline: remainingSamples)
+          self.handsFreeDetector = detector
+        }
+        return samples
+      } catch {
+        AppLogger.audio.error("voicey-capture utterance drain failed: \(error.localizedDescription)")
+        recoverHandsFreeDetectorForNextUtterance()
+        return nil
+      }
+    }
+
+    var utterance: [Float]?
+    bufferQueue.sync {
+      guard var detector = self.handsFreeDetector else { return }
+      let fullBuffer = self.audioBuffer
+      var segment = detector.boundedSamples(from: fullBuffer)
+      if applyTrailingTrimHeuristic {
+        segment = self.trimTrailingLowEnergyAudio(segment)
+      }
+      let drainEnd = min(max(endIndex, 0), fullBuffer.count)
+      if drainEnd > 0 {
+        self.audioBuffer = Array(fullBuffer.dropFirst(drainEnd))
+      }
+      detector.prepareForNextUtterance(sampleBaseline: self.audioBuffer.count)
+      self.handsFreeDetector = detector
+      utterance = segment
+    }
+    return utterance
+  }
+
+  private func closeOpenHandsFreeUtteranceIfNeeded() {
+    bufferQueue.sync {
+      guard var detector = self.handsFreeDetector else { return }
+      guard detector.phase == .recording else { return }
+      let endIndex = self.currentHandsFreeSampleCount()
+      detector.forceEndUtterance(at: endIndex)
+      self.handsFreeDetector = detector
+    }
+  }
+
+  private func currentHandsFreeSampleCount() -> Int {
+    if usesRustCaptureWorker {
+      if let count = try? runSynchronously({
+        try await VoiceyCaptureWorkerSession.shared.currentCaptureLevelSnapshot().sampleCount
+      }) {
+        return count
+      }
+      return approximateWorkerSampleCount()
+    }
+    return bufferQueue.sync { audioBuffer.count }
   }
 
   func stopCapture(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {

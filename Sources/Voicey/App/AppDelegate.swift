@@ -46,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // Model upgrade lock - prevents recording during model swap
   private var isUpgradingModel = false
   private var handsFreeWaitTimeoutTask: Task<Void, Never>?
+  /// When true, the next hands-free deliver appends a trailing space for the following utterance.
+  private var handsFreeSeparateNextPasteWithSpace = false
 
   /// Held open with `flock(LOCK_NB)` so a second Voicey cannot register the same global shortcut.
   private var singleInstanceLockFileDescriptor: Int32 = -1
@@ -753,9 +755,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Transcription Control
 
   func toggleTranscription() {
-    if appState.isWaitingForSpeech {
-      cancelTranscription()
-    } else if appState.isRecording {
+    if appState.handsFreeSessionActive {
+      endHandsFreeSession()
+      return
+    }
+    if appState.isRecording {
       stopRecording()
     } else {
       startRecording()
@@ -881,6 +885,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appState.clearRecordingWaveformDisplay()
     let recordingMode = dependencies.settings.recordingMode
     if recordingMode == .handsFree {
+      appState.handsFreeSessionActive = true
+      handsFreeSeparateNextPasteWithSpace = false
+      appState.resetHandsFreeBackgroundTranscriptionJobs()
       appState.transcriptionState = .waitingForSpeech(startTime: Date())
       scheduleHandsFreeWaitTimeout()
       AppLogger.audio.info("Hands-Free: Armed and waiting for speech")
@@ -984,7 +991,110 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.audio.info(
       "Recording reached maximum duration (\(Int(RecordingDurationLimits.maxSeconds))s); stopping for transcription"
     )
-    stopRecording()
+    if appState.handsFreeSessionActive {
+      finishHandsFreeUtteranceAndContinueListening()
+    } else {
+      stopRecording()
+    }
+  }
+
+  func finishHandsFreeUtteranceAndContinueListening() {
+    guard appState.handsFreeSessionActive, appState.isRecording else { return }
+
+    AppLogger.audio.info("Hands-Free: Finalizing utterance; capture continues")
+
+    guard
+      let audioBuffer = audioCaptureManager?.finalizeHandsFreeUtterance(
+        applyTrailingTrimHeuristic: true)
+    else {
+      AppLogger.audio.error("Hands-Free: Failed to finalize utterance buffer")
+      audioCaptureManager?.recoverHandsFreeDetectorForNextUtterance()
+      appState.transcriptionState = .waitingForSpeech(startTime: Date())
+      return
+    }
+
+    appState.clearRecordingWaveformDisplay()
+    appState.transcriptionState = .waitingForSpeech(startTime: Date())
+
+    let durationSec = Double(audioBuffer.count) / 16000.0
+    AppLogger.audio.info(
+      "Hands-Free utterance: \(audioBuffer.count) samples (~\(String(format: "%.1f", durationSec))s)"
+    )
+
+    guard durationSec >= 0.5 else {
+      AppLogger.audio.warning("Hands-Free utterance too short; resuming listen")
+      return
+    }
+
+    Task {
+      await processTranscription(
+        audioBuffer: audioBuffer,
+        continueHandsFreeSession: true,
+        appendTrailingSpaceForNextUtterance: true
+      )
+    }
+  }
+
+  func endHandsFreeSession() {
+    AppLogger.general.info("Ending hands-free session")
+    cancelHandsFreeWaitTimeout()
+
+    appState.handsFreeSessionActive = false
+    handsFreeSeparateNextPasteWithSpace = false
+
+    var finalUtterance: [Float]?
+    if appState.isRecording {
+      finalUtterance = audioCaptureManager?.finalizeHandsFreeUtteranceForSessionEnd(
+        applyTrailingTrimHeuristic: true)
+    }
+
+    _ = audioCaptureManager?.stopCapture()
+    statusBarController?.updateIcon(recording: false)
+
+    if dependencies.settings.pauseMediaDuringTranscription {
+      dependencies.mediaPlayback.resumeAfterTranscription()
+    }
+
+    guard let audioBuffer = finalUtterance else {
+      appState.resetHandsFreeBackgroundTranscriptionJobs()
+      appState.transcriptionState = .idle
+      appState.clearRecordingWaveformDisplay()
+      hideOverlay()
+      tryPerformPendingUpgrade()
+      return
+    }
+
+    let durationSec = Double(audioBuffer.count) / 16000.0
+    guard durationSec >= 0.5 else {
+      AppLogger.audio.warning(
+        "Hands-Free session end: utterance too short (\(String(format: "%.2f", durationSec))s)"
+      )
+      appState.resetHandsFreeBackgroundTranscriptionJobs()
+      appState.transcriptionState = .idle
+      appState.clearRecordingWaveformDisplay()
+      hideOverlay()
+      tryPerformPendingUpgrade()
+      return
+    }
+
+    appState.resetHandsFreeBackgroundTranscriptionJobs()
+    let selectedModel = userFacingSelectedModel()
+    configureProcessingWaveformDisplay(
+      audioBuffer: audioBuffer,
+      durationSec: durationSec,
+      model: selectedModel
+    )
+    appState.transcriptionState = .processing
+    showOverlay()
+
+    Task {
+      await processTranscription(
+        audioBuffer: audioBuffer,
+        continueHandsFreeSession: false,
+        appendTrailingSpaceForNextUtterance: false,
+        pasteToCurrentFrontmost: true
+      )
+    }
   }
 
   func stopRecording() {
@@ -1052,13 +1162,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Process transcription
     Task {
-      await processTranscription(audioBuffer: audioBuffer)
+      await processTranscription(audioBuffer: audioBuffer, continueHandsFreeSession: false)
     }
   }
 
   func cancelTranscription() {
+    if appState.handsFreeSessionActive {
+      endHandsFreeSession()
+      return
+    }
+
     AppLogger.general.info("Cancelling transcription...")
     cancelHandsFreeWaitTimeout()
+    appState.handsFreeSessionActive = false
 
     appState.transcriptionState = .idle
     appState.clearRecordingWaveformDisplay()
@@ -1100,14 +1216,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func processTranscription(audioBuffer: [Float]) async {
+  private func processTranscription(
+    audioBuffer: [Float],
+    continueHandsFreeSession: Bool = false,
+    appendTrailingSpaceForNextUtterance: Bool = false,
+    pasteToCurrentFrontmost: Bool = false
+  ) async {
+    let durationSec = Double(audioBuffer.count) / 16000.0
+    let selectedModel = userFacingSelectedModel()
+    var backgroundJobID: UUID?
+    if continueHandsFreeSession {
+      await MainActor.run {
+        if selectedModel.isQwenModel {
+          let envelope = AudioWaveformEnvelope.normalizedBars(from: audioBuffer)
+          let estimatedRTF = self.estimatedTranscriptionRTF(for: selectedModel)
+          backgroundJobID = self.appState.addHandsFreeBackgroundTranscriptionJob(
+            envelope: envelope,
+            audioDuration: durationSec,
+            estimatedRTF: estimatedRTF
+          )
+        }
+        self.transcriptionOverlay?.syncLayout(to: self.appState)
+      }
+    }
+    defer {
+      if let backgroundJobID {
+        let jobID = backgroundJobID
+        Task { @MainActor in
+          self.appState.removeHandsFreeBackgroundTranscriptionJob(id: jobID)
+          self.transcriptionOverlay?.syncLayout(to: self.appState)
+        }
+      }
+    }
+
     do {
       debugPrint("🔄 Starting transcription...", category: "TRANSCRIBE")
       AppLogger.transcription.info(
         "processTranscription: Starting with \(audioBuffer.count) samples")
 
       // Transcribe audio using Qwen (Rust infer worker or in-process MLX).
-      let selectedModel = userFacingSelectedModel()
       let decoderContext = TranscriptionSteeringContext.make()
       let result: TranscriptionResult
       if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
@@ -1149,7 +1296,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       // Output text
       await MainActor.run {
-        appState.transcriptionState = .completed(text: processedText)
         appState.lastTranscription = processedText
 
         // Check if we have any text to deliver
@@ -1157,42 +1303,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
           AppLogger.transcription.warning(
             "processTranscription: No text to deliver (empty/whitespace after processing)")
+          if continueHandsFreeSession, self.appState.handsFreeSessionActive {
+            self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+            self.tryPerformPendingUpgrade()
+            return
+          }
           self.hideOverlay()
           self.appState.transcriptionState = .idle
-          // Media resume already ran in stopRecording when the mic stopped.
-          // Check for pending model upgrade now that we're idle
           self.tryPerformPendingUpgrade()
           return
         }
 
         debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
+        var deliverText = processedText
+        if appendTrailingSpaceForNextUtterance || self.handsFreeSeparateNextPasteWithSpace {
+          deliverText = TextCleanup.appendingInterUtteranceSpacingIfNeeded(deliverText)
+        }
+        if appendTrailingSpaceForNextUtterance {
+          self.handsFreeSeparateNextPasteWithSpace = true
+        }
+
+        let pasteTargetPID: pid_t? = {
+          if pasteToCurrentFrontmost || self.appState.handsFreeSessionActive {
+            return nil
+          }
+          return self.recordingTargetPID
+        }()
+
         // Deliver text to clipboard and optionally auto-paste
         outputManager?.deliver(
-          text: processedText,
-          targetPID: self.recordingTargetPID,
+          text: deliverText,
+          targetPID: pasteTargetPID,
           completion: { [weak self] in
             debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
-            self?.hideOverlay()
-            self?.appState.transcriptionState = .idle
-            // Media resume already ran in stopRecording when the mic stopped.
-            self?.tryPerformPendingUpgrade()
+            guard let self else { return }
+            if continueHandsFreeSession, self.appState.handsFreeSessionActive {
+              self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+              self.tryPerformPendingUpgrade()
+              return
+            }
+            self.hideOverlay()
+            self.appState.transcriptionState = .idle
+            self.tryPerformPendingUpgrade()
           }
         )
 
-        // Clear targets after attempting output
-        self.recordingTargetPID = nil
-        self.recordingTargetScreen = nil
+        if continueHandsFreeSession {
+          self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+        } else {
+          self.appState.transcriptionState = .completed(text: processedText)
+        }
+
+        if !continueHandsFreeSession {
+          // Clear targets after attempting output
+          self.recordingTargetPID = nil
+          self.recordingTargetScreen = nil
+        }
       }
     } catch {
       debugPrint("❌ Transcription error: \(error)", category: "ERROR")
       AppLogger.transcription.error("Transcription error: \(error)")
       await MainActor.run { [weak self] in
-        self?.hideOverlay()
-        self?.appState.transcriptionState = .error(message: error.localizedDescription)
-        self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-        // Media resume already ran in stopRecording when the mic stopped.
-        self?.tryPerformPendingUpgrade()
+        guard let self else { return }
+        if continueHandsFreeSession, self.appState.handsFreeSessionActive {
+          self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+          self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+          self.tryPerformPendingUpgrade()
+          return
+        }
+        self.hideOverlay()
+        self.appState.transcriptionState = .error(message: error.localizedDescription)
+        self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+        self.tryPerformPendingUpgrade()
       }
     }
   }
@@ -1234,6 +1417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
       }
       transcriptionOverlay?.show(on: recordingTargetScreen)
+      transcriptionOverlay?.syncLayout(to: appState)
     }
   }
 

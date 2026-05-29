@@ -5,11 +5,23 @@ public struct HandsFreeRecordingConfiguration: Sendable, Equatable {
 
   public let sampleRate: Int
   public let preRollDuration: TimeInterval
+  /// Legacy absolute floor; effective start uses `max(this, noiseFloor + speechStartMarginAboveNoise)`.
   public let speechStartThreshold: Float
+  /// Legacy absolute ceiling for silence; effective end uses adaptive thresholds instead.
   public let speechEndThreshold: Float
   public let minimumSpeechDuration: TimeInterval
   public let silenceHangoverDuration: TimeInterval
   public let waitTimeoutDuration: TimeInterval
+  /// Level must exceed calibrated noise by at least this much to begin speech.
+  public let speechStartMarginAboveNoise: Float
+  /// Silence hangover ends when level stays below noise floor plus this margin.
+  public let speechEndMarginAboveNoise: Float
+  /// Also treat levels below this fraction of peak recording level as silence.
+  public let speechEndPeakFraction: Float
+  public let noiseFloorSmoothingFactor: Float
+  public let initialNoiseFloor: Float
+  /// Ignore speech-start detection until the mic level has been observed for this long.
+  public let minimumCalibrationDuration: TimeInterval
 
   public init(
     sampleRate: Int = 16_000,
@@ -17,8 +29,14 @@ public struct HandsFreeRecordingConfiguration: Sendable, Equatable {
     speechStartThreshold: Float = 0.09,
     speechEndThreshold: Float = 0.045,
     minimumSpeechDuration: TimeInterval = 0.18,
-    silenceHangoverDuration: TimeInterval = 0.8,
-    waitTimeoutDuration: TimeInterval = 8.0
+    silenceHangoverDuration: TimeInterval = 1.5,
+    waitTimeoutDuration: TimeInterval = 8.0,
+    speechStartMarginAboveNoise: Float = 0.07,
+    speechEndMarginAboveNoise: Float = 0.025,
+    speechEndPeakFraction: Float = 0.30,
+    noiseFloorSmoothingFactor: Float = 0.2,
+    initialNoiseFloor: Float = 0.02,
+    minimumCalibrationDuration: TimeInterval = 0.35
   ) {
     self.sampleRate = sampleRate
     self.preRollDuration = preRollDuration
@@ -27,6 +45,12 @@ public struct HandsFreeRecordingConfiguration: Sendable, Equatable {
     self.minimumSpeechDuration = minimumSpeechDuration
     self.silenceHangoverDuration = silenceHangoverDuration
     self.waitTimeoutDuration = waitTimeoutDuration
+    self.speechStartMarginAboveNoise = speechStartMarginAboveNoise
+    self.speechEndMarginAboveNoise = speechEndMarginAboveNoise
+    self.speechEndPeakFraction = speechEndPeakFraction
+    self.noiseFloorSmoothingFactor = noiseFloorSmoothingFactor
+    self.initialNoiseFloor = initialNoiseFloor
+    self.minimumCalibrationDuration = minimumCalibrationDuration
   }
 
   public var preRollSamples: Int {
@@ -43,6 +67,10 @@ public struct HandsFreeRecordingConfiguration: Sendable, Equatable {
 
   public var waitTimeoutSamples: Int {
     max(1, Int((waitTimeoutDuration * Double(sampleRate)).rounded()))
+  }
+
+  public var minimumCalibrationSamples: Int {
+    max(1, Int((minimumCalibrationDuration * Double(sampleRate)).rounded()))
   }
 }
 
@@ -67,9 +95,13 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
   private var consecutiveSpeechSamples: Int = 0
   private var consecutiveSilenceSamples: Int = 0
   private var lastSpeechSampleIndex: Int = 0
+  private var noiseFloor: Float
+  private var peakLevelWhileRecording: Float = 0
+  private var samplesObservedWhileWaiting: Int = 0
 
   public init(configuration: HandsFreeRecordingConfiguration = .default) {
     self.configuration = configuration
+    self.noiseFloor = configuration.initialNoiseFloor
   }
 
   public var hasDetectedSpeech: Bool {
@@ -78,6 +110,14 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
 
   public mutating func consume(level: Float, totalSamplesCaptured: Int) -> [Event] {
     let normalizedTotalSamples = max(totalSamplesCaptured, 0)
+    if normalizedTotalSamples < lastObservedSampleCount {
+      lastObservedSampleCount = normalizedTotalSamples
+    }
+
+    if phase == .speechEnded {
+      reopenListeningAfterUtterance()
+    }
+
     let sampleDelta = max(normalizedTotalSamples - lastObservedSampleCount, 0)
     lastObservedSampleCount = normalizedTotalSamples
 
@@ -85,7 +125,16 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
 
     switch phase {
     case .waitingForSpeech:
-      guard level >= configuration.speechStartThreshold else {
+      adaptNoiseFloor(toward: level)
+      samplesObservedWhileWaiting += sampleDelta
+      let startThreshold = effectiveStartThreshold()
+
+      guard samplesObservedWhileWaiting >= configuration.minimumCalibrationSamples else {
+        consecutiveSpeechSamples = 0
+        return []
+      }
+
+      guard level >= startThreshold else {
         consecutiveSpeechSamples = 0
         return []
       }
@@ -102,11 +151,15 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
       speechStartSampleIndex = speechStartIndex
       lastSpeechSampleIndex = normalizedTotalSamples
       consecutiveSilenceSamples = 0
+      peakLevelWhileRecording = level
       phase = .recording
       return [.speechStarted(startSampleIndex: speechStartIndex)]
 
     case .recording:
-      if level >= configuration.speechEndThreshold {
+      peakLevelWhileRecording = max(peakLevelWhileRecording, level)
+      let endThreshold = effectiveEndThreshold()
+
+      if level >= endThreshold {
         lastSpeechSampleIndex = normalizedTotalSamples
         consecutiveSilenceSamples = 0
         return []
@@ -132,5 +185,48 @@ public struct HandsFreeSpeechDetector: Sendable, Equatable {
     let startIndex = min(max(speechStartSampleIndex, 0), samples.count)
     let endIndex = min(max(speechEndSampleIndex ?? samples.count, startIndex), samples.count)
     return Array(samples[startIndex..<endIndex])
+  }
+
+  /// Resets VAD after an utterance while keeping the learned noise floor for the session.
+  public mutating func prepareForNextUtterance(sampleBaseline: Int) {
+    reopenListeningAfterUtterance()
+    lastObservedSampleCount = max(sampleBaseline, 0)
+  }
+
+  /// Clears utterance bounds but keeps sample timing so the next poll can advance.
+  public mutating func reopenListeningAfterUtterance() {
+    phase = .waitingForSpeech
+    speechStartSampleIndex = nil
+    speechEndSampleIndex = nil
+    consecutiveSpeechSamples = 0
+    consecutiveSilenceSamples = 0
+    peakLevelWhileRecording = 0
+  }
+
+  /// Closes an in-progress utterance when the user ends the session mid-phrase.
+  public mutating func forceEndUtterance(at endSampleIndex: Int) {
+    guard speechStartSampleIndex != nil else { return }
+    let normalizedEnd = max(endSampleIndex, speechStartSampleIndex ?? 0)
+    speechEndSampleIndex = normalizedEnd
+    lastSpeechSampleIndex = max(lastSpeechSampleIndex, normalizedEnd)
+    phase = .speechEnded
+  }
+
+  private mutating func adaptNoiseFloor(toward level: Float) {
+    let smoothing = configuration.noiseFloorSmoothingFactor
+    noiseFloor += smoothing * (level - noiseFloor)
+  }
+
+  private func effectiveStartThreshold() -> Float {
+    max(
+      configuration.speechStartThreshold,
+      noiseFloor + configuration.speechStartMarginAboveNoise
+    )
+  }
+
+  private func effectiveEndThreshold() -> Float {
+    let floorBased = noiseFloor + configuration.speechEndMarginAboveNoise
+    let peakBased = peakLevelWhileRecording * configuration.speechEndPeakFraction
+    return max(floorBased, peakBased, configuration.speechEndThreshold)
   }
 }

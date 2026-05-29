@@ -10,7 +10,7 @@ extension AppDelegate: AudioCaptureManagerDelegate {
 
   func audioCaptureManagerDidDetectSpeechStart(_ manager: AudioCaptureManager) {
     Task { @MainActor in
-      guard self.appState.isWaitingForSpeech else { return }
+      guard self.appState.handsFreeSessionActive, self.appState.isWaitingForSpeech else { return }
       self.cancelHandsFreeWaitTimeout()
       self.appState.transcriptionState = .recording(startTime: Date())
       AppLogger.audio.info("Hands-Free: Speech detected; recording started")
@@ -19,9 +19,13 @@ extension AppDelegate: AudioCaptureManagerDelegate {
 
   func audioCaptureManagerDidDetectSpeechEnd(_ manager: AudioCaptureManager) {
     Task { @MainActor in
-      guard self.appState.isRecording else { return }
-      AppLogger.audio.info("Hands-Free: Silence hangover reached; stopping recording")
-      self.stopRecording()
+      guard self.appState.handsFreeSessionActive else { return }
+      guard self.appState.isRecording else {
+        manager.recoverHandsFreeDetectorForNextUtterance()
+        return
+      }
+      AppLogger.audio.info("Hands-Free: Silence hangover reached; finalizing utterance")
+      self.finishHandsFreeUtteranceAndContinueListening()
     }
   }
 }

@@ -150,6 +150,12 @@ enum L10n {
         static var ready: String { L10n.string("state.ready") }
         static var loadingModel: String { L10n.string("state.loadingModel") }
         static var waitingForSpeech: String { L10n.string("state.waitingForSpeech") }
+        static var waitingForSpeechWhileTranscribing: String {
+            L10n.string("state.waitingForSpeechWhileTranscribing")
+        }
+        static var listeningWhileTranscribing: String {
+            L10n.string("state.listeningWhileTranscribing")
+        }
         static var listening: String { L10n.string("state.listening") }
         static var transcribing: String { L10n.string("state.transcribing") }
         static var done: String { L10n.string("state.done") }

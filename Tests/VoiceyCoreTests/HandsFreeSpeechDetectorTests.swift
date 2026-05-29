@@ -12,7 +12,8 @@ final class HandsFreeSpeechDetectorTests: XCTestCase {
         speechEndThreshold: 0.045,
         minimumSpeechDuration: 0.18,
         silenceHangoverDuration: 0.8,
-        waitTimeoutDuration: 8.0
+        waitTimeoutDuration: 8.0,
+        minimumCalibrationDuration: 0
       )
     )
 
@@ -32,17 +33,64 @@ final class HandsFreeSpeechDetectorTests: XCTestCase {
         speechEndThreshold: 0.045,
         minimumSpeechDuration: 0.18,
         silenceHangoverDuration: 0.8,
+        waitTimeoutDuration: 8.0,
+        minimumCalibrationDuration: 0
+      )
+    )
+
+    _ = detector.consume(level: 0.02, totalSamplesCaptured: 2_000)
+    _ = detector.consume(level: 0.35, totalSamplesCaptured: 5_000)
+    XCTAssertEqual(detector.phase, .recording)
+
+    XCTAssertTrue(detector.consume(level: 0.35, totalSamplesCaptured: 8_000).isEmpty)
+    let events = detector.consume(level: 0.02, totalSamplesCaptured: 21_000)
+
+    XCTAssertEqual(events, [.speechEnded(endSampleIndex: 8_000)])
+    XCTAssertEqual(detector.phase, .speechEnded)
+  }
+
+  func testHighAmbientNoiseDoesNotTriggerSpeechStart() {
+    var detector = HandsFreeSpeechDetector(
+      configuration: HandsFreeRecordingConfiguration(
+        sampleRate: 16_000,
+        minimumSpeechDuration: 0.18,
+        silenceHangoverDuration: 0.8,
         waitTimeoutDuration: 8.0
       )
     )
 
-    _ = detector.consume(level: 0.12, totalSamplesCaptured: 5_000)
-    XCTAssertEqual(detector.phase, .recording)
+    for sampleCount in stride(from: 1_600, through: 16_000, by: 1_600) {
+      XCTAssertTrue(
+        detector.consume(level: 0.14, totalSamplesCaptured: sampleCount).isEmpty,
+        "Expected quiet ambient noise to stay in waiting phase at \(sampleCount) samples"
+      )
+    }
+    XCTAssertEqual(detector.phase, .waitingForSpeech)
+  }
 
-    XCTAssertTrue(detector.consume(level: 0.12, totalSamplesCaptured: 8_000).isEmpty)
-    let events = detector.consume(level: 0.02, totalSamplesCaptured: 21_000)
+  func testRecordingEndsWhenAmbientWasMistakenForSpeech() {
+    var detector = HandsFreeSpeechDetector(
+      configuration: HandsFreeRecordingConfiguration(
+        sampleRate: 16_000,
+        minimumSpeechDuration: 0.18,
+        silenceHangoverDuration: 0.8,
+        waitTimeoutDuration: 8.0,
+        speechStartMarginAboveNoise: 0.05
+      )
+    )
 
-    XCTAssertEqual(events, [.speechEnded(endSampleIndex: 8_000)])
+    for sampleCount in stride(from: 1_600, through: 9_600, by: 1_600) {
+      _ = detector.consume(level: 0.12, totalSamplesCaptured: sampleCount)
+    }
+    let startEvents = detector.consume(level: 0.22, totalSamplesCaptured: 12_800)
+    XCTAssertEqual(startEvents, [.speechStarted(startSampleIndex: 5_600)])
+
+    for sampleCount in stride(from: 14_400, through: 19_200, by: 1_600) {
+      _ = detector.consume(level: 0.12, totalSamplesCaptured: sampleCount)
+    }
+
+    let endEvents = detector.consume(level: 0.12, totalSamplesCaptured: 28_800)
+    XCTAssertEqual(endEvents, [.speechEnded(endSampleIndex: 12_800)])
     XCTAssertEqual(detector.phase, .speechEnded)
   }
 
@@ -55,7 +103,8 @@ final class HandsFreeSpeechDetectorTests: XCTestCase {
         speechEndThreshold: 0.045,
         minimumSpeechDuration: 0.2,
         silenceHangoverDuration: 0.3,
-        waitTimeoutDuration: 8.0
+        waitTimeoutDuration: 8.0,
+        minimumCalibrationDuration: 0
       )
     )
 
@@ -71,5 +120,27 @@ final class HandsFreeSpeechDetectorTests: XCTestCase {
     var detector = HandsFreeSpeechDetector()
     XCTAssertTrue(detector.consume(level: 0.01, totalSamplesCaptured: 2_000).isEmpty)
     XCTAssertEqual(detector.boundedSamples(from: Array(repeating: 0.0, count: 2_000)), [])
+  }
+
+  func testSpeechEndedPhaseRecoversForNextUtterance() {
+    var detector = HandsFreeSpeechDetector(
+      configuration: HandsFreeRecordingConfiguration(
+        sampleRate: 16_000,
+        minimumSpeechDuration: 0.18,
+        silenceHangoverDuration: 0.8,
+        waitTimeoutDuration: 8.0,
+        minimumCalibrationDuration: 0
+      )
+    )
+
+    _ = detector.consume(level: 0.02, totalSamplesCaptured: 2_000)
+    _ = detector.consume(level: 0.35, totalSamplesCaptured: 5_000)
+    _ = detector.consume(level: 0.35, totalSamplesCaptured: 8_000)
+    _ = detector.consume(level: 0.02, totalSamplesCaptured: 21_000)
+    XCTAssertEqual(detector.phase, .speechEnded)
+
+    let nextStart = detector.consume(level: 0.35, totalSamplesCaptured: 25_000)
+    XCTAssertFalse(nextStart.isEmpty)
+    XCTAssertEqual(detector.phase, .recording)
   }
 }
