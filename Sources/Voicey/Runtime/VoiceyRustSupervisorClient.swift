@@ -54,6 +54,45 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
   }
 
   func transcribe(
+    pcmHandle: PCMBufferHandle,
+    model: SpeechModel,
+    decoderContext: String? = nil
+  ) async throws -> TranscriptionResult {
+    var request: [String: Any] = [
+      "type": "transcribe",
+      "id": UUID().uuidString,
+      "model_id": model.rawValue,
+      "sample_rate": pcmHandle.sampleRate,
+      "shm_name": pcmHandle.shmName,
+      "sample_count": pcmHandle.sampleCount
+    ]
+    if let decoderContext, !decoderContext.isEmpty {
+      request["decoder_context"] = decoderContext
+    }
+
+    let response = try await client().send(request: request)
+    try VoiceyJSONLResponse.ensureSuccess(response, context: "transcribe")
+
+    let rawText = response["raw_text"] as? String ?? ""
+    let processingTime = response["processing_seconds"] as? Double ?? 0
+    let audioDuration = response["audio_seconds"] as? Double ?? pcmHandle.durationSeconds
+    let rtf = audioDuration > 0 ? processingTime / audioDuration : 0
+
+    return TranscriptionResult(
+      text: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
+      segments: [],
+      language: response["language"] as? String ?? "auto",
+      processingTime: processingTime,
+      performanceMetrics: PerformanceMetrics(
+        realTimeFactor: rtf,
+        audioDuration: audioDuration,
+        processingTime: processingTime,
+        thermalState: ProcessInfo.processInfo.thermalState
+      )
+    )
+  }
+
+  func transcribe(
     samples: [Float],
     model: SpeechModel,
     decoderContext: String? = nil

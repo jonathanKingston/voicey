@@ -1004,7 +1004,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Stop audio capture and get buffer
     guard
-      let audioBuffer = audioCaptureManager?.stopCapture(
+      let capturedAudio = audioCaptureManager?.stopCapture(
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
     else {
       debugPrint("❌ No audio buffer!", category: "ERROR")
@@ -1015,16 +1015,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    let durationSec = Double(audioBuffer.count) / 16000.0
+    let durationSec = capturedAudio.durationSeconds
     debugPrint(
-      "📊 Got \(audioBuffer.count) samples (~\(String(format: "%.1f", durationSec))s of audio)",
+      "📊 Got \(capturedAudio.sampleCount) samples (~\(String(format: "%.1f", durationSec))s of audio)",
       category: "AUDIO")
     AppLogger.audio.info(
-      "Got audio buffer with \(audioBuffer.count) samples (~\(String(format: "%.1f", durationSec))s)"
+      "Got audio buffer with \(capturedAudio.sampleCount) samples (~\(String(format: "%.1f", durationSec))s)"
     )
 
     // Check minimum duration (0.5 seconds)
     if durationSec < 0.5 {
+      capturedAudio.removeSharedBufferIfNeeded()
       debugPrint(
         "⚠️ Audio too short (\(String(format: "%.2f", durationSec))s), skipping", category: "AUDIO")
       AppLogger.audio.warning(
@@ -1044,7 +1045,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     configureProcessingWaveformDisplay(
-      audioBuffer: audioBuffer,
+      capturedAudio: capturedAudio,
       durationSec: durationSec,
       model: selectedModel
     )
@@ -1052,7 +1053,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Process transcription
     Task {
-      await processTranscription(audioBuffer: audioBuffer)
+      await processTranscription(capturedAudio: capturedAudio)
     }
   }
 
@@ -1063,8 +1064,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appState.transcriptionState = .idle
     appState.clearRecordingWaveformDisplay()
 
-    // Stop and discard audio
-    _ = audioCaptureManager?.stopCapture()
+    // Stop and discard audio (release shared PCM file if capture used voicey-capture).
+    if let capturedAudio = audioCaptureManager?.stopCapture() {
+      capturedAudio.removeSharedBufferIfNeeded()
+    }
 
     // Hide overlay
     hideOverlay()
@@ -1100,11 +1103,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func processTranscription(audioBuffer: [Float]) async {
+  private func processTranscription(capturedAudio: CapturedAudio) async {
     do {
       debugPrint("🔄 Starting transcription...", category: "TRANSCRIBE")
       AppLogger.transcription.info(
-        "processTranscription: Starting with \(audioBuffer.count) samples")
+        "processTranscription: Starting with \(capturedAudio.sampleCount) samples")
 
       // Transcribe audio using Qwen (Rust infer worker or in-process MLX).
       let selectedModel = userFacingSelectedModel()
@@ -1112,12 +1115,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let result: TranscriptionResult
       if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
         result = try await VoiceyRuntimeSupervisor.shared.transcribe(
-          samples: audioBuffer,
+          capturedAudio: capturedAudio,
           model: selectedModel,
           warmupAlreadyDone: multiprocessInferReady,
           decoderContext: decoderContext
         )
       } else {
+        let audioBuffer = try capturedAudio.inMemorySamples()
+        defer { capturedAudio.removeSharedBufferIfNeeded() }
         guard
           let qwenResult = try await qwenEngine?.transcribe(
             audioBuffer: audioBuffer,
@@ -1200,12 +1205,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Overlay
 
   private func configureProcessingWaveformDisplay(
-    audioBuffer: [Float],
+    capturedAudio: CapturedAudio,
     durationSec: TimeInterval,
     model: SpeechModel
   ) {
     guard model.isQwenModel else { return }
-    let envelope = AudioWaveformEnvelope.normalizedBars(from: audioBuffer)
+    let envelope: [Float]
+    switch capturedAudio {
+    case .inMemory(let samples):
+      envelope = AudioWaveformEnvelope.normalizedBars(from: samples)
+    case .sharedBuffer:
+      envelope = Array(repeating: 0.08, count: AudioWaveformEnvelope.displayBarCount)
+    }
     let estimatedRTF = estimatedTranscriptionRTF(for: model)
     appState.prepareTranscriptionProgressDisplay(
       envelope: envelope,

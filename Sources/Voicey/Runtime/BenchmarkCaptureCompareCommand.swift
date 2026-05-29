@@ -24,10 +24,12 @@ enum BenchmarkCaptureCompareCommand {
       let manager = AudioCaptureManager()
       manager.startCapture()
       try await Task.sleep(nanoseconds: UInt64(options.durationSeconds * 1_000_000_000))
-      guard let swiftSamples = manager.stopCapture(applyTrailingTrimHeuristic: false) else {
+      guard let capturedAudio = manager.stopCapture(applyTrailingTrimHeuristic: false) else {
         fputs("error: Swift capture returned no samples\n", stderr)
         return 1
       }
+      let swiftSamples = try capturedAudio.inMemorySamples()
+      defer { capturedAudio.removeSharedBufferIfNeeded() }
 
       let rustClient = VoiceyCaptureWorkerClient(path: capturePath)
       let rustFixture = try rustClient.recordFixture(durationSeconds: options.durationSeconds)
