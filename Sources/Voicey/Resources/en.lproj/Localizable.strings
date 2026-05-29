@@ -109,6 +109,8 @@
 "model.availableModels" = "Available Models";
 "model.performance" = "Performance";
 "model.performanceDescription" = "GPU acceleration is automatically enabled via Metal on Apple Silicon.";
+"model.sizeFootnote" = "%@ on disk · ~%@ RAM when loaded";
+"model.memoryFootnoteMultiprocess" = "Qwen runs in a helper process; Activity Monitor may show the total across Voicey processes.";
 "model.recommended" = "Recommended";
 "model.download" = "Download";
 "model.delete" = "Delete";

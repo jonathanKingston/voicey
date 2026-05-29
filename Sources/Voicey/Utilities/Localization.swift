@@ -302,6 +302,12 @@ enum L10n {
         static var availableModels: String { L10n.string("model.availableModels") }
         static var performance: String { L10n.string("model.performance") }
         static var performanceDescription: String { L10n.string("model.performanceDescription") }
+        static func sizeFootnote(disk: String, memory: String) -> String {
+            L10n.string("model.sizeFootnote", disk, memory)
+        }
+        static var memoryFootnoteMultiprocess: String {
+            L10n.string("model.memoryFootnoteMultiprocess")
+        }
         static var recommended: String { L10n.string("model.recommended") }
         static var download: String { L10n.string("model.download") }
         static var delete: String { L10n.string("model.delete") }
