@@ -1025,6 +1025,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Check minimum duration (0.5 seconds)
     if durationSec < 0.5 {
+      capturedAudio.removeSharedBufferIfNeeded()
       debugPrint(
         "⚠️ Audio too short (\(String(format: "%.2f", durationSec))s), skipping", category: "AUDIO")
       AppLogger.audio.warning(
@@ -1063,8 +1064,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appState.transcriptionState = .idle
     appState.clearRecordingWaveformDisplay()
 
-    // Stop and discard audio
-    _ = audioCaptureManager?.stopCapture()
+    // Stop and discard audio (release shared PCM file if capture used voicey-capture).
+    if let capturedAudio = audioCaptureManager?.stopCapture() {
+      capturedAudio.removeSharedBufferIfNeeded()
+    }
 
     // Hide overlay
     hideOverlay()

@@ -54,4 +54,11 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertEqual(captured.sampleCount, 16_000)
     XCTAssertEqual(captured.durationSeconds, 1.0, accuracy: 0.001)
   }
+
+  func testCapturedAudioInMemoryDuration() {
+    let captured = CapturedAudio.inMemory(Array(repeating: 0, count: 8_000))
+    XCTAssertEqual(captured.sampleCount, 8_000)
+    XCTAssertEqual(captured.durationSeconds, 0.5, accuracy: 0.001)
+    captured.removeSharedBufferIfNeeded()
+  }
 }
