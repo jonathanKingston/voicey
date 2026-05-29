@@ -255,6 +255,66 @@ fn capture_fixture_returns_capture_stopped() {
     }
 }
 
+/// Phase 1 pass-through: capture worker PCM file is forwarded to infer without host rewrite.
+#[test]
+fn capture_fixture_then_transcribe_uses_capture_shm() {
+    const MODEL_ID: &str = "qwen3-asr-0.6b-6bit";
+    let mut session = SupervisorSession::spawn(&[]);
+
+    let capture = session.request(&HostRequest::CaptureFixture {
+        id: "cap-tx-1".into(),
+        duration_seconds: 0.05,
+    });
+    let (shm_name, sample_count) = match capture {
+        HostResponse::CaptureStopped {
+            shm_name,
+            sample_count,
+            ..
+        } => (shm_name, sample_count),
+        other => panic!("expected capture_stopped, got {other:?}"),
+    };
+
+    let load = session.request(&HostRequest::LoadModel {
+        id: "load-cap-tx".into(),
+        model_id: MODEL_ID.into(),
+    });
+    assert!(
+        matches!(load, HostResponse::InferReady { .. }),
+        "expected infer_ready, got {load:?}"
+    );
+
+    let transcribe = session.request(&HostRequest::Transcribe {
+        id: "tx-cap-1".into(),
+        model_id: MODEL_ID.into(),
+        sample_rate: 16_000,
+        shm_name: shm_name.clone(),
+        sample_count,
+        sample_offset: 0,
+        decoder_context: None,
+    });
+    voicey_pcm::remove(&shm_name);
+
+    match transcribe {
+        HostResponse::TranscribeResult {
+            id,
+            ok,
+            raw_text,
+            audio_seconds,
+            ..
+        } => {
+            assert_eq!(id, "tx-cap-1");
+            assert!(ok);
+            assert_eq!(
+                raw_text.as_deref(),
+                Some(format!("stub-transcribe:{MODEL_ID}:{sample_count}").as_str())
+            );
+            let expected_seconds = sample_count as f64 / 16_000.0;
+            assert!((audio_seconds.unwrap_or(0.0) - expected_seconds).abs() < 1e-6);
+        }
+        other => panic!("expected transcribe_result, got {other:?}"),
+    }
+}
+
 #[test]
 fn invalid_host_json_returns_error() {
     let mut session = SupervisorSession::spawn(&[]);
