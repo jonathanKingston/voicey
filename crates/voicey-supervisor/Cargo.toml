@@ -12,5 +12,8 @@ voicey-protocol = { path = "../voicey-protocol" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[dev-dependencies]
+voicey-pcm = { path = "../voicey-pcm" }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
