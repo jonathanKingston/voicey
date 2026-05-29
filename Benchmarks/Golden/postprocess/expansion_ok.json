@@ -1,0 +1,8 @@
+{
+  "description": "Default text expansions (e.g. spelled-out OK)",
+  "text": "that sounds o k to me",
+  "segments": [],
+  "voice_commands_enabled": false,
+  "voice_commands": [],
+  "expected": "that sounds OK to me"
+}

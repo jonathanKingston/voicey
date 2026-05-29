@@ -31,7 +31,7 @@ Tracking issues:
 |-------|------|------------------------------|
 | Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` fallback (`VOICEY_USE_RUST_CAPTURE=0`, dev disable) |
 | Fetch | `voicey-fetch` | `HuggingFaceDownloader` fallback |
-| Post-process | `voicey-text` crate (parity/tests; #63 open) | `PostProcessor` / `NoiseFilter` in host hot path |
+| Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` fallback on worker error / `VOICEY_USE_RUST_TEXT=0` |
 | Text / glossary | `voicey-text` | `VoiceyCore` in host |
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
@@ -55,6 +55,7 @@ Multi-process core for Voicey on macOS:
 | Supervisor | `voicey-supervisor` | Orchestrates infer + capture + fetch prewarm |
 | Capture | `voicey-capture` | Hotkey microphone recording |
 | Fetch | `voicey-fetch` | Qwen model file downloads |
+| Text post-process | `voicey-text` | Noise filter, expansions, voice commands after infer |
 
 Mic capture, UI, and paste remain in the main app process unless noted above.
 
@@ -68,6 +69,7 @@ After `make build-rust` and `make bundle-debug`, workers live in `Voicey.app/Con
 | `VOICEY_USE_RUST_SUPERVISOR=0` | Direct infer-worker IPC (no supervisor) |
 | `VOICEY_USE_RUST_FETCH=0` | Hub-based Qwen downloads |
 | `VOICEY_USE_RUST_CAPTURE=0` | AVAudioEngine mic capture |
+| `VOICEY_USE_RUST_TEXT=0` | Swift `PostProcessor` only (no `voicey-text` worker) |
 | `VOICEY_RUNTIME=in-process` | Qwen MLX inside main app |
 | `VOICEY_USE_FETCH_SANDBOX=0` | Disable the bundled default seatbelt profile for `voicey-fetch` in direct builds |
 | `VOICEY_FETCH_SANDBOX_PROFILE=/path/to/profile.sb` | Launch `voicey-fetch` via `sandbox-exec -f` with the given seatbelt profile |
@@ -87,6 +89,17 @@ Copy runtime diagnostics from **Settings → Advanced** when reporting issues.
 That keeps the main app off the Qwen listing hot path and narrows the worker's authority versus the older raw `url + staging_path` contract.
 
 In direct-distribution builds, Voicey now defaults `voicey-fetch` to a bundled seatbelt profile unless `VOICEY_USE_FETCH_SANDBOX=0` disables it. `VOICEY_FETCH_SANDBOX_PROFILE` still overrides the profile path for local testing.
+
+## Text worker contract (`voicey-text`)
+
+After infer returns raw text, the host may delegate to `voicey-text` over JSONL (`ping`, `postprocess`, `shutdown`):
+
+- **Segment-less backends (Qwen):** `segments` is empty; intelligent punctuation is skipped (same as Swift `PostProcessor`).
+- **Segmented backends:** optional `segments` with `start_time` / `end_time` drive pause-based punctuation.
+- **Voice commands:** host sends enabled commands as structured JSON; settings are snapshotted per request.
+- **Golden parity:** `Benchmarks/Golden/postprocess/*.json` — `cargo test -p voicey-text --test golden_postprocess`.
+
+Swift falls back to in-process `PostProcessor` if the worker is missing or returns an error.
 
 ## Build & run
 
