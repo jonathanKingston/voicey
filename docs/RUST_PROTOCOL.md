@@ -38,6 +38,7 @@ Linux integration tests spawn `voicey-supervisor` with stub workers (no MLX, mic
 
 ```bash
 make test-supervisor-integration
+cargo test -p voicey-capture --test capture_ipc
 ```
 
 Stub behavior overrides: `VOICEY_INFER_STUB_MODE` (`fail_load`, `fail_transcribe`, `malformed_response`, `exit_on_first_request`, `exit_on_start`).

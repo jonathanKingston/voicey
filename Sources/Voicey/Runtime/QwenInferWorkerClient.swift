@@ -128,6 +128,9 @@ final class QwenInferWorkerClient: @unchecked Sendable {
       "shm_name": pcmHandle.shmName,
       "sample_count": pcmHandle.sampleCount
     ]
+    if pcmHandle.sampleOffset > 0 {
+      request["sample_offset"] = pcmHandle.sampleOffset
+    }
     if let decoderContext, !decoderContext.isEmpty {
       request["decoder_context"] = decoderContext
     }

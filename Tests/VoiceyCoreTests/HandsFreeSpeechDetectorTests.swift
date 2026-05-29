@@ -169,4 +169,26 @@ final class HandsFreeSpeechDetectorTests: XCTestCase {
     XCTAssertFalse(nextStart.isEmpty)
     XCTAssertEqual(detector.phase, .recording)
   }
+
+  func testBoundedSliceMatchesBoundedSamplesWindow() {
+    var detector = HandsFreeSpeechDetector(
+      configuration: HandsFreeRecordingConfiguration(
+        sampleRate: 10,
+        preRollDuration: 0.2,
+        speechStartThreshold: 0.09,
+        speechEndThreshold: 0.045,
+        minimumSpeechDuration: 0.2,
+        silenceHangoverDuration: 0.3,
+        waitTimeoutDuration: 8.0
+      )
+    )
+
+    _ = detector.consume(level: 0.5, totalSamplesCaptured: 4)
+    _ = detector.consume(level: 0.5, totalSamplesCaptured: 7)
+    _ = detector.consume(level: 0.0, totalSamplesCaptured: 10)
+
+    let slice = detector.boundedSlice(in: 12)
+    XCTAssertEqual(slice?.offset, 0)
+    XCTAssertEqual(slice?.count, 7)
+  }
 }

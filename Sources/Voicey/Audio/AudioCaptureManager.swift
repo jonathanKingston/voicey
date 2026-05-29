@@ -251,17 +251,22 @@ final class AudioCaptureManager {
             applyTrailingTrim: applyTrailingTrimHeuristic)
         }
         if recordingMode == .handsFree, let handsFreeDetector {
-          let fullSamples = try SharedMemoryPCM.read(
-            name: handle.shmName,
-            sampleCount: handle.sampleCount
-          )
+          if let slice = handsFreeDetector.boundedSlice(in: handle.sampleCount) {
+            let slicedHandle = PCMBufferHandle(
+              shmName: handle.shmName,
+              sampleCount: slice.count,
+              sampleRate: handle.sampleRate,
+              sampleOffset: slice.offset
+            )
+            let durationSec = slicedHandle.durationSeconds
+            AppLogger.audio.info(
+              "AudioCapture (voicey-capture, hands-free): \(slice.count) samples (~\(String(format: "%.1f", durationSec))s) offset \(slice.offset)"
+            )
+            return .sharedBuffer(slicedHandle)
+          }
           handle.remove()
-          let bounded = handsFreeDetector.boundedSamples(from: fullSamples)
-          let durationSec = Double(bounded.count) / targetSampleRate
-          AppLogger.audio.info(
-            "AudioCapture (voicey-capture, hands-free): \(bounded.count) samples (~\(String(format: "%.1f", durationSec))s)"
-          )
-          return .inMemory(bounded)
+          AppLogger.audio.info("AudioCapture (voicey-capture, hands-free): no speech detected")
+          return .inMemory([])
         }
         let durationSec = handle.durationSeconds
         AppLogger.audio.info(

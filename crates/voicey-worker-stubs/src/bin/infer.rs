@@ -62,6 +62,7 @@ fn handle_line(line: &str, mode: InferStubMode, loaded_model: &mut Option<String
             sample_rate,
             shm_name,
             sample_count,
+            sample_offset,
             decoder_context,
         } => {
             if mode == InferStubMode::FailTranscribe {
@@ -85,7 +86,7 @@ fn handle_line(line: &str, mode: InferStubMode, loaded_model: &mut Option<String
                     error: Some("stub: model not loaded".into()),
                 }
             } else {
-                let _ = voicey_pcm::read_f32_samples(&shm_name, sample_count);
+                let _ = voicey_pcm::read_f32_samples_slice(&shm_name, sample_offset, sample_count);
                 let context_suffix = decoder_context
                     .as_deref()
                     .filter(|value| !value.is_empty())

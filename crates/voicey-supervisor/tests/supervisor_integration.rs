@@ -149,6 +149,7 @@ fn load_model_and_transcribe_via_infer_stub() {
         sample_rate: 16_000,
         shm_name: shm_name.clone(),
         sample_count: 512,
+        sample_offset: 0,
         decoder_context: Some("Glossary".into()),
     });
     voicey_pcm::remove(&shm_name);
@@ -254,6 +255,66 @@ fn capture_fixture_returns_capture_stopped() {
     }
 }
 
+/// Phase 1 pass-through: capture worker PCM file is forwarded to infer without host rewrite.
+#[test]
+fn capture_fixture_then_transcribe_uses_capture_shm() {
+    const MODEL_ID: &str = "qwen3-asr-0.6b-6bit";
+    let mut session = SupervisorSession::spawn(&[]);
+
+    let capture = session.request(&HostRequest::CaptureFixture {
+        id: "cap-tx-1".into(),
+        duration_seconds: 0.05,
+    });
+    let (shm_name, sample_count) = match capture {
+        HostResponse::CaptureStopped {
+            shm_name,
+            sample_count,
+            ..
+        } => (shm_name, sample_count),
+        other => panic!("expected capture_stopped, got {other:?}"),
+    };
+
+    let load = session.request(&HostRequest::LoadModel {
+        id: "load-cap-tx".into(),
+        model_id: MODEL_ID.into(),
+    });
+    assert!(
+        matches!(load, HostResponse::InferReady { .. }),
+        "expected infer_ready, got {load:?}"
+    );
+
+    let transcribe = session.request(&HostRequest::Transcribe {
+        id: "tx-cap-1".into(),
+        model_id: MODEL_ID.into(),
+        sample_rate: 16_000,
+        shm_name: shm_name.clone(),
+        sample_count,
+        sample_offset: 0,
+        decoder_context: None,
+    });
+    voicey_pcm::remove(&shm_name);
+
+    match transcribe {
+        HostResponse::TranscribeResult {
+            id,
+            ok,
+            raw_text,
+            audio_seconds,
+            ..
+        } => {
+            assert_eq!(id, "tx-cap-1");
+            assert!(ok);
+            assert_eq!(
+                raw_text.as_deref(),
+                Some(format!("stub-transcribe:{MODEL_ID}:{sample_count}").as_str())
+            );
+            let expected_seconds = sample_count as f64 / 16_000.0;
+            assert!((audio_seconds.unwrap_or(0.0) - expected_seconds).abs() < 1e-6);
+        }
+        other => panic!("expected transcribe_result, got {other:?}"),
+    }
+}
+
 #[test]
 fn invalid_host_json_returns_error() {
     let mut session = SupervisorSession::spawn(&[]);
@@ -300,6 +361,45 @@ fn infer_stub_exit_on_start_prevents_worker_use() {
 }
 
 #[test]
+fn transcribe_with_sample_offset_uses_pcm_slice() {
+    let samples: Vec<f32> = (0..128).map(|index| index as f32).collect();
+    let shm_name = voicey_pcm::write_f32_samples(&samples).expect("write pcm");
+    let mut session = SupervisorSession::spawn(&[]);
+
+    let _ = session.request(&HostRequest::LoadModel {
+        id: "load-slice".into(),
+        model_id: "qwen3-asr-0.6b-6bit".into(),
+    });
+
+    let transcribe = session.request(&HostRequest::Transcribe {
+        id: "tx-slice".into(),
+        model_id: "qwen3-asr-0.6b-6bit".into(),
+        sample_rate: 16_000,
+        shm_name: shm_name.clone(),
+        sample_count: 32,
+        sample_offset: 16,
+        decoder_context: None,
+    });
+    voicey_pcm::remove(&shm_name);
+
+    match transcribe {
+        HostResponse::TranscribeResult {
+            id,
+            ok,
+            raw_text,
+            audio_seconds,
+            ..
+        } => {
+            assert_eq!(id, "tx-slice");
+            assert!(ok);
+            assert_eq!(raw_text.as_deref(), Some("stub-transcribe:qwen3-asr-0.6b-6bit:32"));
+            assert!((audio_seconds.unwrap_or(0.0) - 0.002).abs() < 1e-6);
+        }
+        other => panic!("expected transcribe_result, got {other:?}"),
+    }
+}
+
+#[test]
 fn infer_stub_fail_transcribe_returns_transcribe_error() {
     let shm_name = voicey_pcm::write_f32_samples(&[0.0_f32; 64]).expect("write pcm");
     let mut session = SupervisorSession::spawn(&[("VOICEY_INFER_STUB_MODE", "fail_transcribe")]);
@@ -315,6 +415,7 @@ fn infer_stub_fail_transcribe_returns_transcribe_error() {
         sample_rate: 16_000,
         shm_name: shm_name.clone(),
         sample_count: 64,
+        sample_offset: 0,
         decoder_context: None,
     });
     voicey_pcm::remove(&shm_name);
@@ -345,6 +446,7 @@ fn infer_stub_malformed_json_line_surfaces_transcribe_error() {
         sample_rate: 16_000,
         shm_name: shm_name.clone(),
         sample_count: 32,
+        sample_offset: 0,
         decoder_context: None,
     });
     voicey_pcm::remove(&shm_name);
