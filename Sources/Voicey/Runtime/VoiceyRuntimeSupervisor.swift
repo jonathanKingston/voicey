@@ -248,6 +248,7 @@ actor VoiceyRuntimeSupervisor {
     await shutdownInferWorkers()
     VoiceyCaptureWorkerSession.shared.stop()
     VoiceyFetchWorkerSession.shared.stop()
+    VoiceyTextWorkerSession.shared.stop()
     captureReady = false
   }
 
@@ -259,6 +260,7 @@ actor VoiceyRuntimeSupervisor {
     }
     VoiceyCaptureWorkerSession.shared.stop()
     VoiceyFetchWorkerSession.shared.stop()
+    VoiceyTextWorkerSession.shared.stop()
     inferReadyModel = nil
     captureReady = false
   }
