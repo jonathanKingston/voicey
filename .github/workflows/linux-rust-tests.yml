@@ -60,6 +60,9 @@ jobs:
       - name: Generate protocol fixtures
         run: cargo run -p voicey-protocol --bin gen-fixtures
 
+      - name: Build test worker stubs
+        run: cargo build -p voicey-worker-stubs --bins
+
       - name: Workspace unit tests
         run: cargo test --workspace
 
