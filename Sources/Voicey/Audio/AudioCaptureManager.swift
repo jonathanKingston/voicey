@@ -125,11 +125,9 @@ final class AudioCaptureManager {
       levelTimer = nil
       delegate?.audioCaptureManager(self, didUpdateLevel: 0)
       do {
-        var samples = try runSynchronously {
-          try await VoiceyCaptureWorkerSession.shared.stopRecording()
-        }
-        if applyTrailingTrimHeuristic {
-          samples = trimTrailingLowEnergyAudio(samples) ?? samples
+        let samples = try runSynchronously {
+          try await VoiceyCaptureWorkerSession.shared.stopRecording(
+            applyTrailingTrim: applyTrailingTrimHeuristic)
         }
         let durationSec = Double(samples.count) / targetSampleRate
         AppLogger.audio.info(
