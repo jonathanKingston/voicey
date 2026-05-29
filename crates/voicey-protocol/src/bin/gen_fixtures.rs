@@ -322,6 +322,12 @@ fn main() {
         r#"{"type":"not_a_real_message","id":"fixture-unknown-001"}"#,
     )
     .expect("write unknown type fixture");
+    // Legacy infer-worker emitted `ok` on infer_ready; supervisor must reject (deny_unknown_fields).
+    fs::write(
+        root.join("reject/infer_worker_response_infer_ready_extra_ok.json"),
+        r#"{"type":"infer_ready","id":"fixture-infer-ready-legacy","model_id":"qwen3-asr-0.6b-6bit","ok":true}"#,
+    )
+    .expect("write infer_ready extra ok reject fixture");
 
     eprintln!("wrote fixtures under {}", root.display());
 }
