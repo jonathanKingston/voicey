@@ -24,6 +24,7 @@ CI runs this before Rust and Swift protocol tests. Run it locally before `swift 
 
 - **Rust:** generate fixtures → `cargo test -p voicey-protocol` — [`.github/workflows/linux-rust-tests.yml`](../.github/workflows/linux-rust-tests.yml)
 - **Supervisor (M2):** build `voicey-worker-stubs` binaries → `cargo test -p voicey-supervisor --test supervisor_integration` (same workflow, Tier 1)
+- **Supervisor (M3):** `cargo test -p voicey-supervisor` — in-process `process.rs` unit tests for infer/capture response mapping (no child processes)
 - **Swift:** generate fixtures → `VoiceyProtocolFixtureTests` — [`.github/workflows/linux-core-tests.yml`](../.github/workflows/linux-core-tests.yml)
 
 ## Test worker stubs (M2)

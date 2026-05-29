@@ -18,6 +18,7 @@ struct ManagedWorker {
     stdout: BufReader<std::process::ChildStdout>,
 }
 
+#[derive(Debug)]
 pub struct TranscribeResult {
     pub raw_text: String,
     pub language: String,
@@ -98,27 +99,7 @@ impl WorkerProcesses {
                 decoder_context: decoder_context.map(str::to_string),
             },
         )?;
-        match response {
-            InferWorkerResponse::TranscribeResult {
-                ok: true,
-                raw_text,
-                language,
-                processing_seconds,
-                audio_seconds,
-                ..
-            } => Ok(TranscribeResult {
-                raw_text: raw_text.unwrap_or_default(),
-                language: language.unwrap_or_else(|| "auto".into()),
-                processing_seconds: processing_seconds.unwrap_or(0.0),
-                audio_seconds: audio_seconds.unwrap_or(0.0),
-            }),
-            InferWorkerResponse::TranscribeResult {
-                error: Some(message),
-                ..
-            } => Err(message),
-            InferWorkerResponse::Error { message, .. } => Err(message),
-            other => Err(format!("unexpected infer transcribe response: {other:?}")),
-        }
+        transcribe_result_from_infer_response(response)
     }
 
     pub fn capture_prewarm(&mut self) -> Result<(), String> {
@@ -146,16 +127,7 @@ impl WorkerProcesses {
         })
         .to_string();
         let response: CaptureFixtureResponse = write_capture_json(worker, &line)?;
-        if !response.ok {
-            return Err(response
-                .error
-                .unwrap_or_else(|| "capture fixture failed".into()));
-        }
-        Ok((
-            response.shm_name.ok_or_else(|| "missing shm".to_string())?,
-            response.sample_count.unwrap_or(0),
-            response.sample_rate.unwrap_or(16_000),
-        ))
+        capture_fixture_from_response(response)
     }
 
     pub fn fetch_download_model(
@@ -410,4 +382,131 @@ fn new_id() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     format!("{nanos}")
+}
+
+fn transcribe_result_from_infer_response(
+    response: InferWorkerResponse,
+) -> Result<TranscribeResult, String> {
+    match response {
+        InferWorkerResponse::TranscribeResult {
+            ok: true,
+            raw_text,
+            language,
+            processing_seconds,
+            audio_seconds,
+            ..
+        } => Ok(TranscribeResult {
+            raw_text: raw_text.unwrap_or_default(),
+            language: language.unwrap_or_else(|| "auto".into()),
+            processing_seconds: processing_seconds.unwrap_or(0.0),
+            audio_seconds: audio_seconds.unwrap_or(0.0),
+        }),
+        InferWorkerResponse::TranscribeResult {
+            error: Some(message),
+            ..
+        } => Err(message),
+        InferWorkerResponse::Error { message, .. } => Err(message),
+        other => Err(format!("unexpected infer transcribe response: {other:?}")),
+    }
+}
+
+fn capture_fixture_from_response(
+    response: CaptureFixtureResponse,
+) -> Result<(String, usize, u32), String> {
+    if !response.ok {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "capture fixture failed".into()));
+    }
+    Ok((
+        response.shm_name.ok_or_else(|| "missing shm".to_string())?,
+        response.sample_count.unwrap_or(0),
+        response.sample_rate.unwrap_or(16_000),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use voicey_protocol::InferWorkerResponse;
+
+    #[test]
+    fn transcribe_result_maps_success_with_defaults() {
+        let response = InferWorkerResponse::TranscribeResult {
+            id: "tx-1".into(),
+            ok: true,
+            raw_text: Some("hello".into()),
+            language: None,
+            processing_seconds: Some(0.5),
+            audio_seconds: Some(1.0),
+            error: None,
+        };
+        let result = transcribe_result_from_infer_response(response).expect("ok");
+        assert_eq!(result.raw_text, "hello");
+        assert_eq!(result.language, "auto");
+        assert!((result.processing_seconds - 0.5).abs() < f64::EPSILON);
+        assert!((result.audio_seconds - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn transcribe_result_surfaces_worker_error_message() {
+        let response = InferWorkerResponse::TranscribeResult {
+            id: "tx-2".into(),
+            ok: false,
+            raw_text: None,
+            language: None,
+            processing_seconds: None,
+            audio_seconds: None,
+            error: Some("stub failure".into()),
+        };
+        let error = transcribe_result_from_infer_response(response).unwrap_err();
+        assert_eq!(error, "stub failure");
+    }
+
+    #[test]
+    fn transcribe_result_rejects_unexpected_variant() {
+        let response = InferWorkerResponse::Pong { id: "pong".into() };
+        let error = transcribe_result_from_infer_response(response).unwrap_err();
+        assert!(error.contains("unexpected infer transcribe response"));
+    }
+
+    #[test]
+    fn capture_fixture_requires_shm_when_ok() {
+        let response = CaptureFixtureResponse {
+            kind: "capture_stopped".into(),
+            id: "cap-1".into(),
+            ok: true,
+            shm_name: None,
+            sample_count: Some(100),
+            sample_rate: Some(16_000),
+            error: None,
+        };
+        let error = capture_fixture_from_response(response).unwrap_err();
+        assert_eq!(error, "missing shm");
+    }
+
+    #[test]
+    fn capture_fixture_returns_metadata_when_ok() {
+        let response = CaptureFixtureResponse {
+            kind: "capture_stopped".into(),
+            id: "cap-2".into(),
+            ok: true,
+            shm_name: Some("/voicey-test".into()),
+            sample_count: Some(320),
+            sample_rate: Some(48_000),
+            error: None,
+        };
+        let (shm, count, rate) = capture_fixture_from_response(response).expect("ok");
+        assert_eq!(shm, "/voicey-test");
+        assert_eq!(count, 320);
+        assert_eq!(rate, 48_000);
+    }
+
+    #[test]
+    fn new_id_values_are_unique() {
+        let first = new_id();
+        let second = new_id();
+        assert_ne!(first, second);
+        assert!(!first.is_empty());
+    }
 }
