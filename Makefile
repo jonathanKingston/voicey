@@ -57,6 +57,9 @@ protocol-fixtures:
 test-protocol: protocol-fixtures
 	cargo test -p voicey-protocol
 
+test-supervisor-unit:
+	cargo test -p voicey-supervisor --bin voicey-supervisor
+
 test-supervisor-integration:
 	cargo build -p voicey-worker-stubs --bins
 	cargo test -p voicey-supervisor --test supervisor_integration
