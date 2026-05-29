@@ -18,7 +18,25 @@ System map and code ownership: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 | Mic capture (CoreAudio), TCC, auto-paste | No | Yes |
 | Codesign, bundle, Sparkle, seatbelt on device | No | Yes |
 
-Tracking issue: [#74](https://github.com/jonathanKingston/voicey/issues/74).
+Tracking issues:
+
+- [#74](https://github.com/jonathanKingston/voicey/issues/74) — Rust CI and Linux testability
+- [#70](https://github.com/jonathanKingston/voicey/issues/70) — Rust-first transition; **when Swift duplicate paths can be removed** (Phases 1–6)
+
+### Can Swift duplicates be removed yet? (May 2026)
+
+**No.** Bundled production still needs Swift fallbacks and the Swift MLX infer subprocess. Rust workers and `voicey-text` are additive until Phase 2 in #70.
+
+| Layer | Rust | Swift still required because |
+|-------|------|------------------------------|
+| Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` fallback (`VOICEY_USE_RUST_CAPTURE=0`, dev disable) |
+| Fetch | `voicey-fetch` | `HuggingFaceDownloader` fallback |
+| Post-process | `voicey-text` crate (parity/tests; #63 open) | `PostProcessor` / `NoiseFilter` in host hot path |
+| Text / glossary | `voicey-text` | `VoiceyCore` in host |
+| Infer | — | `QwenEngine` in Swift `infer-worker` |
+| PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
+
+Phase 1 PCM pass-through for manual + hands-free Rust capture is landed (#82, #84). Deletion of fallbacks is Phase 2 in #70.
 
 ## CI tiers (Rust on Ubuntu)
 

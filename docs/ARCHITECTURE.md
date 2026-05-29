@@ -47,7 +47,8 @@ flowchart LR
 
 Runtime reference: [`RUST_RUNTIME.md`](RUST_RUNTIME.md). IPC schema and versioning:
 [`RUST_PROTOCOL.md`](RUST_PROTOCOL.md). Rust CI roadmap:
-GitHub [#74](https://github.com/jonathanKingston/voicey/issues/74). Release note for
+GitHub [#74](https://github.com/jonathanKingston/voicey/issues/74). **Swift removal after Rust porting:**
+[#70](https://github.com/jonathanKingston/voicey/issues/70) (Phases 1–6; nothing safe to delete on the app hot path yet). Release note for
 bundled Rust workers: [`CHANGELOG.md`](../CHANGELOG.md) /
 [PR #52](https://github.com/jonathanKingston/voicey/pull/52).
 
