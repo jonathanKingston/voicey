@@ -1730,6 +1730,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "voicey-text"
+version = "0.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "walkdir"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
