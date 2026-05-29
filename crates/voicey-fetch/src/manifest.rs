@@ -5,7 +5,8 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 
-const HUGGING_FACE_BASE_URL: &str = "https://huggingface.co";
+const DEFAULT_HUGGING_FACE_BASE_URL: &str = "https://huggingface.co";
+const HUGGING_FACE_BASE_URL_ENV: &str = "VOICEY_FETCH_HF_BASE_URL";
 const DEFAULT_REVISION: &str = "main";
 const FETCH_USER_AGENT: &str = "voicey-fetch/0.1";
 const DOWNLOAD_BUFFER_SIZE_BYTES: usize = 256 * 1024;
@@ -127,7 +128,16 @@ pub fn list_model_files(
     revision: Option<&str>,
     patterns: &[String],
 ) -> io::Result<Vec<String>> {
-    let url = list_repo_files_url(model_id, revision)?;
+    list_model_files_at_base(&hugging_face_base_url()?, model_id, revision, patterns)
+}
+
+pub fn list_model_files_at_base(
+    base: &Url,
+    model_id: &str,
+    revision: Option<&str>,
+    patterns: &[String],
+) -> io::Result<Vec<String>> {
+    let url = list_repo_files_url_at_base(base, model_id, revision)?;
     let client = build_client()?;
     let response = client.get(url).send().map_err(io::Error::other)?;
     if !response.status().is_success() {
@@ -150,7 +160,25 @@ pub fn download_model_file(
     model_root: &str,
     expected_sha256: Option<&str>,
 ) -> io::Result<PathBuf> {
-    let url = resolve_file_url(model_id, revision, relative_path)?;
+    download_model_file_at_base(
+        &hugging_face_base_url()?,
+        model_id,
+        revision,
+        relative_path,
+        model_root,
+        expected_sha256,
+    )
+}
+
+pub fn download_model_file_at_base(
+    base: &Url,
+    model_id: &str,
+    revision: Option<&str>,
+    relative_path: &str,
+    model_root: &str,
+    expected_sha256: Option<&str>,
+) -> io::Result<PathBuf> {
+    let url = resolve_file_url_at_base(base, model_id, revision, relative_path)?;
     let staging_path = staging_path_for(model_root, relative_path)?;
     download_to_staging(&url, &staging_path, expected_sha256)
 }
@@ -199,10 +227,21 @@ fn build_client() -> io::Result<reqwest::blocking::Client> {
         .map_err(io::Error::other)
 }
 
-fn list_repo_files_url(model_id: &str, revision: Option<&str>) -> io::Result<Url> {
+/// Base URL for Hugging Face API calls. Override with `VOICEY_FETCH_HF_BASE_URL` in tests.
+fn hugging_face_base_url() -> io::Result<Url> {
+    if let Ok(override_url) = std::env::var(HUGGING_FACE_BASE_URL_ENV) {
+        let trimmed = override_url.trim();
+        if !trimmed.is_empty() {
+            return Url::parse(trimmed).map_err(io::Error::other);
+        }
+    }
+    Url::parse(DEFAULT_HUGGING_FACE_BASE_URL).map_err(io::Error::other)
+}
+
+fn list_repo_files_url_at_base(base: &Url, model_id: &str, revision: Option<&str>) -> io::Result<Url> {
     let validated_model_id = validate_model_id(model_id)?;
     let validated_revision = validate_revision(revision.unwrap_or(DEFAULT_REVISION))?;
-    let mut url = Url::parse(HUGGING_FACE_BASE_URL).map_err(io::Error::other)?;
+    let mut url = base.clone();
     {
         let mut segments = url
             .path_segments_mut()
@@ -215,7 +254,8 @@ fn list_repo_files_url(model_id: &str, revision: Option<&str>) -> io::Result<Url
     Ok(url)
 }
 
-fn resolve_file_url(
+fn resolve_file_url_at_base(
+    base: &Url,
     model_id: &str,
     revision: Option<&str>,
     relative_path: &str,
@@ -223,7 +263,7 @@ fn resolve_file_url(
     let validated_model_id = validate_model_id(model_id)?;
     let validated_revision = validate_revision(revision.unwrap_or(DEFAULT_REVISION))?;
     let relative_segments = validate_relative_path(relative_path)?;
-    let mut url = Url::parse(HUGGING_FACE_BASE_URL).map_err(io::Error::other)?;
+    let mut url = base.clone();
     {
         let mut segments = url
             .path_segments_mut()
@@ -472,5 +512,154 @@ mod tests {
                 "nested/weights.safetensors".to_string(),
             ]
         );
+    }
+
+    struct LocalHttpServer {
+        _thread: std::thread::JoinHandle<()>,
+        base_url: Url,
+    }
+
+    impl LocalHttpServer {
+        fn spawn<F>(handler: F) -> Self
+        where
+            F: Fn(&str, &str) -> (u16, Vec<u8>) + Send + Sync + 'static,
+        {
+            use std::io::{Read, Write};
+            use std::net::{TcpListener, TcpStream};
+
+            fn write_response(stream: &mut TcpStream, status: u16, body: &[u8]) -> io::Result<()> {
+                let response = format!(
+                    "HTTP/1.1 {status} OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes())?;
+                stream.write_all(body)?;
+                stream.flush()
+            }
+
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+            let port = listener.local_addr().expect("local addr").port();
+            let base_url =
+                Url::parse(&format!("http://127.0.0.1:{port}")).expect("test server base url");
+            let thread = std::thread::spawn(move || {
+                for connection in listener.incoming().flatten() {
+                    let mut stream = connection;
+                    let mut buffer = [0_u8; 4096];
+                    let read = stream.read(&mut buffer).unwrap_or(0);
+                    let request = std::str::from_utf8(&buffer[..read]).unwrap_or("");
+                    let mut lines = request.lines();
+                    let request_line = lines.next().unwrap_or("");
+                    let mut parts = request_line.split_whitespace();
+                    let method = parts.next().unwrap_or("");
+                    let path = parts.next().unwrap_or("");
+                    let (status, body) = handler(method, path);
+                    let _ = write_response(&mut stream, status, &body);
+                }
+            });
+            Self {
+                _thread: thread,
+                base_url,
+            }
+        }
+    }
+
+    #[test]
+    fn list_model_files_at_base_filters_hf_tree_response() {
+        let server = LocalHttpServer::spawn(|method, path| {
+            assert_eq!(method, "GET");
+            assert_eq!(path, "/api/models/test-org/test-repo/tree/main?recursive=1");
+            let body = serde_json::json!([
+                {"path": "config.json", "type": "file"},
+                {"path": "README.md", "type": "file"},
+                {"path": "model.safetensors", "type": "file"},
+                {"path": "subdir", "type": "directory"}
+            ])
+            .to_string();
+            (200, body.into_bytes())
+        });
+
+        let files = list_model_files_at_base(
+            &server.base_url,
+            "test-org/test-repo",
+            Some("main"),
+            &["config.json".into(), "*.safetensors".into()],
+        )
+        .expect("list files");
+
+        assert_eq!(
+            files,
+            vec!["config.json".to_string(), "model.safetensors".to_string()]
+        );
+    }
+
+    #[test]
+    fn list_model_files_at_base_surfaces_http_errors() {
+        let server = LocalHttpServer::spawn(|method, _path| {
+            assert_eq!(method, "GET");
+            (404, Vec::new())
+        });
+
+        let error = list_model_files_at_base(
+            &server.base_url,
+            "test-org/test-repo",
+            Some("main"),
+            &["config.json".into()],
+        )
+        .expect_err("404 should fail");
+
+        assert!(
+            error.to_string().contains("HTTP 404"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn download_model_file_at_base_stages_bytes_and_verifies_sha256() {
+        let payload = b"voicey-fetch-staged".to_vec();
+        let digest = hex::encode(Sha256::digest(&payload));
+        let expected_payload = payload.clone();
+        let server = LocalHttpServer::spawn(move |method, path| {
+            assert_eq!(method, "GET");
+            assert_eq!(path, "/test-org/test-repo/resolve/main/config.json");
+            (200, expected_payload.clone())
+        });
+
+        let model_root = tempfile::tempdir().expect("model root");
+        let model_root_path = std::fs::canonicalize(model_root.path()).expect("canonical root");
+        let staged = download_model_file_at_base(
+            &server.base_url,
+            "test-org/test-repo",
+            Some("main"),
+            "config.json",
+            &model_root_path.display().to_string(),
+            Some(&digest),
+        )
+        .expect("download file");
+
+        assert!(staged.is_file());
+        assert_eq!(std::fs::read(&staged).expect("read staged"), payload);
+    }
+
+    #[test]
+    fn download_model_file_at_base_rejects_sha256_mismatch() {
+        let server = LocalHttpServer::spawn(|method, _path| {
+            assert_eq!(method, "GET");
+            (200, b"payload".to_vec())
+        });
+
+        let model_root = tempfile::tempdir().expect("model root");
+        let model_root_path = std::fs::canonicalize(model_root.path()).expect("canonical root");
+        let error = download_model_file_at_base(
+            &server.base_url,
+            "test-org/test-repo",
+            Some("main"),
+            "weights.bin",
+            &model_root_path.display().to_string(),
+            Some("0000000000000000000000000000000000000000000000000000000000000000"),
+        )
+        .expect_err("hash mismatch");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("sha256 mismatch"));
     }
 }
