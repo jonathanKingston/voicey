@@ -28,8 +28,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var settingsWindow: NSWindow?
 
   private var audioCaptureManager: AudioCaptureManager?
-  private var whisperEngine: WhisperEngine?
-  private var graniteEngine: GraniteEngine?
   private var qwenEngine: QwenEngine?
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
@@ -199,26 +197,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     checkModelStatusAndPreload(showUI: false)
   }
 
-  /// Whether the active engine (Whisper or Granite) has a model loaded
+  /// Whether the active Qwen engine (in-process or Rust infer worker) has a model loaded.
   private var isActiveEngineLoaded: Bool {
-    let selectedModel = SettingsManager.shared.selectedModel
-    switch selectedModel.backendKind {
-    case .granitePython:
-      return graniteEngine?.isModelLoaded == true
-    case .qwenMLX:
-      if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
-        return multiprocessInferReady
-      }
-      return qwenEngine?.isModelLoaded == true
-    case .whisperKit:
-      return whisperEngine?.isModelLoaded == true
+    let selectedModel = userFacingSelectedModel()
+    if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
+      return multiprocessInferReady
     }
+    return qwenEngine?.isModelLoaded == true
   }
 
   private var multiprocessInferReady = false
 
-  private func fallbackOrder(preferredBackend: SpeechBackendKind? = nil) -> [SpeechModel] {
-    SpeechModel.userFacingModels
+  /// Returns the selected model after asserting it is user-facing (Qwen only).
+  private func userFacingSelectedModel() -> SpeechModel {
+    let model = SettingsManager.shared.selectedModel
+    precondition(
+      model.isUserFacing,
+      "Benchmark-only model \(model.rawValue) must not reach the app transcription path"
+    )
+    return model
   }
 
   /// Best available Qwen fallback when the selected model cannot load.
@@ -251,17 +248,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func modelLoadFailureMessage(for model: SpeechModel) -> String {
-    switch model.backendKind {
-    case .qwenMLX:
-      if VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
-        return VoiceyRuntimeDiagnostics.userFacingLoadFailureMessage()
-      }
-      return L10n.Runtime.genericModelLoadFailed
-    case .whisperKit:
-      return L10n.Runtime.whisperModelLoadFailed
-    case .granitePython:
-      return L10n.Runtime.graniteModelLoadFailed
+    precondition(model.isUserFacing, "Benchmark-only model passed to app load failure handler")
+    if VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
+      return VoiceyRuntimeDiagnostics.userFacingLoadFailureMessage()
     }
+    return L10n.Runtime.genericModelLoadFailed
   }
 
   private func setupWorkspaceWakeObserver() {
@@ -278,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @MainActor
   private func handleSystemDidWake() async {
-    let model = SettingsManager.shared.selectedModel
+    let model = userFacingSelectedModel()
     guard VoiceyRuntimeConfiguration.usesInferWorker(for: model) else { return }
 
     let healthy = await VoiceyRuntimeSupervisor.shared.verifyInferWorkerHealth(model: model)
@@ -296,18 +287,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @MainActor
   private func preloadSelectedModel() async -> Bool {
-    let selectedModel = SettingsManager.shared.selectedModel
-
-    switch selectedModel.backendKind {
-    case .granitePython:
-      await graniteEngine?.preloadModel()
-      return graniteEngine?.isModelLoaded == true
-    case .qwenMLX:
-      return await preloadQwen(selectedModel: selectedModel)
-    case .whisperKit:
-      await whisperEngine?.preloadModel()
-      return whisperEngine?.isModelLoaded == true
-    }
+    let selectedModel = userFacingSelectedModel()
+    return await preloadQwen(selectedModel: selectedModel)
   }
 
   /// Preload selected model. If a backend fails to load, fall back to another downloaded backend automatically.
@@ -332,17 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       )
       SettingsManager.shared.selectedModel = fallback
       appState.currentModel = fallback
-
-      switch fallback.backendKind {
-      case .granitePython:
-        await graniteEngine?.preloadModel()
-        return graniteEngine?.isModelLoaded == true
-      case .qwenMLX:
-        return await preloadQwen(selectedModel: fallback)
-      case .whisperKit:
-        await whisperEngine?.preloadModel()
-        return whisperEngine?.isModelLoaded == true
-      }
+      return await preloadQwen(selectedModel: fallback)
     }
 
     return false
@@ -363,8 +334,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @MainActor
   private func handleSelectedModelChange(_ model: SpeechModel) async {
+    guard model.isUserFacing else {
+      AppLogger.model.error("Ignoring benchmark-only model selection: \(model.rawValue)")
+      return
+    }
+
     appState.currentModel = model
-    await unloadInactiveEngines(keeping: model.backendKind)
+    await unloadInactiveEngines()
     ModelManager.shared.loadDownloadedModels()
 
     guard ModelManager.shared.isDownloaded(model) else {
@@ -383,52 +359,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @MainActor
-  private func unloadInactiveEngines(keeping backend: SpeechBackendKind) async {
-    if backend != .whisperKit {
-      whisperEngine?.unloadModel()
-    }
-    if backend != .granitePython {
-      graniteEngine?.unloadModel()
-    }
-    if backend != .qwenMLX {
+  private func unloadInactiveEngines() async {
+    let selectedModel = userFacingSelectedModel()
+    if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
       qwenEngine?.unloadModel()
+    } else {
       multiprocessInferReady = false
       await VoiceyRuntimeSupervisor.shared.shutdownInferWorkers()
-    } else if VoiceyRuntimeConfiguration.usesInferWorker(
-      for: SettingsManager.shared.selectedModel) {
-      qwenEngine?.unloadModel()
     }
   }
 
   private func setupComponents() {
     audioCaptureManager = AudioCaptureManager()
     audioCaptureManager?.delegate = self
-
-    whisperEngine = WhisperEngine()
-    whisperEngine?.onLoadingStateChanged = { [weak self] isLoading in
-      if isLoading {
-        self?.appState.transcriptionState = .loadingModel
-      } else if self?.appState.transcriptionState == .loadingModel {
-        self?.appState.transcriptionState = .idle
-      }
-    }
-
-    // Handle performance issues
-    whisperEngine?.onPerformanceIssue = { [weak self] metrics in
-      self?.handlePerformanceIssue(metrics)
-    }
-
-    graniteEngine = GraniteEngine()
-    graniteEngine?.onLoadingStateChanged = { [weak self] isLoading in
-      if isLoading {
-        self?.appState.transcriptionState = .loadingModel
-      } else if self?.appState.transcriptionState == .loadingModel {
-        self?.appState.transcriptionState = .idle
-      }
-    }
-    graniteEngine?.onPerformanceIssue = { [weak self] metrics in
-      self?.handlePerformanceIssue(metrics)
-    }
 
     qwenEngine = QwenEngine()
     qwenEngine?.onLoadingStateChanged = { [weak self] isLoading in
@@ -684,33 +627,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           category: "MODEL")
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        switch model.backendKind {
-        case .granitePython:
-          // Granite preload checks runtime dependencies and marks model readiness.
+        guard model.isUserFacing else {
+          throw QwenError.invalidModel
+        }
+
+        if VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
           await MainActor.run {
             SettingsManager.shared.selectedModel = model
             appState.currentModel = model
           }
-          await graniteEngine?.preloadModel()
-          guard graniteEngine?.isModelLoaded == true else {
-            throw GraniteError.modelNotReady
+          let preloaded = await preloadQwen(selectedModel: model)
+          guard preloaded else {
+            throw QwenError.modelNotReady
           }
-        case .qwenMLX:
+        } else {
           guard let qwenEngine else {
             throw QwenError.modelNotReady
           }
           try await qwenEngine.loadModel(variant: model.rawValue)
           guard qwenEngine.isModelLoaded else {
             throw QwenError.modelNotReady
-          }
-        case .whisperKit:
-          // WhisperEngine.loadModel unloads/reloads internally.
-          guard let whisperEngine else {
-            throw WhisperError.noModelLoaded
-          }
-          try await whisperEngine.loadModel(variant: model.rawValue)
-          guard whisperEngine.isModelLoaded else {
-            throw WhisperError.noModelLoaded
           }
         }
 
@@ -721,8 +657,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           appState.currentModel = model
           ModelManager.shared.pendingUpgradeModel = nil
           appState.modelStatus = .ready
-          whisperEngine?.resetPerformanceTracking()
-          graniteEngine?.resetPerformanceTracking()
           qwenEngine?.resetPerformanceTracking()
           debugPrint(
             "✅ Upgraded to \(model.displayName) in \(String(format: "%.1f", loadTime))s!",
@@ -864,7 +798,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       showOverlay()
 
       Task {
-        await self.unloadInactiveEngines(keeping: SettingsManager.shared.selectedModel.backendKind)
+        await self.unloadInactiveEngines()
         let preloadSucceeded = await self.preloadSelectedModel()
 
         await MainActor.run {
@@ -1053,9 +987,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       statusBarController?.updateIcon(recording: false)
     }
 
-    // Granite does better without additional end-of-audio trimming.
-    let selectedModel = SettingsManager.shared.selectedModel
-    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
+    let selectedModel = userFacingSelectedModel()
+    let applyTrailingTrimHeuristic = true
 
     // Stop audio capture and get buffer
     guard
@@ -1138,42 +1071,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.transcription.info(
         "processTranscription: Starting with \(audioBuffer.count) samples")
 
-      // Transcribe audio using the appropriate engine
-      let selectedModel = SettingsManager.shared.selectedModel
+      // Transcribe audio using Qwen (Rust infer worker or in-process MLX).
+      let selectedModel = userFacingSelectedModel()
       let decoderContext = TranscriptionSteeringContext.make()
       let result: TranscriptionResult
-      switch selectedModel.backendKind {
-      case .granitePython:
-        guard let graniteResult = try await graniteEngine?.transcribe(audioBuffer: audioBuffer)
-        else {
-          throw TranscriptionError.transcriptionFailed("No result from Granite engine")
-        }
-        result = graniteResult
-      case .qwenMLX:
-        if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
-          result = try await VoiceyRuntimeSupervisor.shared.transcribe(
-            samples: audioBuffer,
-            model: selectedModel,
-            warmupAlreadyDone: multiprocessInferReady,
+      if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
+        result = try await VoiceyRuntimeSupervisor.shared.transcribe(
+          samples: audioBuffer,
+          model: selectedModel,
+          warmupAlreadyDone: multiprocessInferReady,
+          decoderContext: decoderContext
+        )
+      } else {
+        guard
+          let qwenResult = try await qwenEngine?.transcribe(
+            audioBuffer: audioBuffer,
             decoderContext: decoderContext
           )
-        } else {
-          guard
-            let qwenResult = try await qwenEngine?.transcribe(
-              audioBuffer: audioBuffer,
-              decoderContext: decoderContext
-            )
-          else {
-            throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
-          }
-          result = qwenResult
-        }
-      case .whisperKit:
-        guard let whisperResult = try await whisperEngine?.transcribe(audioBuffer: audioBuffer)
         else {
-          throw TranscriptionError.transcriptionFailed("No result from Whisper engine")
+          throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
         }
-        result = whisperResult
+        result = qwenResult
       }
 
       debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")

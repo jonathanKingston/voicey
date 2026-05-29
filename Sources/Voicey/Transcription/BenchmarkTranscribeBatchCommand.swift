@@ -29,40 +29,15 @@ enum BenchmarkTranscribeBatchCommand {
   private static func transcribe(samples: [BatchSample], model: SpeechModel) async throws {
     SettingsManager.shared.selectedModel = model
 
-    switch model.backendKind {
-    case .whisperKit:
-      let engine = WhisperEngine()
-      try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-        try await engine.loadModel(variant: model.rawValue)
+    let engine = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
+      try await BenchmarkSpeechBackend.loadEngine(for: model)
+    }
+
+    for sample in samples {
+      let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
+        try await engine.transcribe(audioBuffer: sample.audioSamples())
       }
-      for sample in samples {
-        let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-          try await engine.transcribe(audioBuffer: sample.audioSamples())
-        }
-        try printBatchJSON(result: result, sample: sample, model: model)
-      }
-    case .qwenMLX:
-      let engine = QwenEngine()
-      try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-        try await engine.loadModel(variant: model.rawValue)
-      }
-      for sample in samples {
-        let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-          try await engine.transcribe(audioBuffer: sample.audioSamples())
-        }
-        try printBatchJSON(result: result, sample: sample, model: model)
-      }
-    case .granitePython:
-      let engine = GraniteEngine()
-      try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-        try await engine.loadModel(variant: model.rawValue)
-      }
-      for sample in samples {
-        let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-          try await engine.transcribe(audioBuffer: sample.audioSamples())
-        }
-        try printBatchJSON(result: result, sample: sample, model: model)
-      }
+      try printBatchJSON(result: result, sample: sample, model: model)
     }
   }
 
