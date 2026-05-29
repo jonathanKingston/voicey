@@ -37,6 +37,9 @@ jobs:
       - name: Text postprocess unit tests (voicey-text)
         run: cargo test -p voicey-text
 
+      - name: Text worker IPC tests (black-box JSONL)
+        run: cargo test -p voicey-text --test text_ipc
+
       - name: Supervisor in-process mapping tests (no child processes)
         run: cargo test -p voicey-supervisor --bin voicey-supervisor
 

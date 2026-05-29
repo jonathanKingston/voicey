@@ -21,9 +21,10 @@ final class PostProcessor {
 
   // MARK: - Processing
 
+  /// Synchronous entry point (benchmark CLI). Prefer `processAsync` on async call paths.
   func process(_ result: TranscriptionResult) -> String {
     if VoiceyRuntimeConfiguration.useRustTextPostProcess {
-      if let processed = processViaRustWorker(result) {
+      if let processed = processViaRustWorkerSync(result) {
         return processed
       }
       AppLogger.transcription.warning(
@@ -32,23 +33,39 @@ final class PostProcessor {
     return processInSwift(result)
   }
 
-  private func processViaRustWorker(_ result: TranscriptionResult) -> String? {
+  func processAsync(_ result: TranscriptionResult) async -> String {
+    if VoiceyRuntimeConfiguration.useRustTextPostProcess {
+      if let processed = await processViaRustWorker(result) {
+        return processed
+      }
+      AppLogger.transcription.warning(
+        "PostProcessor: Rust text worker failed; falling back to Swift path")
+    }
+    return processInSwift(result)
+  }
+
+  private func processViaRustWorker(_ result: TranscriptionResult) async -> String? {
+    do {
+      return try await VoiceyTextWorkerSession.shared.postprocess(
+        text: result.text,
+        segments: result.segments,
+        voiceCommandsEnabled: voiceCommandsEnabled,
+        voiceCommands: voiceCommands
+      )
+    } catch {
+      AppLogger.transcription.error(
+        "PostProcessor: Rust text worker error: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
+  }
+
+  private func processViaRustWorkerSync(_ result: TranscriptionResult) -> String? {
     let group = DispatchGroup()
     var processedText: String?
     group.enter()
     Task {
       defer { group.leave() }
-      do {
-        processedText = try await VoiceyTextWorkerSession.shared.postprocess(
-          text: result.text,
-          segments: result.segments,
-          voiceCommandsEnabled: voiceCommandsEnabled,
-          voiceCommands: voiceCommands
-        )
-      } catch {
-        AppLogger.transcription.error(
-          "PostProcessor: Rust text worker error: \(error.localizedDescription, privacy: .public)")
-      }
+      processedText = await processViaRustWorker(result)
     }
     group.wait()
     return processedText
