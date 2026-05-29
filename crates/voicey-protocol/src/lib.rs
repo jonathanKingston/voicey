@@ -6,6 +6,33 @@
 
 pub const PROTOCOL_VERSION: u32 = 1;
 
+/// Staging subdirectory created by `voicey-fetch` under `model_root` (see `manifest.rs`).
+pub const FETCH_STAGING_DIRECTORY_NAME: &str = ".voicey-fetch-staging";
+
+/// Prefix for ephemeral download containers (mirrors Swift `VoiceyRustQwenDownloader`).
+pub const FETCH_STAGING_CONTAINER_PREFIX: &str = ".voicey-fetch-download-";
+
+/// Maps Voicey speech-model raw values to Hugging Face `org/repo` ids for fetch-worker IPC.
+pub fn hugging_face_repo_id(voicey_model_id: &str) -> Result<&'static str, String> {
+    match voicey_model_id {
+        "qwen3-asr-0.6b-6bit" => Ok("aufklarer/Qwen3-ASR-0.6B-MLX-4bit"),
+        "qwen3-asr-1.7b-bf16" => Ok("aufklarer/Qwen3-ASR-1.7B-MLX-8bit"),
+        other => Err(format!("unsupported model_id for HF download: {other}")),
+    }
+}
+
+/// Default file patterns for Qwen MLX weight downloads (mirrors Swift `VoiceyRustQwenDownloader`).
+pub fn qwen_weight_list_patterns() -> Vec<String> {
+    vec![
+        "config.json".into(),
+        "*.safetensors".into(),
+        "model.safetensors.index.json".into(),
+        "vocab.json".into(),
+        "merges.txt".into(),
+        "tokenizer_config.json".into(),
+    ]
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeKind {
