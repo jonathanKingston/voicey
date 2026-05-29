@@ -10,7 +10,7 @@ options:
 settings:
   base:
     PRODUCT_NAME: Voicey
-    MARKETING_VERSION: "1.5.0"
+    MARKETING_VERSION: "1.6.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "15.0"

@@ -21,9 +21,9 @@ This PR covers the remaining direct-build hardening scope:
 - consolidate Qwen cache paths under `Application Support/Voicey/Models/qwen3-speech`;
 - design + evidence documentation.
 
-When PR #56 merges, update `VoiceyFetch.sb` write rules to match the app-managed
-Qwen cache under Application Support (PR #56's profile currently allows
-`~/Library/Caches/qwen3-speech` only).
+`VoiceyFetch.sb` allows writes under both the app-managed Qwen cache
+(`~/Library/Application Support/Voicey/Models/qwen3-speech`) and the legacy
+`~/Library/Caches/qwen3-speech` path for in-flight downloads until migration is complete.
 
 ## Goals
 
