@@ -382,6 +382,7 @@ struct TranscriptionOverlayView: View {
   }
 }
 
+#if DEBUG
 struct TranscriptionOverlayView_Previews: PreviewProvider {
   static var previews: some View {
     TranscriptionOverlayView(onCancel: { print("Cancelled") })
@@ -396,3 +397,4 @@ struct TranscriptionOverlayView_Previews: PreviewProvider {
       .padding()
   }
 }
+#endif

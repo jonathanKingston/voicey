@@ -1308,9 +1308,11 @@ struct SetupStepRow: View {
 
 // MARK: - Preview
 
+#if DEBUG
 struct SettingsView_Previews: PreviewProvider {
   static var previews: some View {
     SettingsView()
       .environmentObject(AppState())
   }
 }
+#endif
