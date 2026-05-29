@@ -148,6 +148,8 @@ final class AppState: ObservableObject {
   @Published var audioLevel: Float = 0.0
   @Published var currentModel: SpeechModel = SettingsManager.shared.selectedModel
   @Published var lastTranscription: String = ""
+  @Published var partialTranscription: String = ""
+  @Published var isCatchingUpTranscription: Bool = false
 
   /// Model loading status - for startup warmup indication
   @Published var modelStatus: ModelStatus = .notDownloaded

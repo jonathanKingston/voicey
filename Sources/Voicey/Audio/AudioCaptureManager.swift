@@ -5,11 +5,13 @@ import os
 
 protocol AudioCaptureManagerDelegate: AnyObject {
   func audioCaptureManager(_ manager: AudioCaptureManager, didUpdateLevel level: Float)
+  func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureSamples samples: [Float])
   func audioCaptureManagerDidDetectSpeechStart(_ manager: AudioCaptureManager)
   func audioCaptureManagerDidDetectSpeechEnd(_ manager: AudioCaptureManager)
 }
 
 extension AudioCaptureManagerDelegate {
+  func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureSamples samples: [Float]) {}
   func audioCaptureManagerDidDetectSpeechStart(_ manager: AudioCaptureManager) {}
   func audioCaptureManagerDidDetectSpeechEnd(_ manager: AudioCaptureManager) {}
 }
@@ -90,7 +92,9 @@ final class AudioCaptureManager {
 
     usesRustCaptureWorker = false
     AppLogger.audio.info("AudioCapture: Starting capture...")
-    audioBuffer.removeAll()
+    bufferQueue.sync {
+      audioBuffer.removeAll()
+    }
 
     audioEngine = AVAudioEngine()
     guard let audioEngine = audioEngine else {
@@ -337,6 +341,7 @@ final class AudioCaptureManager {
     bufferQueue.async { [weak self] in
       guard let self else { return }
       self.audioBuffer.append(contentsOf: samples)
+      self.delegate?.audioCaptureManager(self, didCaptureSamples: samples)
       self.consumeHandsFreeLevel(level, totalSamplesCaptured: self.audioBuffer.count)
     }
   }
@@ -446,8 +451,9 @@ final class AudioCaptureManager {
     guard trimmedSampleCount >= minTrimSamples else { return samples }
 
     let trimmedSeconds = Double(trimmedSampleCount) / targetSampleRate
+    let formattedTrimmedSeconds = String(format: "%.2f", trimmedSeconds)
     AppLogger.audio.info(
-      "AudioCapture: Trimmed \(trimmedSampleCount) trailing low-energy samples (~\(String(format: "%.2f", trimmedSeconds))s)"
+      "AudioCapture: Trimmed \(trimmedSampleCount) trailing low-energy samples (~\(formattedTrimmedSeconds)s)"
     )
 
     return Array(samples.prefix(keepEndIndex))

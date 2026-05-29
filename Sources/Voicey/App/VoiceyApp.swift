@@ -31,6 +31,11 @@ enum VoiceyMain {
       exit(Int32(exitCode))
     }
 
+    if BenchmarkIncrementalBatchCommand.canHandle(CommandLine.arguments) {
+      let exitCode = await BenchmarkIncrementalBatchCommand.run(arguments: CommandLine.arguments)
+      exit(Int32(exitCode))
+    }
+
     if BenchmarkModelDownloadCommand.canHandle(CommandLine.arguments) {
       let exitCode = await BenchmarkModelDownloadCommand.run(arguments: CommandLine.arguments)
       exit(Int32(exitCode))

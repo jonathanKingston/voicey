@@ -59,6 +59,21 @@ class CommonVoiceBenchmarkTests(unittest.TestCase):
     self.assertIn("--model large-v3_turbo", runners[0].command_template)
     self.assertIn("{audio}", runners[0].command_template)
 
+  def test_voicey_batch_runs_distinguish_incremental_mode(self) -> None:
+    runs = benchmark.voicey_batch_runs(
+      ["small.en"],
+      ["small.en"],
+      ["--pause-duration", "1.5"],
+    )
+
+    self.assertEqual(len(runs), 2)
+    self.assertEqual(runs[0].label, "small.en:batch")
+    self.assertEqual(runs[0].command_name, "benchmark-transcribe-batch")
+    self.assertEqual(runs[0].extra_args, [])
+    self.assertEqual(runs[1].label, "small.en:incremental")
+    self.assertEqual(runs[1].command_name, "benchmark-transcribe-incremental-batch")
+    self.assertEqual(runs[1].extra_args, ["--pause-duration", "1.5"])
+
   def test_cli_writes_results_for_small_fixture(self) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
       root = Path(temp_dir)

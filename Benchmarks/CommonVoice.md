@@ -52,6 +52,14 @@ make benchmark-common-voice ARGS='... --keep-going'
 # Choose the compared models
 make benchmark-run-common-voice BENCHMARK_VOICEY_MODELS='large-v3_turbo small.en base.en'
 
+# Compare normal full-buffer transcription against pause-based piecemeal transcription
+python3 scripts/benchmark_common_voice.py \
+  --tsv benchmark-data/common-voice/prepared/.../test.tsv \
+  --clips-dir benchmark-data/common-voice/prepared/.../clips \
+  --limit 25 \
+  --voicey-model small.en \
+  --voicey-incremental-model small.en
+
 # Prepare data only. Add ARGS='--install-sdk' to install the MDC Python SDK.
 make benchmark-prepare-common-voice ARGS='--install-sdk'
 ```
@@ -130,6 +138,10 @@ Use `--all` to download every `SpeechModel` case.
 - Regression checks when model settings change
 - Accent and speaker diversity from Common Voice
 - Comparing processing time across the same selected clips
+- Comparing batch transcription against the pause-based piecemeal path on the
+  same deterministic clips. Use paired `--voicey-model MODEL` and
+  `--voicey-incremental-model MODEL` runs; the summary labels the results as
+  `MODEL:batch` and `MODEL:incremental`.
 
 ## What it does not prove
 

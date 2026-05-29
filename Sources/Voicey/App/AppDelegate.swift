@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var qwenEngine: QwenEngine?
   private var postProcessor: PostProcessor?
   private var outputManager: OutputManager?
+  var incrementalTranscriptionCoordinator: IncrementalTranscriptionCoordinator?
 
   // The app that was frontmost when recording started (used for optional auto-paste)
   private var recordingTargetPID: pid_t?
@@ -391,6 +392,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     postProcessor = PostProcessor()
     outputManager = OutputManager()
+    incrementalTranscriptionCoordinator = IncrementalTranscriptionCoordinator(
+      transcribe: { [weak self] audioBuffer in
+        guard let self else {
+          throw TranscriptionError.audioCaptureFailed
+        }
+        return try await self.transcribeWithSelectedEngine(audioBuffer: audioBuffer)
+      },
+      onUpdate: { [weak self] snapshot in
+        guard let self else { return }
+        await MainActor.run {
+          self.appState.partialTranscription = snapshot.partialText
+          self.appState.isCatchingUpTranscription = snapshot.isCatchingUp
+        }
+      }
+    )
 
   }
 
@@ -883,6 +899,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       dependencies.mediaPlayback.pauseForTranscription()
     }
     appState.clearRecordingWaveformDisplay()
+    incrementalTranscriptionCoordinator?.reset()
+    appState.partialTranscription = ""
+    appState.isCatchingUpTranscription = false
     let recordingMode = dependencies.settings.recordingMode
     if recordingMode == .handsFree {
       appState.handsFreeSessionActive = true
@@ -1113,12 +1132,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     let selectedModel = userFacingSelectedModel()
-    let applyTrailingTrimHeuristic = true
+    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
 
-    // Stop audio capture and get buffer
+    // Stop audio capture. The coordinator already received the streamed samples;
+    // the returned buffer is used for duration/minimum-audio checks only.
     guard
       let capturedAudio = audioCaptureManager?.stopCapture(
-        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+        applyTrailingTrimHeuristic: false)
     else {
       debugPrint("❌ No audio buffer!", category: "ERROR")
       AppLogger.audio.error("No audio buffer!")
@@ -1164,11 +1184,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     appState.transcriptionState = .processing
 
-    // Process transcription
+    guard let incrementalTranscriptionCoordinator else {
+      hideOverlay()
+      appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
+      dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
+      return
+    }
+
+    // Finish any queued pause chunks and transcribe the final tail.
     Task {
-      await processTranscription(
-        capturedAudio: capturedAudio,
-        continueHandsFreeSession: false
+      defer { capturedAudio.removeSharedBufferIfNeeded() }
+      await processIncrementalTranscription(
+        coordinator: incrementalTranscriptionCoordinator,
+        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
       )
     }
   }
@@ -1185,9 +1213,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     appState.transcriptionState = .idle
     appState.clearRecordingWaveformDisplay()
+    appState.partialTranscription = ""
+    appState.isCatchingUpTranscription = false
+    incrementalTranscriptionCoordinator?.cancel()
 
     // Stop and discard audio (release shared PCM file if capture used voicey-capture).
-    if let capturedAudio = audioCaptureManager?.stopCapture() {
+    if let capturedAudio = audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false) {
       capturedAudio.removeSharedBufferIfNeeded()
     }
 
@@ -1201,6 +1232,107 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Check for pending model upgrade now that we're idle
     tryPerformPendingUpgrade()
+  }
+
+  private func processIncrementalTranscription(
+    coordinator: IncrementalTranscriptionCoordinator,
+    applyTrailingTrimHeuristic: Bool
+  ) async {
+    do {
+      debugPrint("🔄 Finishing incremental transcription...", category: "TRANSCRIBE")
+      let result = try await coordinator.flushAndFinish(
+        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+      await handleTranscriptionResult(result)
+    } catch {
+      await handleTranscriptionError(error)
+    }
+  }
+
+  private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
+    let selectedModel = userFacingSelectedModel()
+    let decoderContext = TranscriptionSteeringContext.make()
+    if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
+      return try await VoiceyRuntimeSupervisor.shared.transcribe(
+        samples: audioBuffer,
+        model: selectedModel,
+        warmupAlreadyDone: multiprocessInferReady,
+        decoderContext: decoderContext
+      )
+    }
+    guard
+      let qwenResult = try await qwenEngine?.transcribe(
+        audioBuffer: audioBuffer,
+        decoderContext: decoderContext
+      )
+    else {
+      throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
+    }
+    return qwenResult
+  }
+
+  private func handleTranscriptionResult(_ result: TranscriptionResult) async {
+    debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
+    AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
+
+    // Post-process text
+    let processedText = postProcessor?.process(result) ?? result.text
+    debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
+    AppLogger.transcription.info(
+      "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
+    )
+    let hasDeliverableText =
+      processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
+
+    let selectedModel = SettingsManager.shared.selectedModel
+    if selectedModel.isQwenModel {
+      await MainActor.run {
+        appState.recordQwenTranscriptionRTF(result.performanceMetrics.realTimeFactor)
+      }
+    }
+
+    // Output text
+    await MainActor.run {
+      appState.transcriptionState = .completed(text: processedText)
+      appState.lastTranscription = processedText
+      appState.partialTranscription = ""
+      appState.isCatchingUpTranscription = false
+
+      // Check if we have any text to deliver
+      if !hasDeliverableText {
+        debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
+        AppLogger.transcription.warning(
+          "processTranscription: No text to deliver (empty/whitespace after processing)")
+        self.hideOverlay()
+        self.appState.transcriptionState = .idle
+        self.tryPerformPendingUpgrade()
+        return
+      }
+
+      debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
+
+      outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) { [weak self] in
+        debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
+        self?.hideOverlay()
+        self?.appState.transcriptionState = .idle
+        self?.tryPerformPendingUpgrade()
+      }
+
+      self.recordingTargetPID = nil
+      self.recordingTargetScreen = nil
+    }
+  }
+
+  private func handleTranscriptionError(_ error: Error) async {
+    debugPrint("❌ Transcription error: \(error)", category: "ERROR")
+    AppLogger.transcription.error("Transcription error: \(error)")
+    await MainActor.run { [weak self] in
+      self?.hideOverlay()
+      self?.appState.partialTranscription = ""
+      self?.appState.isCatchingUpTranscription = false
+      self?.appState.transcriptionState = .error(message: error.localizedDescription)
+      self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+      self?.tryPerformPendingUpgrade()
+    }
   }
 
   func cancelHandsFreeWaitTimeout() {
@@ -1295,7 +1427,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.transcription.info(
         "processTranscription: Starting with \(capturedAudio.sampleCount) samples")
 
-      // Transcribe audio using Qwen (Rust infer worker or in-process MLX).
       let decoderContext = TranscriptionSteeringContext.make()
       let result: TranscriptionResult
       if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
@@ -1322,7 +1453,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
       AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
 
-      // Post-process text
       let processedText = postProcessor?.process(result) ?? result.text
       debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
       AppLogger.transcription.info(
@@ -1337,11 +1467,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
       }
 
-      // Output text
       await MainActor.run {
         appState.lastTranscription = processedText
 
-        // Check if we have any text to deliver
         if !hasDeliverableText {
           debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
           AppLogger.transcription.warning(
@@ -1371,7 +1499,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           pasteToCurrentFrontmost: pasteToCurrentFrontmost
         )
 
-        // Deliver text to clipboard and optionally auto-paste
         outputManager?.deliver(
           text: deliverText,
           targetPID: pasteTargetPID,
@@ -1396,7 +1523,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if !continueHandsFreeSession {
-          // Clear targets after attempting output
           self.recordingTargetPID = nil
           self.recordingTargetScreen = nil
         }

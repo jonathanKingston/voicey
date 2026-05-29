@@ -401,6 +401,9 @@ struct TranscriptionOverlayView: View {
     if appState.isWaitingForSpeech, appState.isHandsFreeBackgroundTranscribing {
       return L10n.State.waitingForSpeechWhileTranscribing
     }
+    if appState.transcriptionState.isRecording && appState.isCatchingUpTranscription {
+      return L10n.State.transcribing
+    }
     return appState.transcriptionState.displayText
   }
 

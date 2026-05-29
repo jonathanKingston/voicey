@@ -8,6 +8,11 @@ extension AppDelegate: AudioCaptureManagerDelegate {
     }
   }
 
+  func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureSamples samples: [Float]) {
+    guard !appState.handsFreeSessionActive else { return }
+    incrementalTranscriptionCoordinator?.append(samples: samples)
+  }
+
   func audioCaptureManagerDidDetectSpeechStart(_ manager: AudioCaptureManager) {
     Task { @MainActor in
       guard self.appState.handsFreeSessionActive, self.appState.isWaitingForSpeech else { return }

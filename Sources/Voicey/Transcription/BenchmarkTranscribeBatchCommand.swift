@@ -17,7 +17,7 @@ enum BenchmarkTranscribeBatchCommand {
         return 0
       }
 
-      let samples = try BatchSample.load(tsvURL: options.tsvURL, clipsDirectory: options.clipsDirectory)
+      let samples = try BenchmarkBatchSample.load(tsvURL: options.tsvURL, clipsDirectory: options.clipsDirectory)
       try await transcribe(samples: samples, model: options.model)
       return 0
     } catch {
@@ -26,7 +26,7 @@ enum BenchmarkTranscribeBatchCommand {
     }
   }
 
-  private static func transcribe(samples: [BatchSample], model: SpeechModel) async throws {
+  private static func transcribe(samples: [BenchmarkBatchSample], model: SpeechModel) async throws {
     SettingsManager.shared.selectedModel = model
 
     let engine = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
@@ -43,7 +43,7 @@ enum BenchmarkTranscribeBatchCommand {
 
   private static func printBatchJSON(
     result: TranscriptionResult,
-    sample: BatchSample,
+    sample: BenchmarkBatchSample,
     model: SpeechModel
   ) throws {
     let payload: [String: Any] = [
@@ -139,11 +139,11 @@ private struct BatchOptions {
   }
 }
 
-private struct BatchSample {
+struct BenchmarkBatchSample {
   let relativeAudioPath: String
   let audioURL: URL
 
-  static func load(tsvURL: URL, clipsDirectory: URL) throws -> [BatchSample] {
+  static func load(tsvURL: URL, clipsDirectory: URL) throws -> [BenchmarkBatchSample] {
     let contents = try String(contentsOf: tsvURL, encoding: .utf8)
     var lines = contents.split(whereSeparator: \.isNewline).map(String.init)
     guard !lines.isEmpty else { throw BenchmarkTranscribeError.emptyTSV }
@@ -157,7 +157,7 @@ private struct BatchSample {
       guard pathIndex < columns.count else { return nil }
       let relativePath = columns[pathIndex]
       guard !relativePath.isEmpty else { return nil }
-      return BatchSample(
+      return BenchmarkBatchSample(
         relativeAudioPath: relativePath,
         audioURL: clipsDirectory.appendingPathComponent(relativePath)
       )
