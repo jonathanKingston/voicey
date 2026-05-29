@@ -7,9 +7,9 @@ import Foundation
 enum BenchmarkSpeechBackend {
   final class LoadedEngine: @unchecked Sendable {
     private let model: SpeechModel
-    private var whisperEngine: WhisperEngine?
-    private var graniteEngine: GraniteEngine?
-    private var qwenEngine: QwenEngine?
+    fileprivate var whisperEngine: WhisperEngine?
+    fileprivate var graniteEngine: GraniteEngine?
+    fileprivate var qwenEngine: QwenEngine?
 
     fileprivate init(model: SpeechModel) {
       self.model = model
