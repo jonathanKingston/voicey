@@ -1,0 +1,11 @@
+{
+  "description": "Intelligent punctuation with segment timing (medium pause → comma)",
+  "text": "hello world",
+  "segments": [
+    { "text": "hello", "start_time": 0.0, "end_time": 0.5 },
+    { "text": "world", "start_time": 0.9, "end_time": 1.2 }
+  ],
+  "voice_commands_enabled": false,
+  "voice_commands": [],
+  "expected": "Hello, world."
+}

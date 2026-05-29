@@ -1,0 +1,8 @@
+{
+  "description": "Bracketed noise annotations removed",
+  "text": "[music] hello",
+  "segments": [],
+  "voice_commands_enabled": false,
+  "voice_commands": [],
+  "expected": "hello"
+}

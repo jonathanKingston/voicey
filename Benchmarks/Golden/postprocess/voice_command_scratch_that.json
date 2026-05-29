@@ -1,0 +1,10 @@
+{
+  "description": "Scratch-that voice command removes trailing sentence",
+  "text": "keep this. remove me scratch that",
+  "segments": [],
+  "voice_commands_enabled": true,
+  "voice_commands": [
+    { "phrase": "scratch that", "action": "scratch_that", "enabled": true }
+  ],
+  "expected": "keep this."
+}
