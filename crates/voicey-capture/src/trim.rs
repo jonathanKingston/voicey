@@ -9,6 +9,14 @@ const MINIMUM_REMAINING_AUDIO_SECONDS: f64 = 0.3;
 const MINIMUM_TRIM_SECONDS: f64 = 0.08;
 
 /// Trim low-energy audio from the end to reduce stop-key noise hallucinations.
+pub fn maybe_trim_trailing_low_energy(samples: &[f32], apply: bool) -> Vec<f32> {
+    if apply {
+        trim_trailing_low_energy(samples)
+    } else {
+        samples.to_vec()
+    }
+}
+
 pub fn trim_trailing_low_energy(samples: &[f32]) -> Vec<f32> {
     if samples.is_empty() {
         return samples.to_vec();
@@ -92,6 +100,15 @@ mod tests {
         let trimmed = trim_trailing_low_energy(&samples);
         assert!(trimmed.len() < samples.len());
         assert!(trimmed.len() >= 16_000 / 2);
+    }
+
+    #[test]
+    fn maybe_trim_respects_disabled_flag() {
+        let speech = tone(16_000, 0.2);
+        let tail = silence(4_000);
+        let mut samples = speech;
+        samples.extend(tail);
+        assert_eq!(maybe_trim_trailing_low_energy(&samples, false), samples);
     }
 
     #[test]

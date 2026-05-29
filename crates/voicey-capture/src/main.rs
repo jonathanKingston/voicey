@@ -23,7 +23,11 @@ enum CaptureRequest {
     Ping { id: String },
     Prewarm { id: String },
     StartRecording { id: String },
-    StopRecording { id: String },
+    StopRecording {
+        id: String,
+        #[serde(default = "default_apply_trailing_trim")]
+        apply_trailing_trim: bool,
+    },
     GetLevel { id: String },
     RecordFixture { id: String, duration_seconds: f64 },
     Shutdown { id: String },
@@ -110,24 +114,26 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
                 Err(message) => CaptureResponse::Error { id, message },
             }
         }
-        CaptureRequest::StopRecording { id } => match stop_live_recording() {
-            Ok((shm_name, count)) => CaptureResponse::CaptureFixtureResult {
-                id,
-                ok: true,
-                shm_name: Some(shm_name),
-                sample_count: Some(count),
-                sample_rate: Some(TARGET_SAMPLE_RATE as u32),
-                error: None,
-            },
-            Err(message) => CaptureResponse::CaptureFixtureResult {
-                id,
-                ok: false,
-                shm_name: None,
-                sample_count: None,
-                sample_rate: None,
-                error: Some(message),
-            },
-        },
+        CaptureRequest::StopRecording { id, apply_trailing_trim } => {
+            match stop_live_recording(apply_trailing_trim) {
+                Ok((shm_name, count)) => CaptureResponse::CaptureFixtureResult {
+                    id,
+                    ok: true,
+                    shm_name: Some(shm_name),
+                    sample_count: Some(count),
+                    sample_rate: Some(TARGET_SAMPLE_RATE as u32),
+                    error: None,
+                },
+                Err(message) => CaptureResponse::CaptureFixtureResult {
+                    id,
+                    ok: false,
+                    shm_name: None,
+                    sample_count: None,
+                    sample_rate: None,
+                    error: Some(message),
+                },
+            }
+        }
         CaptureRequest::GetLevel { id } => CaptureResponse::CaptureLevel {
             id,
             level: live_input_level(),
@@ -166,10 +172,14 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
     }
 }
 
-fn stop_live_recording() -> Result<(String, usize), String> {
+fn default_apply_trailing_trim() -> bool {
+    true
+}
+
+fn stop_live_recording(apply_trailing_trim: bool) -> Result<(String, usize), String> {
     let mut recorder = live_recorder().lock().expect("recorder lock");
     let samples = recorder.stop()?;
-    let trimmed = trim::trim_trailing_low_energy(&samples);
+    let trimmed = trim::maybe_trim_trailing_low_energy(&samples, apply_trailing_trim);
     let shm_name = voicey_pcm::write_f32_samples(&trimmed).map_err(|error| error.to_string())?;
     Ok((shm_name, trimmed.len()))
 }
