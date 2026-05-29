@@ -29,6 +29,11 @@ jobs:
       - name: Protocol contract tests
         run: cargo test -p voicey-protocol
 
+      - name: Supervisor integration tests (stub workers)
+        run: |
+          cargo build -p voicey-worker-stubs --bins
+          cargo test -p voicey-supervisor --test supervisor_integration
+
       - name: Build supervisor and fetch workers
         run: cargo build -p voicey-supervisor -p voicey-fetch
 
