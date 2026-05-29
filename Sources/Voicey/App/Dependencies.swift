@@ -10,6 +10,7 @@ protocol SettingsProviding: AnyObject {
   var lastAppliedDefaultModel: String? { get set }
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
+  var recordingMode: RecordingMode { get set }
   var autoPasteEnabled: Bool { get set }
   var restoreClipboardAfterPaste: Bool { get set }
   var pauseMediaDuringTranscription: Bool { get set }

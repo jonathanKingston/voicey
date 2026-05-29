@@ -149,6 +149,7 @@ enum L10n {
     enum State {
         static var ready: String { L10n.string("state.ready") }
         static var loadingModel: String { L10n.string("state.loadingModel") }
+        static var waitingForSpeech: String { L10n.string("state.waitingForSpeech") }
         static var listening: String { L10n.string("state.listening") }
         static var transcribing: String { L10n.string("state.transcribing") }
         static var done: String { L10n.string("state.done") }
@@ -271,6 +272,16 @@ enum L10n {
         static var microphone: String { L10n.string("audio.microphone") }
         static var systemDefault: String { L10n.string("audio.systemDefault") }
         static var inputDeviceDescription: String { L10n.string("audio.inputDeviceDescription") }
+        static var recordingMode: String { L10n.string("audio.recordingMode") }
+        static var recordingModeDescription: String { L10n.string("audio.recordingModeDescription") }
+        static var recordingModeManual: String { L10n.string("audio.recordingModeManual") }
+        static var recordingModeHandsFree: String { L10n.string("audio.recordingModeHandsFree") }
+        static var recordingModeManualDescription: String {
+            L10n.string("audio.recordingModeManualDescription")
+        }
+        static var recordingModeHandsFreeDescription: String {
+            L10n.string("audio.recordingModeHandsFreeDescription")
+        }
         static var testMicrophone: String { L10n.string("audio.testMicrophone") }
         static var testInput: String { L10n.string("audio.testInput") }
         static var testing: String { L10n.string("audio.testing") }

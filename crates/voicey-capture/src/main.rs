@@ -14,7 +14,7 @@ const TARGET_SAMPLE_RATE: f64 = 16_000.0;
 static LIVE_RECORDER: OnceLock<Mutex<LiveRecorder>> = OnceLock::new();
 
 fn live_recorder() -> &'static Mutex<LiveRecorder> {
-  LIVE_RECORDER.get_or_init(|| Mutex::new(LiveRecorder::new()))
+    LIVE_RECORDER.get_or_init(|| Mutex::new(LiveRecorder::new()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -22,7 +22,12 @@ fn live_recorder() -> &'static Mutex<LiveRecorder> {
 enum CaptureRequest {
     Ping { id: String },
     Prewarm { id: String },
-    StartRecording { id: String },
+    StartRecording {
+        id: String,
+        #[serde(default)]
+        #[allow(dead_code)]
+        mode: Option<String>,
+    },
     StopRecording {
         id: String,
         #[serde(default = "default_apply_trailing_trim")]
@@ -36,8 +41,12 @@ enum CaptureRequest {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum CaptureResponse {
-    Pong { id: String },
-    CaptureReady { id: String },
+    Pong {
+        id: String,
+    },
+    CaptureReady {
+        id: String,
+    },
     CaptureFixtureResult {
         id: String,
         ok: bool,
@@ -50,7 +59,10 @@ enum CaptureResponse {
         id: String,
         level: f32,
     },
-    Error { id: String, message: String },
+    Error {
+        id: String,
+        message: String,
+    },
 }
 
 fn main() {
@@ -73,9 +85,8 @@ fn run(mut input: impl BufRead, mut output: impl Write) -> std::io::Result<()> {
             continue;
         }
         let response = handle_request(trimmed, &mut warmed);
-        let json = serde_json::to_string(&response).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?;
+        let json = serde_json::to_string(&response)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         writeln!(output, "{json}")?;
         output.flush()?;
     }
@@ -95,19 +106,17 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
 
     match request {
         CaptureRequest::Ping { id } => CaptureResponse::Pong { id },
-        CaptureRequest::Prewarm { id } => {
-            match prewarm_device() {
-                Ok(()) => {
-                    *warmed = true;
-                    CaptureResponse::CaptureReady { id }
-                }
-                Err(error) => CaptureResponse::Error {
-                    id,
-                    message: error.to_string(),
-                },
+        CaptureRequest::Prewarm { id } => match prewarm_device() {
+            Ok(()) => {
+                *warmed = true;
+                CaptureResponse::CaptureReady { id }
             }
-        }
-        CaptureRequest::StartRecording { id } => {
+            Err(error) => CaptureResponse::Error {
+                id,
+                message: error.to_string(),
+            },
+        },
+        CaptureRequest::StartRecording { id, mode: _ } => {
             let mut recorder = live_recorder().lock().expect("recorder lock");
             match recorder.start() {
                 Ok(()) => CaptureResponse::CaptureReady { id },
@@ -138,7 +147,10 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
             id,
             level: live_input_level(),
         },
-        CaptureRequest::RecordFixture { id, duration_seconds } => {
+        CaptureRequest::RecordFixture {
+            id,
+            duration_seconds,
+        } => {
             if duration_seconds <= 0.0 || duration_seconds > 30.0 {
                 return CaptureResponse::CaptureFixtureResult {
                     id,
@@ -266,7 +278,10 @@ fn resample_to_16k(input: Vec<f32>, input_rate: f64) -> std::io::Result<Vec<f32>
     let mut output = Vec::with_capacity(output_len);
     for index in 0..output_len {
         let src_index = (index as f64 * input_rate / TARGET_SAMPLE_RATE) as usize;
-        let sample = input.get(src_index.min(input.len() - 1)).copied().unwrap_or(0.0);
+        let sample = input
+            .get(src_index.min(input.len() - 1))
+            .copied()
+            .unwrap_or(0.0);
         output.push(sample);
     }
     Ok(output)

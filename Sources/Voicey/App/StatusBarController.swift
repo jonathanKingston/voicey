@@ -93,7 +93,7 @@ final class StatusBarController {
 
     updateTooltip(for: appState.modelStatus)
 
-    if appState.isRecording {
+    if appState.isCaptureEngaged {
       startRecordingAnimation()
     } else {
       stopRecordingAnimation()
@@ -101,7 +101,8 @@ final class StatusBarController {
     }
 
     if let startItem = menu.items.first {
-      startItem.title = appState.isRecording ? L10n.Menu.stopTranscription : L10n.Menu.startTranscription
+      startItem.title =
+        appState.isCaptureEngaged ? L10n.Menu.stopTranscription : L10n.Menu.startTranscription
     }
   }
 
@@ -132,7 +133,7 @@ final class StatusBarController {
 
   private func updateIconForModelStatus(_ status: ModelStatus) {
     // Don't update icon if we're recording
-    if appState?.isRecording == true { return }
+    if appState?.isCaptureEngaged == true { return }
 
     guard let button = ensureStatusItemButton() else { return }
     // Clear any recording tint so template icons can adapt to menubar highlight/appearance.

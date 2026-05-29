@@ -7,6 +7,7 @@
 /* Transcription States */
 "state.ready" = "就绪";
 "state.loadingModel" = "正在加载模型...";
+"state.waitingForSpeech" = "Waiting for speech...";
 "state.listening" = "正在聆听...";
 "state.transcribing" = "正在转录...";
 "state.done" = "完成";
@@ -93,6 +94,12 @@
 "audio.testInput" = "测试输入";
 "audio.testing" = "测试中...";
 "audio.testDescription" = "对着麦克风说话以验证其是否正常工作。";
+"audio.recordingMode" = "Recording Mode";
+"audio.recordingModeDescription" = "Choose how Voicey starts and stops capture.";
+"audio.recordingModeManual" = "Manual";
+"audio.recordingModeHandsFree" = "Hands-Free";
+"audio.recordingModeManualDescription" = "Press once to start, press again to stop and transcribe.";
+"audio.recordingModeHandsFreeDescription" = "Press once. Voicey waits for you to speak, starts automatically, and transcribes after you pause.";
 
 /* Model Settings */
 "model.selectedModel" = "已选模型";

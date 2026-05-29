@@ -1,9 +1,17 @@
 import AVFoundation
 import Accelerate
+import VoiceyCore
 import os
 
 protocol AudioCaptureManagerDelegate: AnyObject {
   func audioCaptureManager(_ manager: AudioCaptureManager, didUpdateLevel level: Float)
+  func audioCaptureManagerDidDetectSpeechStart(_ manager: AudioCaptureManager)
+  func audioCaptureManagerDidDetectSpeechEnd(_ manager: AudioCaptureManager)
+}
+
+extension AudioCaptureManagerDelegate {
+  func audioCaptureManagerDidDetectSpeechStart(_ manager: AudioCaptureManager) {}
+  func audioCaptureManagerDidDetectSpeechEnd(_ manager: AudioCaptureManager) {}
 }
 
 final class AudioCaptureManager {
@@ -24,9 +32,13 @@ final class AudioCaptureManager {
   private let trailingSilenceRMSThreshold: Float = 0.01
   private let minimumRemainingAudioSeconds: Double = 0.3
   private let minimumTrimSeconds: Double = 0.08
+  private let handsFreeConfiguration = HandsFreeRecordingConfiguration.default
 
   private var levelTimer: Timer?
   private var usesRustCaptureWorker = false
+  private var recordingMode: RecordingMode = .manual
+  private var handsFreeDetector: HandsFreeSpeechDetector?
+  private var captureStartedAt: Date?
 
   init() {
     setupAudioSession()
@@ -37,13 +49,19 @@ final class AudioCaptureManager {
     // Audio configuration is handled through AVAudioEngine
   }
 
-  func startCapture() {
+  var handsFreeWaitTimeoutDuration: TimeInterval {
+    handsFreeConfiguration.waitTimeoutDuration
+  }
+
+  func startCapture(mode: RecordingMode = .manual) {
+    prepareForCapture(mode: mode)
+
     if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
       usesRustCaptureWorker = true
       AppLogger.audio.info("AudioCapture: Starting voicey-capture worker...")
       Task {
         do {
-          try await VoiceyCaptureWorkerSession.shared.startRecording()
+          try await VoiceyCaptureWorkerSession.shared.startRecording(mode: mode)
         } catch {
           AppLogger.audio.error("voicey-capture start failed: \(error.localizedDescription)")
         }
@@ -53,9 +71,7 @@ final class AudioCaptureManager {
         Task {
           do {
             let level = try await VoiceyCaptureWorkerSession.shared.currentInputLevel()
-            await MainActor.run {
-              self.delegate?.audioCaptureManager(self, didUpdateLevel: level)
-            }
+            self.handleCaptureLevel(level, totalSamplesCaptured: self.approximateWorkerSampleCount())
           } catch {
             // Worker may still be starting; keep last level.
           }
@@ -116,16 +132,19 @@ final class AudioCaptureManager {
   }
 
   func stopCapture(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
+    defer { resetCaptureState() }
+
     if usesRustCaptureWorker {
       usesRustCaptureWorker = false
       levelTimer?.invalidate()
       levelTimer = nil
       delegate?.audioCaptureManager(self, didUpdateLevel: 0)
       do {
-        let samples = try runSynchronously {
+        var samples = try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.stopRecording(
             applyTrailingTrim: applyTrailingTrimHeuristic)
         }
+        samples = boundedSamplesIfNeeded(from: samples)
         let durationSec = Double(samples.count) / targetSampleRate
         AppLogger.audio.info(
           "AudioCapture (voicey-capture): \(samples.count) samples (~\(String(format: "%.1f", durationSec))s)"
@@ -150,7 +169,9 @@ final class AudioCaptureManager {
     }
 
     if applyTrailingTrimHeuristic, let capturedAudio = result {
-      result = trimTrailingLowEnergyAudio(capturedAudio)
+      result = trimTrailingLowEnergyAudio(boundedSamplesIfNeeded(from: capturedAudio))
+    } else if let capturedAudio = result {
+      result = boundedSamplesIfNeeded(from: capturedAudio)
     }
 
     // Clean up references
@@ -191,7 +212,9 @@ final class AudioCaptureManager {
 
     // Append to buffer
     bufferQueue.async { [weak self] in
-      self?.audioBuffer.append(contentsOf: samples)
+      guard let self else { return }
+      self.audioBuffer.append(contentsOf: samples)
+      self.consumeHandsFreeLevel(level, totalSamplesCaptured: self.audioBuffer.count)
     }
   }
 
@@ -331,6 +354,64 @@ final class AudioCaptureManager {
 
   static var defaultInputDevice: AVCaptureDevice? {
     AVCaptureDevice.default(for: .audio)
+  }
+
+  private func prepareForCapture(mode: RecordingMode) {
+    recordingMode = mode
+    captureStartedAt = Date()
+    handsFreeDetector = mode == .handsFree
+      ? HandsFreeSpeechDetector(configuration: handsFreeConfiguration)
+      : nil
+  }
+
+  private func resetCaptureState() {
+    captureStartedAt = nil
+    handsFreeDetector = nil
+    recordingMode = .manual
+  }
+
+  private func handleCaptureLevel(_ level: Float, totalSamplesCaptured: Int) {
+    Task { @MainActor [weak self] in
+      guard let self = self else { return }
+      self.delegate?.audioCaptureManager(self, didUpdateLevel: level)
+    }
+
+    bufferQueue.async { [weak self] in
+      self?.consumeHandsFreeLevel(level, totalSamplesCaptured: totalSamplesCaptured)
+    }
+  }
+
+  private func consumeHandsFreeLevel(_ level: Float, totalSamplesCaptured: Int) {
+    guard recordingMode == .handsFree, var detector = handsFreeDetector else { return }
+
+    let events = detector.consume(level: level, totalSamplesCaptured: totalSamplesCaptured)
+    handsFreeDetector = detector
+
+    for event in events {
+      switch event {
+      case .speechStarted:
+        Task { @MainActor [weak self] in
+          guard let self else { return }
+          self.delegate?.audioCaptureManagerDidDetectSpeechStart(self)
+        }
+      case .speechEnded:
+        Task { @MainActor [weak self] in
+          guard let self else { return }
+          self.delegate?.audioCaptureManagerDidDetectSpeechEnd(self)
+        }
+      }
+    }
+  }
+
+  private func boundedSamplesIfNeeded(from samples: [Float]) -> [Float] {
+    guard recordingMode == .handsFree, let handsFreeDetector else { return samples }
+    return handsFreeDetector.boundedSamples(from: samples)
+  }
+
+  private func approximateWorkerSampleCount() -> Int {
+    guard let captureStartedAt else { return 0 }
+    let elapsed = max(0, Date().timeIntervalSince(captureStartedAt))
+    return Int((elapsed * targetSampleRate).rounded())
   }
 
   private func runSynchronously<T>(_ operation: @escaping () async throws -> T) throws -> T {

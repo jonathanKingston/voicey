@@ -449,12 +449,38 @@ struct HotkeySettingsView: View {
 // MARK: - Audio Settings
 
 struct AudioSettingsView: View {
+  private static let defaults = SettingsManager.defaultsStore
+  @AppStorage("recordingMode", store: defaults) private var recordingMode: String =
+    RecordingMode.manual.rawValue
   @State private var isTestingMic: Bool = false
   @State private var testLevel: Float = 0
   @State private var testPassed: Bool?
 
   var body: some View {
     Form {
+      Section(L10n.Audio.recordingMode) {
+        Picker(L10n.Audio.recordingMode, selection: $recordingMode) {
+          Text(L10n.Audio.recordingModeManual)
+            .tag(RecordingMode.manual.rawValue)
+          Text(L10n.Audio.recordingModeHandsFree)
+            .tag(RecordingMode.handsFree.rawValue)
+        }
+        .pickerStyle(.segmented)
+
+        Text(L10n.Audio.recordingModeDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        let currentMode = RecordingMode(rawValue: recordingMode) ?? .manual
+        Text(
+          currentMode == .manual
+            ? L10n.Audio.recordingModeManualDescription
+            : L10n.Audio.recordingModeHandsFreeDescription
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
+
       Section(L10n.Audio.inputDevice) {
         HStack {
           Text(L10n.Audio.microphone)

@@ -7,6 +7,7 @@
 /* Transcription States */
 "state.ready" = "Ready";
 "state.loadingModel" = "Loading model...";
+"state.waitingForSpeech" = "Waiting for speech...";
 "state.listening" = "Listening...";
 "state.transcribing" = "Transcribing...";
 "state.done" = "Done";
@@ -93,6 +94,12 @@
 "audio.testInput" = "Test Input";
 "audio.testing" = "Testing...";
 "audio.testDescription" = "Speak into your microphone to verify it's working.";
+"audio.recordingMode" = "Recording Mode";
+"audio.recordingModeDescription" = "Choose how Voicey starts and stops capture.";
+"audio.recordingModeManual" = "Manual";
+"audio.recordingModeHandsFree" = "Hands-Free";
+"audio.recordingModeManualDescription" = "Press once to start, press again to stop and transcribe.";
+"audio.recordingModeHandsFreeDescription" = "Press once. Voicey waits for you to speak, starts automatically, and transcribes after you pause.";
 
 /* Model Settings */
 "model.selectedModel" = "Selected Model";
