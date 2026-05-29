@@ -40,6 +40,14 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertEqual(processed, "hello world")
   }
 
+  func testSharedMemoryPCMReadSlice() throws {
+    let samples: [Float] = [0, 0.25, -0.5, 1.0, 0.75]
+    let name = try SharedMemoryPCM.write(samples: samples)
+    defer { SharedMemoryPCM.remove(name: name) }
+    let slice = try SharedMemoryPCM.read(name: name, sampleCount: 3, sampleOffset: 1)
+    XCTAssertEqual(slice, [0.25, -0.5, 1.0])
+  }
+
   func testSharedMemoryPCMRoundTrip() throws {
     let samples: [Float] = [0.0, 0.25, -0.5, 1.0]
     let name = try SharedMemoryPCM.write(samples: samples)

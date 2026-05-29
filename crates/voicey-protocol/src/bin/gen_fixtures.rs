@@ -53,6 +53,7 @@ fn main() {
             sample_rate: 16_000,
             shm_name: "voicey-pcm-fixture".into(),
             sample_count: 1024,
+            sample_offset: 0,
             decoder_context: Some("Glossary: Voicey".into()),
         },
     );
@@ -64,6 +65,19 @@ fn main() {
             sample_rate: 16_000,
             shm_name: "voicey-pcm-fixture".into(),
             sample_count: 512,
+            sample_offset: 0,
+            decoder_context: None,
+        },
+    );
+    write_fixture(
+        &root.join("host_request/transcribe_slice.json"),
+        &HostRequest::Transcribe {
+            id: "fixture-transcribe-003".into(),
+            model_id: "qwen3-asr-0.6b-6bit".into(),
+            sample_rate: 16_000,
+            shm_name: "voicey-pcm-fixture".into(),
+            sample_count: 256,
+            sample_offset: 128,
             decoder_context: None,
         },
     );
@@ -230,6 +244,7 @@ fn main() {
             sample_rate: 16_000,
             shm_name: "voicey-pcm-fixture".into(),
             sample_count: 1024,
+            sample_offset: 0,
             decoder_context: Some("Glossary: Voicey".into()),
         },
     );
@@ -241,6 +256,19 @@ fn main() {
             sample_rate: 16_000,
             shm_name: "voicey-pcm-fixture".into(),
             sample_count: 512,
+            sample_offset: 0,
+            decoder_context: None,
+        },
+    );
+    write_fixture(
+        &root.join("infer_worker_request/transcribe_slice.json"),
+        &InferWorkerRequest::Transcribe {
+            id: "fixture-infer-transcribe-003".into(),
+            model_id: "qwen3-asr-0.6b-6bit".into(),
+            sample_rate: 16_000,
+            shm_name: "voicey-pcm-fixture".into(),
+            sample_count: 256,
+            sample_offset: 128,
             decoder_context: None,
         },
     );

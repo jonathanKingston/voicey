@@ -78,12 +78,14 @@ fn handle_request(line: &str, workers: &mut process::WorkerProcesses) -> HostRes
             sample_rate,
             shm_name,
             sample_count,
+            sample_offset,
             decoder_context,
         } => match workers.infer_transcribe(
             &model_id,
             sample_rate,
             &shm_name,
             sample_count,
+            sample_offset,
             decoder_context.as_deref(),
         ) {
             Ok(result) => HostResponse::TranscribeResult {

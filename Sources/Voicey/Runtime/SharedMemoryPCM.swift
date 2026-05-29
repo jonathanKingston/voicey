@@ -17,16 +17,18 @@ enum SharedMemoryPCM {
     return name
   }
 
-  static func read(name: String, sampleCount: Int) throws -> [Float] {
+  static func read(name: String, sampleCount: Int, sampleOffset: Int = 0) throws -> [Float] {
     let url = fileURL(for: name)
     let data = try Data(contentsOf: url)
-    let expected = sampleCount * MemoryLayout<Float>.size
-    guard data.count >= expected else {
+    let sampleSize = MemoryLayout<Float>.size
+    let byteOffset = sampleOffset * sampleSize
+    let expected = sampleCount * sampleSize
+    guard data.count >= byteOffset + expected else {
       throw SharedMemoryPCMError.bufferTooSmall
     }
     return data.withUnsafeBytes { rawBuffer in
       let bound = rawBuffer.bindMemory(to: Float.self)
-      return Array(bound.prefix(sampleCount))
+      return Array(bound[sampleOffset..<(sampleOffset + sampleCount)])
     }
   }
 

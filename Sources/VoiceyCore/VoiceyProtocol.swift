@@ -27,6 +27,7 @@ public enum VoiceyHostRequest: Equatable {
     sampleRate: UInt32,
     shmName: String,
     sampleCount: Int,
+    sampleOffset: Int,
     decoderContext: String?
   )
   case downloadModel(id: String, modelID: String, destinationRoot: String)
@@ -44,6 +45,7 @@ extension VoiceyHostRequest: Codable {
     case sampleRate = "sample_rate"
     case shmName = "shm_name"
     case sampleCount = "sample_count"
+    case sampleOffset = "sample_offset"
     case decoderContext = "decoder_context"
     case destinationRoot = "destination_root"
     case durationSeconds = "duration_seconds"
@@ -81,6 +83,7 @@ extension VoiceyHostRequest: Codable {
         sampleRate: try container.decode(UInt32.self, forKey: .sampleRate),
         shmName: try container.decode(String.self, forKey: .shmName),
         sampleCount: try container.decode(Int.self, forKey: .sampleCount),
+        sampleOffset: try container.decodeIfPresent(Int.self, forKey: .sampleOffset) ?? 0,
         decoderContext: try container.decodeIfPresent(String.self, forKey: .decoderContext)
       )
     case "download_model":
@@ -137,13 +140,14 @@ extension VoiceyHostRequest: Codable {
       try container.encode("unload_model", forKey: .type)
       try container.encode(id, forKey: .id)
     case .transcribe(
-      let id, let modelID, let sampleRate, let shmName, let sampleCount, let decoderContext):
+      let id, let modelID, let sampleRate, let shmName, let sampleCount, let sampleOffset, let decoderContext):
       try container.encode("transcribe", forKey: .type)
       try container.encode(id, forKey: .id)
       try container.encode(modelID, forKey: .modelID)
       try container.encode(sampleRate, forKey: .sampleRate)
       try container.encode(shmName, forKey: .shmName)
       try container.encode(sampleCount, forKey: .sampleCount)
+      try container.encode(sampleOffset, forKey: .sampleOffset)
       try container.encodeIfPresent(decoderContext, forKey: .decoderContext)
     case .downloadModel(let id, let modelID, let destinationRoot):
       try container.encode("download_model", forKey: .type)
@@ -361,6 +365,7 @@ public enum VoiceyInferWorkerRequest: Equatable {
     sampleRate: UInt32,
     shmName: String,
     sampleCount: Int,
+    sampleOffset: Int,
     decoderContext: String?
   )
   case shutdown(id: String)
@@ -374,6 +379,7 @@ extension VoiceyInferWorkerRequest: Codable {
     case sampleRate = "sample_rate"
     case shmName = "shm_name"
     case sampleCount = "sample_count"
+    case sampleOffset = "sample_offset"
     case decoderContext = "decoder_context"
   }
 
@@ -397,6 +403,7 @@ extension VoiceyInferWorkerRequest: Codable {
         sampleRate: try container.decode(UInt32.self, forKey: .sampleRate),
         shmName: try container.decode(String.self, forKey: .shmName),
         sampleCount: try container.decode(Int.self, forKey: .sampleCount),
+        sampleOffset: try container.decodeIfPresent(Int.self, forKey: .sampleOffset) ?? 0,
         decoderContext: try container.decodeIfPresent(String.self, forKey: .decoderContext)
       )
     case "shutdown":
@@ -424,13 +431,14 @@ extension VoiceyInferWorkerRequest: Codable {
       try container.encode("unload_model", forKey: .type)
       try container.encode(id, forKey: .id)
     case .transcribe(
-      let id, let modelID, let sampleRate, let shmName, let sampleCount, let decoderContext):
+      let id, let modelID, let sampleRate, let shmName, let sampleCount, let sampleOffset, let decoderContext):
       try container.encode("transcribe", forKey: .type)
       try container.encode(id, forKey: .id)
       try container.encode(modelID, forKey: .modelID)
       try container.encode(sampleRate, forKey: .sampleRate)
       try container.encode(shmName, forKey: .shmName)
       try container.encode(sampleCount, forKey: .sampleCount)
+      try container.encode(sampleOffset, forKey: .sampleOffset)
       try container.encodeIfPresent(decoderContext, forKey: .decoderContext)
     case .shutdown(let id):
       try container.encode("shutdown", forKey: .type)
