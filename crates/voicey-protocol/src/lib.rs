@@ -1,6 +1,7 @@
 //! Versioned IPC messages between Voicey host, supervisor, and workers.
 //! Schema version 1 — bump `PROTOCOL_VERSION` when breaking changes ship.
 //!
+//!
 //! Shared PCM audio buffers use the `voicey-pcm` crate spec (temp-dir `.pcm` files).
 //! Golden JSON fixtures live under `fixtures/`; see `docs/RUST_PROTOCOL.md`.
 
