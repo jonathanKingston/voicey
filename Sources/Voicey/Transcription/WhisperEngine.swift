@@ -84,7 +84,9 @@ struct TranscriptionToken {
   let endTime: TimeInterval
 }
 
-/// Wrapper around WhisperKit for on-device speech-to-text
+/// Wrapper around WhisperKit for on-device speech-to-text.
+///
+/// Used by benchmark CLI tooling only (`BenchmarkSpeechBackend`). The production app uses Qwen.
 /// Note: This class should be accessed from the main thread for UI callbacks.
 /// WhisperKit operations are async and run on background threads automatically.
 final class WhisperEngine: @unchecked Sendable {
