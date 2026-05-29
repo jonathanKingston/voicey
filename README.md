@@ -158,6 +158,9 @@ See [`docs/RUST_RUNTIME.md`](docs/RUST_RUNTIME.md) for environment flags, bundle
 
 ## Architecture
 
+For a compact system diagram, code map, runtime trade-offs, and guidance on where
+new development should live, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ```text
 Sources/
 ├── Voicey/App             # App lifecycle, menubar, update integration
