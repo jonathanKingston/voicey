@@ -288,6 +288,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   /// Use the smaller Qwen model on machines with less than 16 GB RAM.
   private static let largeQwenMemoryThresholdBytes: UInt64 = 16 * 1024 * 1024 * 1024
   private static let qwenModelsDirectoryName = "qwen3-speech"
+  private var didMigrateLegacyQwenCache = false
 
   /// The default/recommended model - native Qwen3 MLX, chosen by available RAM.
   static var defaultModel: SpeechModel {
@@ -344,7 +345,47 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     return voiceyDir
   }
 
+  private var legacyQwenCachesDirectory: URL {
+    let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+    return caches.appendingPathComponent(Self.qwenModelsDirectoryName, isDirectory: true)
+  }
+
+  /// Move Qwen weights from the legacy `~/Library/Caches/qwen3-speech` layout when present.
+  private func migrateLegacyQwenCacheIfNeeded() {
+    guard !didMigrateLegacyQwenCache else { return }
+    didMigrateLegacyQwenCache = true
+
+    let legacy = legacyQwenCachesDirectory
+    guard fileManager.fileExists(atPath: legacy.path),
+      let legacyEntries = try? fileManager.contentsOfDirectory(atPath: legacy.path),
+      !legacyEntries.isEmpty
+    else {
+      return
+    }
+
+    let destination = modelsDirectory.appendingPathComponent(Self.qwenModelsDirectoryName, isDirectory: true)
+    do {
+      try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+    } catch {
+      AppLogger.model.error("Failed to prepare Qwen models directory at \(destination.path): \(error)")
+      return
+    }
+
+    for entry in legacyEntries where !entry.hasPrefix(".") {
+      let source = legacy.appendingPathComponent(entry)
+      let target = destination.appendingPathComponent(entry)
+      guard !fileManager.fileExists(atPath: target.path) else { continue }
+      do {
+        try fileManager.moveItem(at: source, to: target)
+        AppLogger.model.info("Migrated Qwen cache entry to app-managed models directory: \(entry)")
+      } catch {
+        AppLogger.model.error("Failed to migrate Qwen cache entry \(entry): \(error)")
+      }
+    }
+  }
+
   private var qwenModelsDirectory: URL {
+    migrateLegacyQwenCacheIfNeeded()
     let directory = modelsDirectory.appendingPathComponent(Self.qwenModelsDirectoryName, isDirectory: true)
     if !fileManager.fileExists(atPath: directory.path) {
       do {

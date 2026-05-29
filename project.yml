@@ -71,7 +71,7 @@ targets:
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
 
-  # Direct distribution target (sandboxed, Sparkle updates)
+  # Direct distribution target (non-sandboxed: auto-paste; Sparkle updates)
   VoiceyDirect:
     type: application
     platform: macOS
@@ -102,7 +102,6 @@ targets:
         CODE_SIGN_ENTITLEMENTS: VoiceyDirect.entitlements
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: YES
-        ENABLE_APP_SANDBOX: YES
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: VOICEY_DIRECT_DISTRIBUTION
       configs:
         Debug:
@@ -112,12 +111,9 @@ targets:
     entitlements:
       path: VoiceyDirect.entitlements
       properties:
-        com.apple.security.app-sandbox: true
+        com.apple.security.app-sandbox: false
         com.apple.security.device.audio-input: true
         com.apple.security.network.client: true
-        com.apple.security.temporary-exception.mach-lookup.global-name:
-          - work.voicey.VoiceyDirect-spks
-          - work.voicey.VoiceyDirect-spki
 
 schemes:
   Voicey:
