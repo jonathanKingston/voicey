@@ -4,6 +4,10 @@ import KeyboardShortcuts
 import SwiftUI
 import VoiceyCore
 
+// Settings UI aggregates many panes in one file. Keep the file-length warning
+// disabled until the panes are extracted into separate views.
+// swiftlint:disable file_length
+
 /// Main settings view with sidebar navigation
 struct SettingsView: View {
   static let windowSize = CGSize(width: 760, height: 580)

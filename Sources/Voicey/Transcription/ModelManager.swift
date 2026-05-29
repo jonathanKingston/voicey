@@ -4,6 +4,10 @@ import Foundation
 import WhisperKit
 import os
 
+// ModelManager owns download, update, and revision-tracking responsibilities.
+// Keep size warnings disabled until these concerns are split into focused types.
+// swiftlint:disable type_body_length file_length
+
 /// Available speech model variants
 enum SpeechModel: String, CaseIterable, Identifiable {
   // Qwen3 ASR models (native MLX Swift)
@@ -303,8 +307,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
       // Check file size - compiled models have substantial coremldata.bin files
       if let attrs = try? fileManager.attributesOfItem(atPath: audioEncoderCompiled.path),
         let size = attrs[.size] as? Int64,
-        size > 1_000_000
-      {  // > 1MB suggests it's been compiled
+        size > 1_000_000 {  // > 1MB suggests it's been compiled
         return true
       }
     }
@@ -400,7 +403,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     // Verify essential model components exist with their weight files
     // A complete model must have MelSpectrogram, AudioEncoder, and TextDecoder
     let essentialComponents = [
-      "MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc", "TextDecoder.mlmodelc",
+      "MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc", "TextDecoder.mlmodelc"
     ]
 
     for component in essentialComponents {
@@ -958,14 +961,12 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
 
     // Check for common error patterns in the message
     if errorString.contains("network") || errorString.contains("internet")
-      || errorString.contains("connection")
-    {
+      || errorString.contains("connection") {
       return "Network error: Please check your internet connection and try again."
     }
 
     if errorString.contains("disk") || errorString.contains("space")
-      || errorString.contains("storage")
-    {
+      || errorString.contains("storage") {
       return "Insufficient disk space. Please free up some storage and try again."
     }
 
@@ -1028,8 +1029,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
       // For Granite models, just remove the directory if marker is missing
       if let dir = graniteModelDirectory(for: model),
         fileManager.fileExists(atPath: dir.path),
-        !fileManager.fileExists(atPath: dir.appendingPathComponent(".download_complete").path)
-      {
+        !fileManager.fileExists(atPath: dir.appendingPathComponent(".download_complete").path) {
         try? fileManager.removeItem(at: dir)
       }
       return
@@ -1037,8 +1037,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     if model.isQwenModel {
       if let dir = qwenModelDirectory(for: model),
         fileManager.fileExists(atPath: dir.path),
-        !isQwenModelComplete(at: dir)
-      {
+        !isQwenModelComplete(at: dir) {
         try? fileManager.removeItem(at: dir)
       }
       return
@@ -1081,8 +1080,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   func deleteModel(_ model: SpeechModel) throws {
     if model.isGraniteModel {
       if let dir = graniteModelDirectory(for: model),
-        fileManager.fileExists(atPath: dir.path)
-      {
+        fileManager.fileExists(atPath: dir.path) {
         try fileManager.removeItem(at: dir)
       }
       downloadedModels.remove(model)
@@ -1092,8 +1090,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     }
     if model.isQwenModel {
       if let dir = qwenModelDirectory(for: model),
-        fileManager.fileExists(atPath: dir.path)
-      {
+        fileManager.fileExists(atPath: dir.path) {
         try fileManager.removeItem(at: dir)
       }
       downloadedModels.remove(model)
@@ -1144,8 +1141,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   }
 
   private func saveRevisionMetadata() {
-    let storedMetadata = modelRevisionMetadata.reduce(into: [String: ModelRevisionMetadata]()) {
-      result, element in
+    let storedMetadata = modelRevisionMetadata.reduce(into: [String: ModelRevisionMetadata]()) { result, element in
       result[element.key.rawValue] = element.value
     }
 
@@ -1363,6 +1359,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
     return formatter.string(fromByteCount: bytes)
   }
 }
+// swiftlint:enable type_body_length
 
 private actor GraniteDownloadOutputBuffer {
   private var stdout = ""
