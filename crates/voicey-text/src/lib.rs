@@ -2,11 +2,15 @@
 
 pub mod bm25;
 pub mod glossary;
+pub mod noise_filter;
+pub mod postprocess;
 pub mod screen_term_filter;
 pub mod screen_term_healing;
 pub mod screen_term_selector;
 pub mod snapshot;
 pub mod text_cleanup;
+pub mod voice_command;
+pub mod worker;
 
 pub use bm25::{rank_terms, rank_terms_default, RankedTerm};
 pub use glossary::{
@@ -29,3 +33,5 @@ pub use text_cleanup::{
     apply_expansions, capitalize_first, capitalize_i, cleanup_spacing_and_punctuation,
     default_text_expansions, is_conjunction,
 };
+pub use postprocess::{postprocess, PostProcessInput, TranscriptionSegment};
+pub use voice_command::{default_voice_commands, VoiceCommand, VoiceCommandAction};
