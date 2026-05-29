@@ -1240,6 +1240,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return recordingTargetPID
   }
 
+  /// Restores hands-free "waiting for speech" only when capture is not mid-utterance.
+  @MainActor
+  private func restoreHandsFreeWaitingForSpeechIfNotRecording() {
+    guard appState.handsFreeSessionActive, !appState.isRecording else { return }
+    appState.transcriptionState = .waitingForSpeech(startTime: Date())
+  }
+
   private func processTranscription(
     audioBuffer: [Float],
     continueHandsFreeSession: Bool = false,
@@ -1324,7 +1331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           AppLogger.transcription.warning(
             "processTranscription: No text to deliver (empty/whitespace after processing)")
           if continueHandsFreeSession, self.appState.handsFreeSessionActive {
-            self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+            self.restoreHandsFreeWaitingForSpeechIfNotRecording()
             self.tryPerformPendingUpgrade()
             return
           }
@@ -1356,7 +1363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
             guard let self else { return }
             if continueHandsFreeSession, self.appState.handsFreeSessionActive {
-              self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+              self.restoreHandsFreeWaitingForSpeechIfNotRecording()
               self.tryPerformPendingUpgrade()
               return
             }
@@ -1367,7 +1374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if continueHandsFreeSession {
-          self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+          self.restoreHandsFreeWaitingForSpeechIfNotRecording()
         } else {
           self.appState.transcriptionState = .completed(text: processedText)
         }
@@ -1384,7 +1391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       await MainActor.run { [weak self] in
         guard let self else { return }
         if continueHandsFreeSession, self.appState.handsFreeSessionActive {
-          self.appState.transcriptionState = .waitingForSpeech(startTime: Date())
+          self.restoreHandsFreeWaitingForSpeechIfNotRecording()
           self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
           self.tryPerformPendingUpgrade()
           return

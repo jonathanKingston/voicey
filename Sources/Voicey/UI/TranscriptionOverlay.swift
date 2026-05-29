@@ -398,7 +398,10 @@ struct TranscriptionOverlayView: View {
   }
 
   private var statusText: String {
-    appState.transcriptionState.displayText
+    if appState.isWaitingForSpeech, appState.isHandsFreeBackgroundTranscribing {
+      return L10n.State.waitingForSpeechWhileTranscribing
+    }
+    return appState.transcriptionState.displayText
   }
 
   private var iconName: String {
