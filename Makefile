@@ -29,7 +29,7 @@ BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SO
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
-.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-supervisor-unit test-supervisor-integration ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
+.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
 
@@ -59,6 +59,9 @@ test-protocol: protocol-fixtures
 
 test-supervisor-unit:
 	cargo test -p voicey-supervisor --bin voicey-supervisor
+
+test-text:
+	cargo test -p voicey-text
 
 test-supervisor-integration:
 	cargo build -p voicey-worker-stubs --bins

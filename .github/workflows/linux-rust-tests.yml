@@ -1,8 +1,9 @@
 # Rust worker CI on Ubuntu: protocol tests, worker builds, and benchmark script checks.
 # macOS-only paths (Swift infer worker, CoreAudio) stay in build.yml.
 #
-# Tier 1 (`rust-core`): fast PR signal — protocol, in-process supervisor mapping tests,
-# stub integration, capture IPC, worker builds, benchmark script smoke.
+# Tier 1 (`rust-core`): fast PR signal — protocol, voicey-text postprocess tests,
+# in-process supervisor mapping tests, stub integration, capture IPC, worker builds,
+# benchmark script smoke.
 # Tier 2 (`rust-workspace`): full workspace `cargo test` + clippy (ALSA, all crates).
 name: Linux Rust tests
 
@@ -32,6 +33,9 @@ jobs:
 
       - name: Protocol contract tests
         run: cargo test -p voicey-protocol
+
+      - name: Text postprocess unit tests (voicey-text)
+        run: cargo test -p voicey-text
 
       - name: Supervisor in-process mapping tests (no child processes)
         run: cargo test -p voicey-supervisor --bin voicey-supervisor
