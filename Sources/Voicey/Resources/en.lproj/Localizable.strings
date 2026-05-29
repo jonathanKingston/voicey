@@ -8,6 +8,8 @@
 "state.ready" = "Ready";
 "state.loadingModel" = "Loading model...";
 "state.waitingForSpeech" = "Waiting for speech...";
+"state.waitingForSpeechWhileTranscribing" = "Waiting · transcribing…";
+"state.listeningWhileTranscribing" = "Listening · transcribing…";
 "state.listening" = "Listening...";
 "state.transcribing" = "Transcribing...";
 "state.done" = "Done";

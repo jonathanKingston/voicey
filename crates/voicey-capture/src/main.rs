@@ -34,6 +34,13 @@ enum CaptureRequest {
         apply_trailing_trim: bool,
     },
     GetLevel { id: String },
+    DrainHandsFreeUtterance {
+        id: String,
+        start_sample_index: usize,
+        end_sample_index: usize,
+        #[serde(default = "default_apply_trailing_trim")]
+        apply_trailing_trim: bool,
+    },
     RecordFixture { id: String, duration_seconds: f64 },
     Shutdown { id: String },
 }
@@ -58,6 +65,7 @@ enum CaptureResponse {
     CaptureLevel {
         id: String,
         level: f32,
+        sample_count: usize,
     },
     Error {
         id: String,
@@ -146,6 +154,44 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
         CaptureRequest::GetLevel { id } => CaptureResponse::CaptureLevel {
             id,
             level: live_input_level(),
+            sample_count: live_recorder().lock().expect("recorder lock").sample_count(),
+        },
+        CaptureRequest::DrainHandsFreeUtterance {
+            id,
+            start_sample_index,
+            end_sample_index,
+            apply_trailing_trim,
+        } => match live_recorder()
+            .lock()
+            .expect("recorder lock")
+            .drain_utterance(start_sample_index, end_sample_index, apply_trailing_trim)
+        {
+            Ok(samples) => match voicey_pcm::write_f32_samples(&samples) {
+                Ok(shm_name) => CaptureResponse::CaptureFixtureResult {
+                    id,
+                    ok: true,
+                    shm_name: Some(shm_name),
+                    sample_count: Some(samples.len()),
+                    sample_rate: Some(TARGET_SAMPLE_RATE as u32),
+                    error: None,
+                },
+                Err(error) => CaptureResponse::CaptureFixtureResult {
+                    id,
+                    ok: false,
+                    shm_name: None,
+                    sample_count: None,
+                    sample_rate: None,
+                    error: Some(error.to_string()),
+                },
+            },
+            Err(message) => CaptureResponse::CaptureFixtureResult {
+                id,
+                ok: false,
+                shm_name: None,
+                sample_count: None,
+                sample_rate: None,
+                error: Some(message),
+            },
         },
         CaptureRequest::RecordFixture {
             id,

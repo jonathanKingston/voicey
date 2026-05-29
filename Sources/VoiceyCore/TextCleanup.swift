@@ -88,4 +88,13 @@ public enum TextCleanup {
 
     return result.trimmingCharacters(in: .whitespacesAndNewlines)
   }
+
+  /// Adds a trailing space between consecutive hands-free pastes when appropriate.
+  public static func appendingInterUtteranceSpacingIfNeeded(_ text: String) -> String {
+    guard !text.isEmpty else { return text }
+    if text.hasSuffix(" ") || text.hasSuffix("\n") || text.hasSuffix("\t") {
+      return text
+    }
+    return text + " "
+  }
 }

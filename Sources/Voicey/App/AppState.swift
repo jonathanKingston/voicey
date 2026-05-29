@@ -1,6 +1,14 @@
 import Combine
 import Foundation
 
+struct HandsFreeBackgroundTranscriptionJob: Identifiable, Equatable {
+  let id: UUID
+  let envelope: [Float]
+  let startedAt: Date
+  let audioDuration: TimeInterval
+  let estimatedRTF: Double
+}
+
 /// Represents the current state of the transcription process
 enum TranscriptionState: Equatable {
   /// No transcription in progress
@@ -132,6 +140,11 @@ enum ModelStatus: Equatable {
 /// Holds the observable application state
 final class AppState: ObservableObject {
   @Published var transcriptionState: TranscriptionState = .idle
+  /// Hands-free hotkey session: mic stays open across utterances until cancelled.
+  @Published var handsFreeSessionActive: Bool = false
+  /// In-flight utterance transcriptions while the mic stays open in hands-free mode.
+  @Published private(set) var handsFreeBackgroundTranscriptionJobs: [HandsFreeBackgroundTranscriptionJob] =
+    []
   @Published var audioLevel: Float = 0.0
   @Published var currentModel: SpeechModel = SettingsManager.shared.selectedModel
   @Published var lastTranscription: String = ""
@@ -166,7 +179,36 @@ final class AppState: ObservableObject {
   }
 
   var isCaptureEngaged: Bool {
-    transcriptionState.isCaptureEngaged
+    handsFreeSessionActive || transcriptionState.isCaptureEngaged
+  }
+
+  var isHandsFreeBackgroundTranscribing: Bool {
+    handsFreeSessionActive && !handsFreeBackgroundTranscriptionJobs.isEmpty
+  }
+
+  @discardableResult
+  func addHandsFreeBackgroundTranscriptionJob(
+    envelope: [Float],
+    audioDuration: TimeInterval,
+    estimatedRTF: Double
+  ) -> UUID {
+    let job = HandsFreeBackgroundTranscriptionJob(
+      id: UUID(),
+      envelope: envelope,
+      startedAt: Date(),
+      audioDuration: audioDuration,
+      estimatedRTF: max(estimatedRTF, 0.05)
+    )
+    handsFreeBackgroundTranscriptionJobs.append(job)
+    return job.id
+  }
+
+  func removeHandsFreeBackgroundTranscriptionJob(id: UUID) {
+    handsFreeBackgroundTranscriptionJobs.removeAll { $0.id == id }
+  }
+
+  func resetHandsFreeBackgroundTranscriptionJobs() {
+    handsFreeBackgroundTranscriptionJobs = []
   }
 
   /// Whether the app is ready to record (model loaded and permissions granted)

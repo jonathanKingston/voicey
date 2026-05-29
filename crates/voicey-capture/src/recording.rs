@@ -32,21 +32,30 @@ fn update_live_input_level(samples: &[f32]) {
     LIVE_LEVEL_BITS.store(normalized.to_bits(), Ordering::Relaxed);
 }
 
+struct LiveRecordingHandle {
+    samples: Arc<Mutex<Vec<f32>>>,
+    stop_tx: mpsc::Sender<()>,
+    join: thread::JoinHandle<Result<(), String>>,
+}
+
 pub struct LiveRecorder {
-    stop_tx: Option<mpsc::Sender<()>>,
-    join: Option<thread::JoinHandle<Result<Vec<f32>, String>>>,
+    handle: Option<LiveRecordingHandle>,
 }
 
 impl LiveRecorder {
     pub fn new() -> Self {
-        Self {
-            stop_tx: None,
-            join: None,
-        }
+        Self { handle: None }
     }
 
     pub fn is_recording(&self) -> bool {
-        self.stop_tx.is_some()
+        self.handle.is_some()
+    }
+
+    pub fn sample_count(&self) -> usize {
+        self.handle
+            .as_ref()
+            .map(|handle| handle.samples.lock().expect("lock").len())
+            .unwrap_or(0)
     }
 
     pub fn start(&mut self) -> Result<(), String> {
@@ -54,32 +63,61 @@ impl LiveRecorder {
             return Err("capture already recording".into());
         }
         reset_live_input_level();
+        let samples = Arc::new(Mutex::new(Vec::new()));
+        let writer = samples.clone();
         let (stop_tx, stop_rx) = mpsc::channel();
-        let join = thread::spawn(move || record_until_stop(stop_rx));
-        self.stop_tx = Some(stop_tx);
-        self.join = Some(join);
+        let join = thread::spawn(move || record_until_stop(writer, stop_rx));
+        self.handle = Some(LiveRecordingHandle {
+            samples,
+            stop_tx,
+            join,
+        });
         Ok(())
     }
 
+    pub fn drain_utterance(
+        &self,
+        start_sample_index: usize,
+        end_sample_index: usize,
+        apply_trailing_trim: bool,
+    ) -> Result<Vec<f32>, String> {
+        let handle = self
+            .handle
+            .as_ref()
+            .ok_or_else(|| "capture not recording".to_string())?;
+        let mut guard = handle.samples.lock().expect("lock");
+        let start = start_sample_index.min(guard.len());
+        let end = end_sample_index.max(start).min(guard.len());
+        let utterance: Vec<f32> = guard[start..end].to_vec();
+        guard.drain(..end);
+        drop(guard);
+        Ok(crate::trim::maybe_trim_trailing_low_energy(
+            &utterance,
+            apply_trailing_trim,
+        ))
+    }
+
     pub fn stop(&mut self) -> Result<Vec<f32>, String> {
-        let stop_tx = self
-            .stop_tx
+        let handle = self
+            .handle
             .take()
             .ok_or_else(|| "capture not recording".to_string())?;
-        let join = self
+        let _ = handle.stop_tx.send(());
+        let result = handle
             .join
-            .take()
-            .ok_or_else(|| "capture join handle missing".to_string())?;
-        let _ = stop_tx.send(());
-        let result = join
             .join()
-            .map_err(|_| "capture thread panicked".to_string())??;
+            .map_err(|_| "capture thread panicked".to_string())?;
+        result?;
         reset_live_input_level();
-        Ok(result)
+        let mut guard = handle.samples.lock().expect("lock");
+        Ok(guard.drain(..).collect())
     }
 }
 
-fn record_until_stop(stop_rx: mpsc::Receiver<()>) -> Result<Vec<f32>, String> {
+fn record_until_stop(
+    samples: Arc<Mutex<Vec<f32>>>,
+    stop_rx: mpsc::Receiver<()>,
+) -> Result<(), String> {
     let host = cpal::default_host();
     let device = host
         .default_input_device()
@@ -90,8 +128,7 @@ fn record_until_stop(stop_rx: mpsc::Receiver<()>) -> Result<Vec<f32>, String> {
     let sample_rate = config.sample_rate().0 as f64;
     let channels = config.channels() as usize;
 
-    let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
-    let writer = buffer.clone();
+    let writer = samples.clone();
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => device
             .build_input_stream(
@@ -103,7 +140,7 @@ fn record_until_stop(stop_rx: mpsc::Receiver<()>) -> Result<Vec<f32>, String> {
                     }
                     update_live_input_level(&mono_chunk);
                     let mut guard = writer.lock().expect("lock");
-                    guard.extend_from_slice(&mono_chunk);
+                    append_resampled_chunk(&mut guard, &mono_chunk, sample_rate);
                 },
                 |error| eprintln!("voicey-capture stream error: {error}"),
                 None,
@@ -126,26 +163,25 @@ fn record_until_stop(stop_rx: mpsc::Receiver<()>) -> Result<Vec<f32>, String> {
     }
 
     drop(stream);
-    let raw = buffer.lock().expect("lock").clone();
-    resample_to_16k(raw, sample_rate)
+    Ok(())
 }
 
-fn resample_to_16k(input: Vec<f32>, input_rate: f64) -> Result<Vec<f32>, String> {
-    if input.is_empty() {
-        return Ok(input);
+fn append_resampled_chunk(target: &mut Vec<f32>, chunk: &[f32], input_rate: f64) {
+    if chunk.is_empty() {
+        return;
     }
     if (input_rate - TARGET_SAMPLE_RATE).abs() < 1.0 {
-        return Ok(input);
+        target.extend_from_slice(chunk);
+        return;
     }
-    let output_len = ((input.len() as f64) * TARGET_SAMPLE_RATE / input_rate).ceil() as usize;
-    let mut output = Vec::with_capacity(output_len);
+    let output_len = ((chunk.len() as f64) * TARGET_SAMPLE_RATE / input_rate).ceil() as usize;
+    target.reserve(output_len);
     for index in 0..output_len {
         let src_index = (index as f64 * input_rate / TARGET_SAMPLE_RATE) as usize;
-        let sample = input
-            .get(src_index.min(input.len().saturating_sub(1)))
+        let sample = chunk
+            .get(src_index.min(chunk.len().saturating_sub(1)))
             .copied()
             .unwrap_or(0.0);
-        output.push(sample);
+        target.push(sample);
     }
-    Ok(output)
 }
