@@ -1241,7 +1241,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   /// Restores hands-free "waiting for speech" only when capture is not mid-utterance.
-  @MainActor
   private func restoreHandsFreeWaitingForSpeechIfNotRecording() {
     guard appState.handsFreeSessionActive, !appState.isRecording else { return }
     appState.transcriptionState = .waitingForSpeech(startTime: Date())
