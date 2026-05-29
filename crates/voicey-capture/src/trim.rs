@@ -1,4 +1,6 @@
-//! Trailing low-energy trim — mirrors Swift `AudioCaptureManager.trimTrailingLowEnergyAudio`.
+//! Trailing low-energy trim — mirrors Swift
+//! `Sources/Voicey/Audio/AudioCaptureManager.swift::trimTrailingLowEnergyAudio`.
+//! Keep the seven constants below in sync with that Swift implementation.
 
 const TARGET_SAMPLE_RATE: f64 = 16_000.0;
 const MAX_TRAILING_TRIM_SECONDS: f64 = 0.5;
@@ -114,6 +116,17 @@ mod tests {
     #[test]
     fn preserves_loud_tail() {
         let samples = tone(32_000, 0.2);
+        assert_eq!(trim_trailing_low_energy(&samples), samples);
+    }
+
+    #[test]
+    fn keeps_audio_when_silence_below_minimum_trim() {
+        // ~0.07s of trailing silence is under MINIMUM_TRIM_SECONDS (0.08s), so the
+        // "don't bother trimming" guard must return the buffer untouched.
+        let speech = tone(16_000, 0.2); // 1s
+        let tail = silence(1_120); // 0.07s silence
+        let mut samples = speech;
+        samples.extend(tail);
         assert_eq!(trim_trailing_low_energy(&samples), samples);
     }
 }
