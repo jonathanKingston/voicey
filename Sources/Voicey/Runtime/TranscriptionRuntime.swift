@@ -5,6 +5,18 @@ enum TranscriptionRuntimeKind: String {
   case multiprocess
 }
 
+enum TranscriptionRuntimeError: LocalizedError {
+  case multiprocessRequiresQwen(SpeechModel)
+
+  var errorDescription: String? {
+    switch self {
+    case .multiprocessRequiresQwen(let model):
+      return
+        "Multiprocess runtime only supports Qwen models; \(model.rawValue) requires --runtime in-process"
+    }
+  }
+}
+
 enum TranscriptionRuntime {
   static func transcribe(
     samples: [Float],
@@ -16,39 +28,17 @@ enum TranscriptionRuntime {
 
     switch runtime {
     case .inProcess:
-      return try await transcribeInProcess(samples: samples, model: model, warmupCount: warmupCount)
+      return try await BenchmarkSpeechBackend.transcribe(
+        samples: samples,
+        model: model,
+        warmupCount: warmupCount
+      )
     case .multiprocess:
-      return try await transcribeMultiprocess(samples: samples, model: model, warmupCount: warmupCount)
-    }
-  }
-
-  private static func transcribeInProcess(
-    samples: [Float],
-    model: SpeechModel,
-    warmupCount: Int
-  ) async throws -> TranscriptionResult {
-    switch model.backendKind {
-    case .qwenMLX:
-      let engine = QwenEngine()
-      try await engine.loadModel(variant: model.rawValue)
-      for _ in 0..<warmupCount {
-        _ = try await engine.transcribe(audioBuffer: samples)
-      }
-      return try await engine.transcribe(audioBuffer: samples)
-    case .whisperKit:
-      let engine = WhisperEngine()
-      try await engine.loadModel(variant: model.rawValue)
-      for _ in 0..<warmupCount {
-        _ = try await engine.transcribe(audioBuffer: samples)
-      }
-      return try await engine.transcribe(audioBuffer: samples)
-    case .granitePython:
-      let engine = GraniteEngine()
-      try await engine.loadModel(variant: model.rawValue)
-      for _ in 0..<warmupCount {
-        _ = try await engine.transcribe(audioBuffer: samples)
-      }
-      return try await engine.transcribe(audioBuffer: samples)
+      return try await transcribeMultiprocess(
+        samples: samples,
+        model: model,
+        warmupCount: warmupCount
+      )
     }
   }
 
@@ -57,6 +47,10 @@ enum TranscriptionRuntime {
     model: SpeechModel,
     warmupCount: Int
   ) async throws -> TranscriptionResult {
+    guard model.isQwenModel else {
+      throw TranscriptionRuntimeError.multiprocessRequiresQwen(model)
+    }
+
     let supervisor = VoiceyRuntimeSupervisor.shared
     try await supervisor.prewarmInfer(model: model)
     for _ in 0..<warmupCount {

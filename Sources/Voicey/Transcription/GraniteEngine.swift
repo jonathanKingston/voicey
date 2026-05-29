@@ -2,7 +2,9 @@ import Foundation
 import os
 import Darwin
 
-/// Engine for IBM Granite Speech models using Python mlx-audio for inference on Apple Silicon
+/// Engine for IBM Granite Speech models using Python mlx-audio for inference on Apple Silicon.
+///
+/// Used by benchmark CLI tooling only (`BenchmarkSpeechBackend`). The production app uses Qwen.
 final class GraniteEngine: @unchecked Sendable {
   private var isLoading = false
   private var modelReady = false
