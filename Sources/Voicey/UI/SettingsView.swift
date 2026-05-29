@@ -707,9 +707,21 @@ struct ModelRowView: View {
               .cornerRadius(4)
           }
         }
-        Text(ModelManager.formatSize(model.diskSize))
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        Text(
+          L10n.Model.sizeFootnote(
+            disk: ModelManager.formatSize(model.diskSize),
+            memory: ModelManager.formatSize(model.memoryUsage)
+          )
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+        if model.isQwenModel,
+          VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
+          Text(L10n.Model.memoryFootnoteMultiprocess)
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
 
         if let updateStatusText {
           Text(updateStatusText)

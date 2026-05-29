@@ -64,6 +64,13 @@ enum VoiceyRuntimeDiagnostics {
     lines.append("Voicey runtime diagnostics")
     lines.append("Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")")
     lines.append("Selected model: \(selectedModel.rawValue)")
+    lines.append(
+      "Selected model RAM estimate: \(ModelManager.formatSize(selectedModel.memoryUsage)) (planning; MLX may use unified GPU memory)"
+    )
+    lines.append(
+      "System RAM: \(ModelManager.formatSize(Int64(ProcessInfo.processInfo.physicalMemory)))"
+    )
+    lines.append("Runtime mode: \(VoiceyRuntimeConfiguration.mode.rawValue)")
     lines.append("VOICEY_RUNTIME: \(envOverride)")
     lines.append(
       "Qwen infer worker: \(VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel))")
