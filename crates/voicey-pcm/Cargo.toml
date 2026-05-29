@@ -1,0 +1,9 @@
+[package]
+name = "voicey-pcm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared PCM file transport between Voicey workers and the Swift host"
+
+[dependencies]
+uuid = { version = "=1.11.0", features = ["v4"] }

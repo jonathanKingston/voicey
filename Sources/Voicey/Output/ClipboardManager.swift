@@ -8,9 +8,12 @@ final class ClipboardManager: @unchecked Sendable {
   private let pasteboard = NSPasteboard.general
 
   /// Stored clipboard data for restore (legacy single-flight save)
-  private var savedItems: [(NSPasteboard.PasteboardType, Data)]?
+  private var savedItems: SavedClipboardSnapshot?
 
-  typealias SavedClipboardItems = [(NSPasteboard.PasteboardType, Data)]
+  /// One pasteboard item represented as its type/data pairs.
+  typealias SavedClipboardItem = [(NSPasteboard.PasteboardType, Data)]
+  /// Full pasteboard snapshot preserving per-item structure for multi-item clipboards.
+  typealias SavedClipboardSnapshot = [SavedClipboardItem]
 
   private init() {}
 
@@ -52,19 +55,33 @@ final class ClipboardManager: @unchecked Sendable {
 
   /// Capture current clipboard contents for later restoration.
   /// Returns an independent snapshot so concurrent deliver flows do not clobber each other.
-  func captureContents() -> SavedClipboardItems {
-    guard let types = pasteboard.types else {
+  func captureContents() -> SavedClipboardSnapshot {
+    if let pasteboardItems = pasteboard.pasteboardItems, !pasteboardItems.isEmpty {
+      let snapshot = pasteboardItems.map { item in
+        item.types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
+          guard let data = item.data(forType: type) else { return nil }
+          return (type, data)
+        }
+      }
+      let typeCount = snapshot.reduce(0) { $0 + $1.count }
+      AppLogger.output.info(
+        "Clipboard: Captured \(snapshot.count) pasteboard item(s) with \(typeCount) type payload(s)"
+      )
+      return snapshot
+    }
+
+    guard let types = pasteboard.types, !types.isEmpty else {
       AppLogger.output.info("Clipboard: No types to capture")
       return []
     }
 
-    let items = types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
+    let legacyItem = types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
       guard let data = pasteboard.data(forType: type) else { return nil }
       return (type, data)
     }
 
-    AppLogger.output.info("Clipboard: Captured \(items.count) items")
-    return items
+    AppLogger.output.info("Clipboard: Captured legacy pasteboard item with \(legacyItem.count) type payload(s)")
+    return legacyItem.isEmpty ? [] : [legacyItem]
   }
 
   /// Save current clipboard contents for later restoration
@@ -73,24 +90,33 @@ final class ClipboardManager: @unchecked Sendable {
   }
 
   /// Restore previously captured clipboard contents
-  func restoreContents(_ items: SavedClipboardItems) {
+  func restoreContents(_ items: SavedClipboardSnapshot) {
+    pasteboard.clearContents()
+
     guard !items.isEmpty else {
-      AppLogger.output.info("Clipboard: Nothing to restore")
+      AppLogger.output.info("Clipboard: Restored to empty")
       return
     }
 
-    pasteboard.clearContents()
-
-    for (type, data) in items {
-      pasteboard.setData(data, forType: type)
+    let pasteboardItems = items.map { typeDataPairs -> NSPasteboardItem in
+      let item = NSPasteboardItem()
+      for (type, data) in typeDataPairs {
+        item.setData(data, forType: type)
+      }
+      return item
     }
 
-    AppLogger.output.info("Clipboard: Restored \(items.count) items")
+    let writeResult = pasteboard.writeObjects(pasteboardItems)
+    if writeResult {
+      AppLogger.output.info("Clipboard: Restored \(pasteboardItems.count) pasteboard item(s)")
+    } else {
+      AppLogger.output.error("Clipboard: writeObjects failed while restoring \(pasteboardItems.count) item(s)")
+    }
   }
 
   /// Restore previously saved clipboard contents
   func restoreContents() {
-    guard let items = savedItems, !items.isEmpty else {
+    guard let items = savedItems else {
       AppLogger.output.info("Clipboard: Nothing to restore")
       return
     }
@@ -106,6 +132,7 @@ final class ClipboardManager: @unchecked Sendable {
 
   /// Check if there are saved contents pending restore
   var hasSavedContents: Bool {
-    savedItems != nil && !(savedItems?.isEmpty ?? true)
+    guard let savedItems else { return false }
+    return !savedItems.isEmpty
   }
 }

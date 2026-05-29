@@ -1,6 +1,9 @@
 import Foundation
 
-/// Shared PCM files under the system temp directory (`voicey_pcm_*.pcm`), matching Rust workers.
+/// Shared PCM files under the system temp directory (`voicey_pcm_*.pcm`).
+///
+/// Spec (protocol v1): matches the Rust `voicey-pcm` crate — little-endian f32 mono samples;
+/// name is `voicey_pcm_{uuid}` with UUID v4 hex (no dashes); file is `{name}.pcm` in temp dir.
 enum SharedMemoryPCM {
   static func write(samples: [Float]) throws -> String {
     let name = "voicey_pcm_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
