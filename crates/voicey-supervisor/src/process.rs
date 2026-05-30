@@ -29,7 +29,7 @@ fn worker_request_timeout(default: Duration) -> Duration {
 
 fn transcribe_timeout(sample_count: usize, sample_rate: u32) -> Duration {
     let audio_seconds = sample_count as f64 / f64::from(sample_rate.max(1));
-    let seconds = (audio_seconds * 4.0 + 60.0).max(120.0).min(3600.0);
+    let seconds = (audio_seconds * 4.0 + 60.0).clamp(120.0, 3600.0);
     worker_request_timeout(Duration::from_secs_f64(seconds))
 }
 
