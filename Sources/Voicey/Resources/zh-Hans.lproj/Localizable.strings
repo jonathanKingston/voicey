@@ -100,6 +100,8 @@
 "audio.recordingModeHandsFree" = "Hands-Free";
 "audio.recordingModeManualDescription" = "Press once to start, press again to stop and transcribe.";
 "audio.recordingModeHandsFreeDescription" = "Press once. Voicey waits for you to speak, starts automatically, and transcribes after you pause.";
+"audio.handsFreeAutoCommit" = "长时间停顿后自动提交";
+"audio.handsFreeAutoCommitDescription" = "当你停顿几秒后，Voicey 会粘贴它听到的全部内容；否则会将文字保留在屏幕上，直到你按下快捷键。";
 
 /* Model Settings */
 "model.selectedModel" = "已选模型";

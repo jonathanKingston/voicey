@@ -55,6 +55,10 @@ final class AudioCaptureManager {
     handsFreeConfiguration.waitTimeoutDuration
   }
 
+  var handsFreeAutoCommitSilenceDuration: TimeInterval {
+    handsFreeConfiguration.autoCommitSilenceDuration
+  }
+
   func startCapture(mode: RecordingMode = .manual) {
     prepareForCapture(mode: mode)
 

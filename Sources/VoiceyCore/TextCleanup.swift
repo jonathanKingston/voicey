@@ -97,4 +97,16 @@ public enum TextCleanup {
     }
     return text + " "
   }
+
+  /// Joins per-utterance hands-free transcripts into a single block for deferred commit.
+  ///
+  /// Each utterance is already post-processed in isolation, so this only handles spacing
+  /// between utterances: surrounding whitespace is trimmed, empty fragments are dropped, and
+  /// the remaining fragments are separated by a single space.
+  public static func joinHandsFreeUtterances(_ utterances: [String]) -> String {
+    utterances
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .joined(separator: " ")
+  }
 }

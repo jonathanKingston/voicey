@@ -17,6 +17,7 @@ extension AppDelegate: AudioCaptureManagerDelegate {
     Task { @MainActor in
       guard self.appState.handsFreeSessionActive, self.appState.isWaitingForSpeech else { return }
       self.cancelHandsFreeWaitTimeout()
+      self.cancelHandsFreeAutoCommitTimeout()
       self.appState.transcriptionState = .recording(startTime: Date())
       AppLogger.audio.info("Hands-Free: Speech detected; recording started")
     }

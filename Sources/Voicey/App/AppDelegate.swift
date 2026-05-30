@@ -47,8 +47,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // Model upgrade lock - prevents recording during model swap
   private var isUpgradingModel = false
   private var handsFreeWaitTimeoutTask: Task<Void, Never>?
-  /// When true, the next hands-free deliver appends a trailing space for the following utterance.
-  private var handsFreeSeparateNextPasteWithSpace = false
+  /// Fires after a long post-utterance silence to auto-commit the deferred hands-free transcript.
+  private var handsFreeAutoCommitTask: Task<Void, Never>?
+
+  // MARK: - Hands-free deferred commit
+
+  /// Monotonic id for the current hands-free session; bumped on arm and on discard so stale,
+  /// in-flight utterance transcriptions from an abandoned session are dropped.
+  private var handsFreeSessionToken = 0
+  /// Sequence counter assigning each finalized utterance a stable spoken-order index.
+  private var handsFreeUtteranceCounter = 0
+  /// Utterance sequences whose transcription has not yet completed; commit waits for this to drain.
+  private var handsFreeInFlightUtterances = Set<Int>()
+  /// Set when the session is ending; the accumulated transcript is pasted once it is empty.
+  private var handsFreeCommitRequested = false
 
   /// Held open with `flock(LOCK_NB)` so a second Voicey cannot register the same global shortcut.
   private var singleInstanceLockFileDescriptor: Int32 = -1
@@ -905,8 +917,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let recordingMode = dependencies.settings.recordingMode
     if recordingMode == .handsFree {
       appState.handsFreeSessionActive = true
-      handsFreeSeparateNextPasteWithSpace = false
+      handsFreeSessionToken += 1
+      handsFreeUtteranceCounter = 0
+      handsFreeInFlightUtterances.removeAll()
+      handsFreeCommitRequested = false
+      cancelHandsFreeAutoCommitTimeout()
       appState.resetHandsFreeBackgroundTranscriptionJobs()
+      appState.resetPendingHandsFreeUtterances()
       appState.transcriptionState = .waitingForSpeech(startTime: Date())
       scheduleHandsFreeWaitTimeout()
       AppLogger.audio.info("Hands-Free: Armed and waiting for speech")
@@ -1017,6 +1034,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  /// Silence hangover reached: finalize the utterance, transcribe it into the accumulation
+  /// buffer (no paste yet), and keep listening. The paste is deferred until commit.
   func finishHandsFreeUtteranceAndContinueListening() {
     guard appState.handsFreeSessionActive, appState.isRecording else { return }
 
@@ -1029,6 +1048,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.audio.error("Hands-Free: Failed to finalize utterance buffer")
       audioCaptureManager?.recoverHandsFreeDetectorForNextUtterance()
       appState.transcriptionState = .waitingForSpeech(startTime: Date())
+      scheduleHandsFreeAutoCommitTimeoutIfNeeded()
       return
     }
 
@@ -1042,81 +1062,127 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     guard durationSec >= 0.5 else {
       AppLogger.audio.warning("Hands-Free utterance too short; resuming listen")
+      scheduleHandsFreeAutoCommitTimeoutIfNeeded()
       return
     }
 
+    enqueueHandsFreeUtteranceTranscription(.inMemory(audioBuffer))
+    scheduleHandsFreeAutoCommitTimeoutIfNeeded()
+  }
+
+  /// Assigns the finalized utterance a spoken-order sequence and transcribes it in the
+  /// background, appending the result to the deferred-commit buffer when it completes.
+  private func enqueueHandsFreeUtteranceTranscription(_ capturedAudio: CapturedAudio) {
+    handsFreeUtteranceCounter += 1
+    let seq = handsFreeUtteranceCounter
+    let token = handsFreeSessionToken
+    handsFreeInFlightUtterances.insert(seq)
     Task {
-      await processTranscription(
-        capturedAudio: .inMemory(audioBuffer),
-        continueHandsFreeSession: true,
-        appendTrailingSpaceForNextUtterance: true
+      await processHandsFreeUtterance(
+        capturedAudio: capturedAudio,
+        utteranceSeq: seq,
+        sessionToken: token
       )
     }
   }
 
+  /// Hotkey pressed during a hands-free session: commit (paste) the accumulated transcript.
   func endHandsFreeSession() {
-    AppLogger.general.info("Ending hands-free session")
+    commitHandsFreeSession()
+  }
+
+  /// Stop capturing and paste the accumulated transcript once all in-flight utterance
+  /// transcriptions have completed. Used by the hotkey and the auto-commit timeout.
+  func commitHandsFreeSession() {
+    guard appState.handsFreeSessionActive else { return }
+    AppLogger.general.info("Hands-Free: Committing session")
     cancelHandsFreeWaitTimeout()
+    cancelHandsFreeAutoCommitTimeout()
 
     appState.handsFreeSessionActive = false
-    handsFreeSeparateNextPasteWithSpace = false
+    handsFreeCommitRequested = true
 
-    var finalUtterance: [Float]?
-    if appState.isRecording {
-      finalUtterance = audioCaptureManager?.finalizeHandsFreeUtteranceForSessionEnd(
-        applyTrailingTrimHeuristic: true)
+    // Fold any in-progress utterance into the accumulation buffer before stopping.
+    if appState.isRecording,
+      let audioBuffer = audioCaptureManager?.finalizeHandsFreeUtteranceForSessionEnd(
+        applyTrailingTrimHeuristic: true),
+      Double(audioBuffer.count) / 16000.0 >= 0.5 {
+      enqueueHandsFreeUtteranceTranscription(.inMemory(audioBuffer))
     }
 
     if let discardedCapture = audioCaptureManager?.stopCapture() {
       discardedCapture.removeSharedBufferIfNeeded()
     }
     statusBarController?.updateIcon(recording: false)
-
     if dependencies.settings.pauseMediaDuringTranscription {
       dependencies.mediaPlayback.resumeAfterTranscription()
     }
 
-    guard let audioBuffer = finalUtterance else {
-      appState.resetHandsFreeBackgroundTranscriptionJobs()
-      appState.transcriptionState = .idle
-      appState.clearRecordingWaveformDisplay()
-      hideOverlay()
-      tryPerformPendingUpgrade()
-      return
-    }
-
-    let durationSec = Double(audioBuffer.count) / 16000.0
-    guard durationSec >= 0.5 else {
-      AppLogger.audio.warning(
-        "Hands-Free session end: utterance too short (\(String(format: "%.2f", durationSec))s)"
-      )
-      appState.resetHandsFreeBackgroundTranscriptionJobs()
-      appState.transcriptionState = .idle
-      appState.clearRecordingWaveformDisplay()
-      hideOverlay()
-      tryPerformPendingUpgrade()
-      return
-    }
-
-    appState.resetHandsFreeBackgroundTranscriptionJobs()
-    let selectedModel = userFacingSelectedModel()
-    let capturedAudio = CapturedAudio.inMemory(audioBuffer)
-    configureProcessingWaveformDisplay(
-      capturedAudio: capturedAudio,
-      durationSec: durationSec,
-      model: selectedModel
-    )
+    appState.clearRecordingWaveformDisplay()
     appState.transcriptionState = .processing
     showOverlay()
+    maybeFinishHandsFreeCommit()
+  }
 
-    Task {
-      await processTranscription(
-        capturedAudio: capturedAudio,
-        continueHandsFreeSession: false,
-        appendTrailingSpaceForNextUtterance: false,
-        pasteToCurrentFrontmost: true
-      )
+  /// Pastes the accumulated transcript once no utterance transcriptions remain in flight.
+  private func maybeFinishHandsFreeCommit() {
+    guard handsFreeCommitRequested, handsFreeInFlightUtterances.isEmpty else { return }
+    handsFreeCommitRequested = false
+
+    let finalText = appState.pendingHandsFreeTranscript
+    appState.resetHandsFreeBackgroundTranscriptionJobs()
+
+    guard !finalText.isEmpty else {
+      AppLogger.transcription.info("Hands-Free commit: nothing to paste")
+      finishHandsFreeCommitCleanup()
+      return
     }
+
+    appState.lastTranscription = finalText
+    appState.transcriptionState = .completed(text: finalText)
+    debugPrint("📋 Hands-Free commit: \"\(finalText)\"", category: "OUTPUT")
+
+    outputManager?.deliver(text: finalText, targetPID: nil) { [weak self] in
+      self?.finishHandsFreeCommitCleanup()
+    }
+  }
+
+  private func finishHandsFreeCommitCleanup() {
+    appState.resetPendingHandsFreeUtterances()
+    appState.transcriptionState = .idle
+    appState.clearRecordingWaveformDisplay()
+    hideOverlay()
+    recordingTargetPID = nil
+    recordingTargetScreen = nil
+    tryPerformPendingUpgrade()
+  }
+
+  /// Escape / cancel during a hands-free session: stop capturing and drop the buffer unpasted.
+  private func discardHandsFreeSession() {
+    AppLogger.general.info("Hands-Free: Discarding session")
+    cancelHandsFreeWaitTimeout()
+    cancelHandsFreeAutoCommitTimeout()
+
+    // Bump the token so any in-flight transcription results are ignored on completion.
+    handsFreeSessionToken += 1
+    handsFreeInFlightUtterances.removeAll()
+    handsFreeCommitRequested = false
+    appState.handsFreeSessionActive = false
+
+    if let discardedCapture = audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false) {
+      discardedCapture.removeSharedBufferIfNeeded()
+    }
+    statusBarController?.updateIcon(recording: false)
+    dependencies.mediaPlayback.resumeAfterTranscription()
+
+    appState.resetHandsFreeBackgroundTranscriptionJobs()
+    appState.resetPendingHandsFreeUtterances()
+    appState.transcriptionState = .idle
+    appState.clearRecordingWaveformDisplay()
+    hideOverlay()
+    recordingTargetPID = nil
+    recordingTargetScreen = nil
+    tryPerformPendingUpgrade()
   }
 
   func stopRecording() {
@@ -1202,13 +1268,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func cancelTranscription() {
-    if appState.handsFreeSessionActive {
-      endHandsFreeSession()
+    if appState.handsFreeSessionActive || handsFreeCommitRequested {
+      discardHandsFreeSession()
       return
     }
 
     AppLogger.general.info("Cancelling transcription...")
     cancelHandsFreeWaitTimeout()
+    cancelHandsFreeAutoCommitTimeout()
     appState.handsFreeSessionActive = false
 
     appState.transcriptionState = .idle
@@ -1357,6 +1424,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  func cancelHandsFreeAutoCommitTimeout() {
+    handsFreeAutoCommitTask?.cancel()
+    handsFreeAutoCommitTask = nil
+  }
+
+  /// Arms the deferred-commit auto-commit timer when enabled and there is pending text to commit.
+  /// Cancelled as soon as the user resumes speaking.
+  private func scheduleHandsFreeAutoCommitTimeoutIfNeeded() {
+    cancelHandsFreeAutoCommitTimeout()
+    guard dependencies.settings.handsFreeAutoCommitEnabled else { return }
+    guard appState.handsFreeSessionActive else { return }
+    guard appState.hasPendingHandsFreeTranscript || !handsFreeInFlightUtterances.isEmpty else { return }
+
+    let duration = audioCaptureManager?.handsFreeAutoCommitSilenceDuration ?? 6.0
+    guard duration > 0 else { return }
+    handsFreeAutoCommitTask = Task { [weak self] in
+      let timeoutNanoseconds = UInt64(duration * 1_000_000_000)
+      try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+
+      await MainActor.run {
+        guard let self else { return }
+        guard self.appState.handsFreeSessionActive, self.appState.isWaitingForSpeech else { return }
+        guard
+          self.appState.hasPendingHandsFreeTranscript || !self.handsFreeInFlightUtterances.isEmpty
+        else { return }
+        AppLogger.audio.info("Hands-Free: Auto-commit after silence")
+        self.commitHandsFreeSession()
+      }
+    }
+  }
+
   @MainActor
   private func registerHandsFreeBackgroundTranscriptionJobIfNeeded(
     model: SpeechModel,
@@ -1379,38 +1477,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
   }
 
-  @MainActor
-  private func transcriptionPasteTargetPID(pasteToCurrentFrontmost: Bool) -> pid_t? {
-    if pasteToCurrentFrontmost || appState.handsFreeSessionActive {
-      return nil
-    }
-    return recordingTargetPID
-  }
-
-  /// Restores hands-free "waiting for speech" only when capture is not mid-utterance.
-  private func restoreHandsFreeWaitingForSpeechIfNotRecording() {
-    guard appState.handsFreeSessionActive, !appState.isRecording else { return }
-    appState.transcriptionState = .waitingForSpeech(startTime: Date())
-  }
-
-  private func processTranscription(
+  /// Transcribes one hands-free utterance and appends the post-processed text to the deferred
+  /// commit buffer (keyed by `utteranceSeq` for spoken order). Never pastes directly — the paste
+  /// happens once at commit. Stale results from an abandoned session (`sessionToken` mismatch)
+  /// are dropped.
+  private func processHandsFreeUtterance(
     capturedAudio: CapturedAudio,
-    continueHandsFreeSession: Bool = false,
-    appendTrailingSpaceForNextUtterance: Bool = false,
-    pasteToCurrentFrontmost: Bool = false
+    utteranceSeq: Int,
+    sessionToken: Int
   ) async {
     let durationSec = capturedAudio.durationSeconds
     let selectedModel = userFacingSelectedModel()
     var backgroundJobID: UUID?
-    if continueHandsFreeSession {
-      await MainActor.run {
-        backgroundJobID = self.registerHandsFreeBackgroundTranscriptionJobIfNeeded(
-          model: selectedModel,
-          capturedAudio: capturedAudio,
-          durationSec: durationSec
-        )
-        self.transcriptionOverlay?.syncLayout(to: self.appState)
-      }
+    await MainActor.run {
+      backgroundJobID = self.registerHandsFreeBackgroundTranscriptionJobIfNeeded(
+        model: selectedModel,
+        capturedAudio: capturedAudio,
+        durationSec: durationSec
+      )
+      self.transcriptionOverlay?.syncLayout(to: self.appState)
     }
     defer {
       if let backgroundJobID {
@@ -1423,9 +1508,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     do {
-      debugPrint("🔄 Starting transcription...", category: "TRANSCRIBE")
       AppLogger.transcription.info(
-        "processTranscription: Starting with \(capturedAudio.sampleCount) samples")
+        "Hands-Free utterance #\(utteranceSeq): transcribing \(capturedAudio.sampleCount) samples")
 
       let decoderContext = TranscriptionSteeringContext.make()
       let result: TranscriptionResult
@@ -1450,13 +1534,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         result = qwenResult
       }
 
-      debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
-      AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
-
       let processedText = await postProcessor?.processAsync(result) ?? result.text
-      debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
       AppLogger.transcription.info(
-        "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
+        "Hands-Free utterance #\(utteranceSeq): \"\(processedText)\" (length: \(processedText.count))"
       )
       let hasDeliverableText =
         processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
@@ -1468,79 +1548,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
 
       await MainActor.run {
-        appState.lastTranscription = processedText
-
-        if !hasDeliverableText {
-          debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
-          AppLogger.transcription.warning(
-            "processTranscription: No text to deliver (empty/whitespace after processing)")
-          if continueHandsFreeSession, self.appState.handsFreeSessionActive {
-            self.restoreHandsFreeWaitingForSpeechIfNotRecording()
-            self.tryPerformPendingUpgrade()
-            return
-          }
-          self.hideOverlay()
-          self.appState.transcriptionState = .idle
-          self.tryPerformPendingUpgrade()
+        guard sessionToken == self.handsFreeSessionToken else {
+          AppLogger.transcription.info(
+            "Hands-Free utterance #\(utteranceSeq): dropped (session ended)")
           return
         }
-
-        debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
-
-        var deliverText = processedText
-        if appendTrailingSpaceForNextUtterance || self.handsFreeSeparateNextPasteWithSpace {
-          deliverText = TextCleanup.appendingInterUtteranceSpacingIfNeeded(deliverText)
+        self.handsFreeInFlightUtterances.remove(utteranceSeq)
+        if hasDeliverableText {
+          self.appState.setPendingHandsFreeUtterance(seq: utteranceSeq, text: processedText)
+          self.appState.lastTranscription = processedText
         }
-        if appendTrailingSpaceForNextUtterance {
-          self.handsFreeSeparateNextPasteWithSpace = true
-        }
-
-        let pasteTargetPID = self.transcriptionPasteTargetPID(
-          pasteToCurrentFrontmost: pasteToCurrentFrontmost
-        )
-
-        outputManager?.deliver(
-          text: deliverText,
-          targetPID: pasteTargetPID,
-          completion: { [weak self] in
-            debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
-            guard let self else { return }
-            if continueHandsFreeSession, self.appState.handsFreeSessionActive {
-              self.restoreHandsFreeWaitingForSpeechIfNotRecording()
-              self.tryPerformPendingUpgrade()
-              return
-            }
-            self.hideOverlay()
-            self.appState.transcriptionState = .idle
-            self.tryPerformPendingUpgrade()
-          }
-        )
-
-        if continueHandsFreeSession {
-          self.restoreHandsFreeWaitingForSpeechIfNotRecording()
-        } else {
-          self.appState.transcriptionState = .completed(text: processedText)
-        }
-
-        if !continueHandsFreeSession {
-          self.recordingTargetPID = nil
-          self.recordingTargetScreen = nil
-        }
+        self.transcriptionOverlay?.syncLayout(to: self.appState)
+        self.maybeFinishHandsFreeCommit()
+        self.tryPerformPendingUpgrade()
       }
     } catch {
-      debugPrint("❌ Transcription error: \(error)", category: "ERROR")
-      AppLogger.transcription.error("Transcription error: \(error)")
+      AppLogger.transcription.error("Hands-Free utterance #\(utteranceSeq) error: \(error)")
       await MainActor.run { [weak self] in
         guard let self else { return }
-        if continueHandsFreeSession, self.appState.handsFreeSessionActive {
-          self.restoreHandsFreeWaitingForSpeechIfNotRecording()
-          self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-          self.tryPerformPendingUpgrade()
-          return
-        }
-        self.hideOverlay()
-        self.appState.transcriptionState = .error(message: error.localizedDescription)
+        guard sessionToken == self.handsFreeSessionToken else { return }
+        self.handsFreeInFlightUtterances.remove(utteranceSeq)
         self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+        self.maybeFinishHandsFreeCommit()
         self.tryPerformPendingUpgrade()
       }
     }

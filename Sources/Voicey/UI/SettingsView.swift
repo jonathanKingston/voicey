@@ -452,6 +452,8 @@ struct AudioSettingsView: View {
   private static let defaults = SettingsManager.defaultsStore
   @AppStorage("recordingMode", store: defaults) private var recordingMode: String =
     RecordingMode.manual.rawValue
+  @AppStorage("handsFreeAutoCommitEnabled", store: defaults) private var handsFreeAutoCommitEnabled: Bool =
+    false
   @State private var isTestingMic: Bool = false
   @State private var testLevel: Float = 0
   @State private var testPassed: Bool?
@@ -479,6 +481,14 @@ struct AudioSettingsView: View {
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+
+        if currentMode == .handsFree {
+          Toggle(L10n.Audio.handsFreeAutoCommit, isOn: $handsFreeAutoCommitEnabled)
+
+          Text(L10n.Audio.handsFreeAutoCommitDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
       }
 
       Section(L10n.Audio.inputDevice) {

@@ -43,6 +43,32 @@ final class TextCleanupTests: XCTestCase {
     XCTAssertEqual(TextCleanup.appendingInterUtteranceSpacingIfNeeded(""), "")
   }
 
+  func testJoinHandsFreeUtterancesSeparatesWithSingleSpace() {
+    XCTAssertEqual(
+      TextCleanup.joinHandsFreeUtterances(["Hello, my name.", "Is.", "Jonathan."]),
+      "Hello, my name. Is. Jonathan."
+    )
+  }
+
+  func testJoinHandsFreeUtterancesTrimsAndDropsEmptyFragments() {
+    XCTAssertEqual(
+      TextCleanup.joinHandsFreeUtterances(["  Hello  ", "", "   ", "there"]),
+      "Hello there"
+    )
+  }
+
+  func testJoinHandsFreeUtterancesPreservesInternalLineBreaks() {
+    XCTAssertEqual(
+      TextCleanup.joinHandsFreeUtterances(["First\nline", "second"]),
+      "First\nline second"
+    )
+  }
+
+  func testJoinHandsFreeUtterancesEmptyInput() {
+    XCTAssertEqual(TextCleanup.joinHandsFreeUtterances([]), "")
+    XCTAssertEqual(TextCleanup.joinHandsFreeUtterances(["", "  "]), "")
+  }
+
   private func defaultCustomReplacement(for phrase: String) -> String? {
     let command = VoiceCommand.defaults.first { $0.phrase == phrase }
     guard case .custom(let replacement) = command?.action else {

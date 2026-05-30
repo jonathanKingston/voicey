@@ -12,6 +12,9 @@ public struct HandsFreeRecordingConfiguration: Sendable, Equatable {
   public let minimumSpeechDuration: TimeInterval
   public let silenceHangoverDuration: TimeInterval
   public let waitTimeoutDuration: TimeInterval
+  /// Silence after the last utterance before an armed deferred-commit session auto-commits.
+  /// Much longer than `silenceHangoverDuration` so mid-sentence thinking pauses never commit.
+  public let autoCommitSilenceDuration: TimeInterval
   /// Level must exceed calibrated noise by at least this much to begin speech.
   public let speechStartMarginAboveNoise: Float
   /// Silence hangover ends when level stays below noise floor plus this margin.
@@ -31,6 +34,7 @@ public struct HandsFreeRecordingConfiguration: Sendable, Equatable {
     minimumSpeechDuration: TimeInterval = 0.18,
     silenceHangoverDuration: TimeInterval = 1.5,
     waitTimeoutDuration: TimeInterval = 8.0,
+    autoCommitSilenceDuration: TimeInterval = 6.0,
     speechStartMarginAboveNoise: Float = 0.07,
     speechEndMarginAboveNoise: Float = 0.025,
     speechEndPeakFraction: Float = 0.30,
@@ -45,6 +49,7 @@ public struct HandsFreeRecordingConfiguration: Sendable, Equatable {
     self.minimumSpeechDuration = minimumSpeechDuration
     self.silenceHangoverDuration = silenceHangoverDuration
     self.waitTimeoutDuration = waitTimeoutDuration
+    self.autoCommitSilenceDuration = autoCommitSilenceDuration
     self.speechStartMarginAboveNoise = speechStartMarginAboveNoise
     self.speechEndMarginAboveNoise = speechEndMarginAboveNoise
     self.speechEndPeakFraction = speechEndPeakFraction

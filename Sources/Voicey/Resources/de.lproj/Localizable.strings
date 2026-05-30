@@ -100,6 +100,8 @@
 "audio.recordingModeHandsFree" = "Hands-Free";
 "audio.recordingModeManualDescription" = "Press once to start, press again to stop and transcribe.";
 "audio.recordingModeHandsFreeDescription" = "Press once. Voicey waits for you to speak, starts automatically, and transcribes after you pause.";
+"audio.handsFreeAutoCommit" = "Nach langer Pause automatisch einfügen";
+"audio.handsFreeAutoCommitDescription" = "Wenn du einige Sekunden ruhig bleibst, fügt Voicey alles Gehörte ein. Andernfalls bleibt der Text sichtbar, bis du das Kürzel drückst.";
 
 /* Model Settings */
 "model.selectedModel" = "Ausgewähltes Modell";

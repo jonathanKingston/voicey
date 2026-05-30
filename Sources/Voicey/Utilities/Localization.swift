@@ -288,6 +288,10 @@ enum L10n {
         static var recordingModeHandsFreeDescription: String {
             L10n.string("audio.recordingModeHandsFreeDescription")
         }
+        static var handsFreeAutoCommit: String { L10n.string("audio.handsFreeAutoCommit") }
+        static var handsFreeAutoCommitDescription: String {
+            L10n.string("audio.handsFreeAutoCommitDescription")
+        }
         static var testMicrophone: String { L10n.string("audio.testMicrophone") }
         static var testInput: String { L10n.string("audio.testInput") }
         static var testing: String { L10n.string("audio.testing") }
