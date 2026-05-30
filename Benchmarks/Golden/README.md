@@ -1,4 +1,6 @@
-# Golden benchmark audio
+# Golden benchmarks
+
+## Audio (WAV)
 
 Short mono WAV clips at 16 kHz for `benchmark-transcribe` parity checks.
 
@@ -18,3 +20,11 @@ make benchmark-measure-runtime-memory
 ```
 
 Set `VOICEY_BENCHMARK_WARMUP=1` (default in `compare_benchmark_runtime.sh`) for fair RTF. Override model: `BENCHMARK_RUNTIME_PARITY_MODEL=qwen3-asr-1.7b-bf16`.
+
+## Post-process text (`postprocess/`)
+
+JSON fixtures for Rust `voicey-text` post-processing (issue #63). Each file defines input text, optional segments, voice-command settings, and expected output after the full pipeline.
+
+Linux CI: `cargo test -p voicey-text --test golden_postprocess`
+
+macOS: compare against Swift `PostProcessor` on the same inputs when validating a release.

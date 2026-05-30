@@ -175,6 +175,9 @@ enum VoiceyJSONLResponse {
     case "transcribe_result":
       if (json["ok"] as? Bool) == true { return }
       throw VoiceyJSONLWorkerError.workerFailed(json["error"] as? String ?? context)
+    case "postprocess_result":
+      if (json["ok"] as? Bool) == true { return }
+      throw VoiceyJSONLWorkerError.workerFailed(json["error"] as? String ?? context)
     case "capture_fixture_result":
       if (json["ok"] as? Bool) == true { return }
       throw VoiceyJSONLWorkerError.workerFailed(json["error"] as? String ?? context)

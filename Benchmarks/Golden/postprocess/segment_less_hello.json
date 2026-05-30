@@ -1,0 +1,8 @@
+{
+  "description": "Qwen / segment-less backends: no intelligent punctuation; stable pass-through after cleanup",
+  "text": "hello world",
+  "segments": [],
+  "voice_commands_enabled": false,
+  "voice_commands": [],
+  "expected": "hello world"
+}
