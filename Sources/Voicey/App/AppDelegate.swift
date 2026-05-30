@@ -1119,10 +1119,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     guard let audioBuffer = finalUtterance else {
-      incrementalTranscriptionCoordinator?.cancel()
+      // Let an in-flight hands-free flush finish; cancel() races with flushAndFinish.
+      if !appState.isHandsFreeBackgroundTranscribing {
+        incrementalTranscriptionCoordinator?.cancel()
+      }
       appState.partialTranscription = ""
       appState.isCatchingUpTranscription = false
-      appState.resetHandsFreeBackgroundTranscriptionJobs()
+      if !appState.isHandsFreeBackgroundTranscribing {
+        appState.resetHandsFreeBackgroundTranscriptionJobs()
+      }
       appState.transcriptionState = .idle
       appState.clearRecordingWaveformDisplay()
       hideOverlay()
@@ -1135,10 +1140,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.audio.warning(
         "Hands-Free session end: utterance too short (\(String(format: "%.2f", durationSec))s)"
       )
-      incrementalTranscriptionCoordinator?.cancel()
+      if !appState.isHandsFreeBackgroundTranscribing {
+        incrementalTranscriptionCoordinator?.cancel()
+      }
       appState.partialTranscription = ""
       appState.isCatchingUpTranscription = false
-      appState.resetHandsFreeBackgroundTranscriptionJobs()
+      if !appState.isHandsFreeBackgroundTranscribing {
+        appState.resetHandsFreeBackgroundTranscriptionJobs()
+      }
       appState.transcriptionState = .idle
       appState.clearRecordingWaveformDisplay()
       hideOverlay()
