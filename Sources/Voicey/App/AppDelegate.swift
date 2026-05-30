@@ -67,11 +67,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    guard
-      VoiceySingleInstance.acquireLockOrQuit(applyLockedFileDescriptor: { fd in
-        self.singleInstanceLockFileDescriptor = fd
-      })
-    else { return }
+    let lockResult = VoiceySingleInstance.acquireLock(applyLockedFileDescriptor: { fd in
+      self.singleInstanceLockFileDescriptor = fd
+    })
+    switch lockResult {
+    case .acquired, .multipleInstancesAllowed:
+      break
+    case .alreadyRunning:
+      return
+    case .unavailable(let failure):
+      VoiceySingleInstance.presentLockUnavailableAlert(
+        failure: failure,
+        lockPath: VoiceySingleInstance.productionLockOperations().lockFilePath()
+      )
+      NSApp.terminate(nil)
+      return
+    }
 
     // Keep the menubar app alive even when it has no open windows.
     ProcessInfo.processInfo.disableAutomaticTermination(Self.automaticTerminationReason)
@@ -307,7 +318,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     if selectedModel.isQwenModel,
       VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel),
-      ModelManager.shared.isDownloaded(selectedModel) {
+      ModelManager.shared.isDownloaded(selectedModel)
+    {
       return false
     }
 
@@ -806,7 +818,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if !ModelManager.shared.isDownloaded(selectedModel),
       let fallbackModel = SpeechModel.userFacingModels.first(where: {
         downloadedModels.contains($0)
-      }) {
+      })
+    {
       AppLogger.general.info(
         "startRecording: Selected model not available, switching to \(fallbackModel.rawValue)")
       SettingsManager.shared.selectedModel = fallbackModel
@@ -990,7 +1003,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let ocrEnabled = SettingsManager.shared.transcriptionScreenContextOCREnabled
       let screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
       if captured.exposure.shouldConsiderOCRFallback, ocrEnabled, screenCaptureGranted,
-        let windowImage {
+        let windowImage
+      {
         if let ocrSnapshot = await ScreenContextOCR.recognizeText(in: windowImage) {
           snapshot = ScreenContextSnapshotMerger.merging(snapshot, supplemental: ocrSnapshot)
         }
@@ -1248,7 +1262,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
+  private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws
+    -> TranscriptionResult
+  {
     let selectedModel = userFacingSelectedModel()
     let decoderContext = TranscriptionSteeringContext.make()
     if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
@@ -1310,7 +1326,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
 
-      outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) { [weak self] in
+      outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) {
+        [weak self] in
         debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
         self?.hideOverlay()
         self?.appState.transcriptionState = .idle
