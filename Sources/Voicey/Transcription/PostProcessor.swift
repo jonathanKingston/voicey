@@ -2,7 +2,10 @@ import Foundation
 import VoiceyCore
 import os
 
-/// Post-processes transcription output for punctuation, formatting, and voice commands
+/// Post-processes transcription output for expansions, voice commands, and formatting.
+///
+/// Whisper caption noise filtering and segment-based punctuation run only when
+/// `TranscriptionResult.segments` is non-empty (benchmark / Whisper backends).
 final class PostProcessor {
   private let textExpansions: [String: String]
 
@@ -76,16 +79,15 @@ final class PostProcessor {
 
     AppLogger.transcription.info("PostProcessor: Input text: \"\(text)\"")
 
-    // First, filter out noise words and artifacts
-    text = filterNoise(text)
-
-    AppLogger.transcription.info("PostProcessor: After noise filter: \"\(text)\"")
-
-    // If the entire transcription was just noise, return empty
-    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      AppLogger.transcription.info(
-        "PostProcessor: Text is empty after noise filter, returning empty")
-      return ""
+    // Whisper caption cleanup — benchmark / segmented backends only (Qwen passes empty segments).
+    if !result.segments.isEmpty {
+      text = filterNoise(text)
+      AppLogger.transcription.info("PostProcessor: After noise filter: \"\(text)\"")
+      if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        AppLogger.transcription.info(
+          "PostProcessor: Text is empty after noise filter, returning empty")
+        return ""
+      }
     }
 
     // Apply intelligent punctuation based on timing and segment analysis.

@@ -1,4 +1,4 @@
-//! Constants and logic for filtering noise words from transcription output.
+//! Whisper caption / silence artifact cleanup (benchmark and segmented backends only).
 
 use regex::Regex;
 use std::sync::LazyLock;

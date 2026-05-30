@@ -31,7 +31,7 @@ Tracking issues:
 |-------|------|------------------------------|
 | Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` fallback (`VOICEY_USE_RUST_CAPTURE=0`, dev disable) |
 | Fetch | `voicey-fetch` | `HuggingFaceDownloader` fallback |
-| Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` fallback on worker error / `VOICEY_USE_RUST_TEXT=0` |
+| Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` fallback on worker error / `VOICEY_USE_RUST_TEXT=0`; Whisper caption noise filter only when `segments` non-empty (benchmark) |
 | Text / glossary | `voicey-text` | `VoiceyCore` in host |
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
@@ -55,7 +55,7 @@ Multi-process core for Voicey on macOS:
 | Supervisor | `voicey-supervisor` | Orchestrates infer + capture + fetch prewarm |
 | Capture | `voicey-capture` | Hotkey microphone recording |
 | Fetch | `voicey-fetch` | Qwen model file downloads |
-| Text post-process | `voicey-text` | Noise filter, expansions, voice commands after infer |
+| Text post-process | `voicey-text` | Expansions, voice commands after infer; Whisper noise filter only with segments (benchmark) |
 
 Mic capture, UI, and paste remain in the main app process unless noted above.
 
@@ -94,8 +94,8 @@ In direct-distribution builds, Voicey now defaults `voicey-fetch` to a bundled s
 
 After infer returns raw text, the host may delegate to `voicey-text` over JSONL (`ping`, `postprocess`, `shutdown`):
 
-- **Segment-less backends (Qwen):** `segments` is empty; intelligent punctuation is skipped (same as Swift `PostProcessor`).
-- **Segmented backends:** optional `segments` with `start_time` / `end_time` drive pause-based punctuation.
+- **Segment-less backends (Qwen):** `segments` is empty; Whisper caption noise filter and intelligent punctuation are skipped (same as Swift `PostProcessor`).
+- **Segmented backends (benchmark Whisper):** optional `segments` with `start_time` / `end_time` enable noise filter and pause-based punctuation.
 - **Voice commands:** host sends enabled commands as structured JSON; settings are snapshotted per request.
 - **Golden parity:** `Benchmarks/Golden/postprocess/*.json` — `cargo test -p voicey-text --test golden_postprocess`.
 
