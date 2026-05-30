@@ -188,12 +188,13 @@ final class AppState: ObservableObject {
     handsFreeSessionActive && !handsFreeBackgroundTranscriptionJobs.isEmpty
   }
 
-  /// True while a hands-free utterance is finishing via `flushAndFinish` (Qwen overlay job and/or barrier).
   private(set) var handsFreeIncrementalFlushBarrierCount = 0
 
+  /// True while `flushAndFinish` is in flight (background job and/or barrier).
+  /// Intentionally independent of `handsFreeSessionActive` so session teardown does not call `cancel()` mid-flush.
   var isHandsFreeUtteranceFlushInProgress: Bool {
-    handsFreeSessionActive
-      && (isHandsFreeBackgroundTranscribing || handsFreeIncrementalFlushBarrierCount > 0)
+    !handsFreeBackgroundTranscriptionJobs.isEmpty
+      || handsFreeIncrementalFlushBarrierCount > 0
   }
 
   func beginHandsFreeIncrementalFlushBarrier() {
