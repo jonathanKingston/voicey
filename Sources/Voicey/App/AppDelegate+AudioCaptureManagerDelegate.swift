@@ -9,7 +9,9 @@ extension AppDelegate: AudioCaptureManagerDelegate {
   }
 
   func audioCaptureManager(_ manager: AudioCaptureManager, didCaptureSamples samples: [Float]) {
-    guard !appState.handsFreeSessionActive else { return }
+    if appState.handsFreeSessionActive {
+      guard appState.isRecording else { return }
+    }
     incrementalTranscriptionCoordinator?.append(samples: samples)
   }
 
@@ -17,6 +19,9 @@ extension AppDelegate: AudioCaptureManagerDelegate {
     Task { @MainActor in
       guard self.appState.handsFreeSessionActive, self.appState.isWaitingForSpeech else { return }
       self.cancelHandsFreeWaitTimeout()
+      self.incrementalTranscriptionCoordinator?.reset()
+      self.appState.partialTranscription = ""
+      self.appState.isCatchingUpTranscription = false
       self.appState.transcriptionState = .recording(startTime: Date())
       AppLogger.audio.info("Hands-Free: Speech detected; recording started")
     }

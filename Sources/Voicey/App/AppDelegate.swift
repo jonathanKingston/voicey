@@ -8,6 +8,15 @@ import os
 // AppDelegate is the legacy lifecycle coordinator. Keep size warnings disabled
 // here until the existing recording/model/output responsibilities are split.
 // swiftlint:disable type_body_length file_length
+private struct HandsFreeIncrementalUtteranceRequest {
+  let capturedAudio: CapturedAudio
+  let durationSec: Double
+  let continueHandsFreeSession: Bool
+  let appendTrailingSpaceForNextUtterance: Bool
+  let pasteToCurrentFrontmost: Bool
+  let applyTrailingTrimHeuristic: Bool
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private static let automaticTerminationReason = "Voicey menubar app"
   private static let settingsWindowAutosaveName = "VoiceySettingsWindow"
@@ -899,10 +908,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       dependencies.mediaPlayback.pauseForTranscription()
     }
     appState.clearRecordingWaveformDisplay()
-    incrementalTranscriptionCoordinator?.reset()
-    appState.partialTranscription = ""
-    appState.isCatchingUpTranscription = false
     let recordingMode = dependencies.settings.recordingMode
+    if recordingMode != .handsFree {
+      incrementalTranscriptionCoordinator?.reset()
+      appState.partialTranscription = ""
+      appState.isCatchingUpTranscription = false
+    }
     if recordingMode == .handsFree {
       appState.handsFreeSessionActive = true
       handsFreeSeparateNextPasteWithSpace = false
@@ -1042,14 +1053,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     guard durationSec >= 0.5 else {
       AppLogger.audio.warning("Hands-Free utterance too short; resuming listen")
+      incrementalTranscriptionCoordinator?.reset()
+      appState.partialTranscription = ""
+      appState.isCatchingUpTranscription = false
       return
     }
 
+    guard let incrementalTranscriptionCoordinator else {
+      AppLogger.audio.error("Hands-Free: Incremental transcription coordinator unavailable")
+      return
+    }
+
+    let selectedModel = userFacingSelectedModel()
+    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
+    let capturedAudio = CapturedAudio.inMemory(audioBuffer)
+
+    let request = HandsFreeIncrementalUtteranceRequest(
+      capturedAudio: capturedAudio,
+      durationSec: durationSec,
+      continueHandsFreeSession: true,
+      appendTrailingSpaceForNextUtterance: true,
+      pasteToCurrentFrontmost: false,
+      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
+    )
     Task {
-      await processTranscription(
-        capturedAudio: .inMemory(audioBuffer),
-        continueHandsFreeSession: true,
-        appendTrailingSpaceForNextUtterance: true
+      defer { capturedAudio.removeSharedBufferIfNeeded() }
+      await processHandsFreeIncrementalUtterance(
+        coordinator: incrementalTranscriptionCoordinator,
+        request: request
       )
     }
   }
@@ -1077,6 +1108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     guard let audioBuffer = finalUtterance else {
+      incrementalTranscriptionCoordinator?.cancel()
+      appState.partialTranscription = ""
+      appState.isCatchingUpTranscription = false
       appState.resetHandsFreeBackgroundTranscriptionJobs()
       appState.transcriptionState = .idle
       appState.clearRecordingWaveformDisplay()
@@ -1090,6 +1124,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.audio.warning(
         "Hands-Free session end: utterance too short (\(String(format: "%.2f", durationSec))s)"
       )
+      incrementalTranscriptionCoordinator?.cancel()
+      appState.partialTranscription = ""
+      appState.isCatchingUpTranscription = false
       appState.resetHandsFreeBackgroundTranscriptionJobs()
       appState.transcriptionState = .idle
       appState.clearRecordingWaveformDisplay()
@@ -1109,12 +1146,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appState.transcriptionState = .processing
     showOverlay()
 
+    guard let incrementalTranscriptionCoordinator else {
+      hideOverlay()
+      appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
+      dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
+      capturedAudio.removeSharedBufferIfNeeded()
+      tryPerformPendingUpgrade()
+      return
+    }
+
+    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
+
+    let request = HandsFreeIncrementalUtteranceRequest(
+      capturedAudio: capturedAudio,
+      durationSec: durationSec,
+      continueHandsFreeSession: false,
+      appendTrailingSpaceForNextUtterance: false,
+      pasteToCurrentFrontmost: true,
+      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
+    )
     Task {
-      await processTranscription(
-        capturedAudio: capturedAudio,
-        continueHandsFreeSession: false,
-        appendTrailingSpaceForNextUtterance: false,
-        pasteToCurrentFrontmost: true
+      defer { capturedAudio.removeSharedBufferIfNeeded() }
+      await processHandsFreeIncrementalUtterance(
+        coordinator: incrementalTranscriptionCoordinator,
+        request: request
       )
     }
   }
@@ -1245,6 +1300,157 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       await handleTranscriptionResult(result)
     } catch {
       await handleTranscriptionError(error)
+    }
+  }
+
+  private func processHandsFreeIncrementalUtterance(
+    coordinator: IncrementalTranscriptionCoordinator,
+    request: HandsFreeIncrementalUtteranceRequest
+  ) async {
+    let selectedModel = userFacingSelectedModel()
+    var backgroundJobID: UUID?
+    if request.continueHandsFreeSession {
+      await MainActor.run {
+        backgroundJobID = self.registerHandsFreeBackgroundTranscriptionJobIfNeeded(
+          model: selectedModel,
+          capturedAudio: request.capturedAudio,
+          durationSec: request.durationSec
+        )
+        self.transcriptionOverlay?.syncLayout(to: self.appState)
+      }
+    }
+    defer {
+      if let backgroundJobID {
+        let jobID = backgroundJobID
+        Task { @MainActor in
+          self.appState.removeHandsFreeBackgroundTranscriptionJob(id: jobID)
+          self.transcriptionOverlay?.syncLayout(to: self.appState)
+        }
+      }
+      Task { @MainActor in
+        coordinator.reset()
+        if request.continueHandsFreeSession {
+          self.appState.partialTranscription = ""
+          self.appState.isCatchingUpTranscription = false
+        }
+      }
+    }
+
+    do {
+      debugPrint("🔄 Finishing hands-free incremental transcription...", category: "TRANSCRIBE")
+      let result = try await coordinator.flushAndFinish(
+        applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic)
+      let processedText = postProcessor?.process(result) ?? result.text
+      debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
+      AppLogger.transcription.info(
+        "processHandsFreeIncrementalUtterance: Processed text: \"\(processedText)\" (length: \(processedText.count))"
+      )
+      let hasDeliverableText =
+        processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
+
+      if selectedModel.isQwenModel {
+        await MainActor.run {
+          appState.recordQwenTranscriptionRTF(result.performanceMetrics.realTimeFactor)
+        }
+      }
+
+      await MainActor.run {
+        self.deliverHandsFreeTranscription(
+          processedText: processedText,
+          hasDeliverableText: hasDeliverableText,
+          continueHandsFreeSession: request.continueHandsFreeSession,
+          appendTrailingSpaceForNextUtterance: request.appendTrailingSpaceForNextUtterance,
+          pasteToCurrentFrontmost: request.pasteToCurrentFrontmost
+        )
+      }
+    } catch {
+      debugPrint("❌ Transcription error: \(error)", category: "ERROR")
+      AppLogger.transcription.error("Hands-free incremental transcription error: \(error)")
+      await MainActor.run { [weak self] in
+        guard let self else { return }
+        if request.continueHandsFreeSession, self.appState.handsFreeSessionActive {
+          self.restoreHandsFreeWaitingForSpeechIfNotRecording()
+          self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+          self.tryPerformPendingUpgrade()
+          return
+        }
+        self.hideOverlay()
+        self.appState.partialTranscription = ""
+        self.appState.isCatchingUpTranscription = false
+        self.appState.transcriptionState = .error(message: error.localizedDescription)
+        self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
+        self.tryPerformPendingUpgrade()
+      }
+    }
+  }
+
+  @MainActor
+  private func deliverHandsFreeTranscription(
+    processedText: String,
+    hasDeliverableText: Bool,
+    continueHandsFreeSession: Bool,
+    appendTrailingSpaceForNextUtterance: Bool,
+    pasteToCurrentFrontmost: Bool
+  ) {
+    appState.lastTranscription = processedText
+    appState.partialTranscription = ""
+    appState.isCatchingUpTranscription = false
+
+    if !hasDeliverableText {
+      debugPrint("⚠️ No text to deliver (empty after processing)", category: "OUTPUT")
+      AppLogger.transcription.warning(
+        "processHandsFreeIncrementalUtterance: No text to deliver (empty/whitespace after processing)")
+      if continueHandsFreeSession, appState.handsFreeSessionActive {
+        restoreHandsFreeWaitingForSpeechIfNotRecording()
+        tryPerformPendingUpgrade()
+        return
+      }
+      hideOverlay()
+      appState.transcriptionState = .idle
+      tryPerformPendingUpgrade()
+      return
+    }
+
+    debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
+
+    var deliverText = processedText
+    if appendTrailingSpaceForNextUtterance || handsFreeSeparateNextPasteWithSpace {
+      deliverText = TextCleanup.appendingInterUtteranceSpacingIfNeeded(deliverText)
+    }
+    if appendTrailingSpaceForNextUtterance {
+      handsFreeSeparateNextPasteWithSpace = true
+    }
+
+    let pasteTargetPID = transcriptionPasteTargetPID(
+      pasteToCurrentFrontmost: pasteToCurrentFrontmost
+    )
+
+    outputManager?.deliver(
+      text: deliverText,
+      targetPID: pasteTargetPID,
+      completion: { [weak self] in
+        debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
+        guard let self else { return }
+        if continueHandsFreeSession, self.appState.handsFreeSessionActive {
+          self.restoreHandsFreeWaitingForSpeechIfNotRecording()
+          self.tryPerformPendingUpgrade()
+          return
+        }
+        self.hideOverlay()
+        self.appState.transcriptionState = .idle
+        self.tryPerformPendingUpgrade()
+      }
+    )
+
+    if continueHandsFreeSession {
+      restoreHandsFreeWaitingForSpeechIfNotRecording()
+    } else {
+      appState.transcriptionState = .completed(text: processedText)
+    }
+
+    if !continueHandsFreeSession {
+      recordingTargetPID = nil
+      recordingTargetScreen = nil
     }
   }
 
