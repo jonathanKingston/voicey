@@ -105,8 +105,11 @@ Swift falls back to in-process `PostProcessor` if the worker is missing or retur
 
 ```bash
 make build-rust          # builds + copies workers to .build/debug/
+make build-rust-release  # release workers (strip debug symbols; see Cargo.toml [profile.release])
 make run-multiprocess    # bundle-debug + sign + open Voicey.app
 ```
+
+Release workers use the workspace `[profile.release]` profile (`strip = true`). Thin LTO is deferred until release build time is measured on macOS ([#73](https://github.com/jonathanKingston/voicey/issues/73)).
 
 ## Benchmarks
 
