@@ -1331,18 +1331,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     defer {
-      if let backgroundJobID {
-        let jobID = backgroundJobID
-        Task { @MainActor in
-          self.appState.removeHandsFreeBackgroundTranscriptionJob(id: jobID)
-          self.transcriptionOverlay?.syncLayout(to: self.appState)
-        }
-      }
+      let jobID = backgroundJobID
       Task { @MainActor in
         coordinator.reset()
         if request.continueHandsFreeSession {
           self.appState.partialTranscription = ""
           self.appState.isCatchingUpTranscription = false
+        }
+        if let jobID {
+          self.appState.removeHandsFreeBackgroundTranscriptionJob(id: jobID)
+          self.transcriptionOverlay?.syncLayout(to: self.appState)
         }
       }
     }
