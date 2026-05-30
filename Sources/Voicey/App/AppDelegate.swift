@@ -1597,7 +1597,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  @MainActor
   private func registerHandsFreeBackgroundTranscriptionJobIfNeeded(
     model: SpeechModel,
     capturedAudio: CapturedAudio,
