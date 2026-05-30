@@ -2,7 +2,7 @@
 # macOS-only paths (Swift infer worker, CoreAudio) stay in build.yml.
 #
 # Tier 1 (`rust-core`): fast PR signal — protocol, in-process supervisor mapping tests,
-# stub integration, capture IPC, voicey-text unit tests, worker builds, benchmark script smoke.
+# stub integration, capture IPC, voicey-text tests (unit + golden), worker builds, benchmark script smoke.
 # Tier 2 (`rust-workspace`): full workspace `cargo test` + clippy (ALSA, all crates).
 name: Linux Rust tests
 
@@ -47,8 +47,8 @@ jobs:
       - name: Capture worker IPC tests (fixture path, no microphone)
         run: cargo test -p voicey-capture --test capture_ipc
 
-      - name: Text crate unit tests (glossary, cleanup; no worker binary required)
-        run: cargo test -p voicey-text --lib
+      - name: Text crate tests (unit + golden postprocess fixtures)
+        run: cargo test -p voicey-text
 
       - name: Build supervisor and fetch workers
         run: cargo build -p voicey-supervisor -p voicey-fetch
