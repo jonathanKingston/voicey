@@ -50,6 +50,9 @@ jobs:
       - name: Text crate tests (unit + golden postprocess fixtures)
         run: cargo test -p voicey-text
 
+      - name: Text worker IPC tests (black-box)
+        run: cargo test -p voicey-text --test text_ipc
+
       - name: Build supervisor and fetch workers
         run: cargo build -p voicey-supervisor -p voicey-fetch
 

@@ -1275,7 +1275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
 
     // Post-process text
-    let processedText = postProcessor?.process(result) ?? result.text
+    let processedText = await postProcessor?.processAsync(result) ?? result.text
     debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
     AppLogger.transcription.info(
       "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
@@ -1453,7 +1453,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
       AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
 
-      let processedText = postProcessor?.process(result) ?? result.text
+      let processedText = await postProcessor?.processAsync(result) ?? result.text
       debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
       AppLogger.transcription.info(
         "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
