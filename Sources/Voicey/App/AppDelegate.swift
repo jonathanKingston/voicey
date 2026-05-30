@@ -67,11 +67,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    guard
-      VoiceySingleInstance.acquireLockOrQuit(applyLockedFileDescriptor: { fd in
-        self.singleInstanceLockFileDescriptor = fd
-      })
-    else { return }
+    let lockResult = VoiceySingleInstance.acquireLock(applyLockedFileDescriptor: { fd in
+      self.singleInstanceLockFileDescriptor = fd
+    })
+    switch lockResult {
+    case .acquired, .multipleInstancesAllowed:
+      break
+    case .alreadyRunning:
+      return
+    case .unavailable(let failure):
+      VoiceySingleInstance.presentLockUnavailableAlert(
+        failure: failure,
+        lockPath: VoiceySingleInstance.productionLockOperations().lockFilePath()
+      )
+      NSApp.terminate(nil)
+      return
+    }
 
     // Keep the menubar app alive even when it has no open windows.
     ProcessInfo.processInfo.disableAutomaticTermination(Self.automaticTerminationReason)

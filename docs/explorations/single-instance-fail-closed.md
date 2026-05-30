@@ -2,7 +2,7 @@
 
 ## Status
 
-Exploratory proposal.
+Implemented in [#121](https://github.com/jonathanKingston/voicey/issues/121) (fail-closed lock + tests). This doc remains the design record.
 
 ## Summary
 
