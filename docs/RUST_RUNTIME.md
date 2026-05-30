@@ -20,7 +20,7 @@ System map and code ownership: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 Tracking issues:
 
-- [#74](https://github.com/jonathanKingston/voicey/issues/74) — Rust CI and Linux testability
+- [#74](https://github.com/jonathanKingston/voicey/issues/74) — Rust CI and Linux testability ([`ISSUE_74_PROGRESS.md`](ISSUE_74_PROGRESS.md))
 - [#70](https://github.com/jonathanKingston/voicey/issues/70) — Rust-first transition; **when Swift duplicate paths can be removed** (Phases 1–6)
 
 ### Can Swift duplicates be removed yet? (May 2026)
