@@ -126,7 +126,10 @@ final class TranscriptionOverlayController {
       return
     }
     let jobCount = appState.handsFreeBackgroundTranscriptionJobs.count
-    let size = TranscriptionOverlayView.hostWindowSize(backgroundJobCount: jobCount)
+    let size = TranscriptionOverlayView.hostWindowSize(
+      backgroundJobCount: jobCount,
+      showsTranscript: appState.hasPendingHandsFreeTranscript
+    )
     hostingView.frame = NSRect(x: 0, y: 0, width: size.width, height: size.height)
     window.setContentSize(NSSize(width: size.width, height: size.height))
     if let screen = window.screen ?? NSScreen.main {
@@ -153,15 +156,22 @@ struct TranscriptionOverlayView: View {
   private static let compactCardHeight: CGFloat = 68
   private static let backgroundJobStripHeight: CGFloat = 32
   private static let backgroundJobStripSpacing: CGFloat = 8
+  private static let transcriptRegionHeight: CGFloat = 96
 
-  static func cardHeight(backgroundJobCount: Int) -> CGFloat {
-    guard backgroundJobCount > 0 else { return compactCardHeight }
-    return compactCardHeight + backgroundJobStripSpacing
-      + (backgroundJobStripHeight * CGFloat(backgroundJobCount))
+  static func cardHeight(backgroundJobCount: Int, showsTranscript: Bool = false) -> CGFloat {
+    var height = compactCardHeight
+    if showsTranscript {
+      height += backgroundJobStripSpacing + transcriptRegionHeight
+    }
+    if backgroundJobCount > 0 {
+      height += backgroundJobStripSpacing
+        + (backgroundJobStripHeight * CGFloat(backgroundJobCount))
+    }
+    return height
   }
 
-  static func hostWindowSize(backgroundJobCount: Int = 0) -> CGSize {
-    let cardHeight = cardHeight(backgroundJobCount: backgroundJobCount)
+  static func hostWindowSize(backgroundJobCount: Int = 0, showsTranscript: Bool = false) -> CGSize {
+    let cardHeight = cardHeight(backgroundJobCount: backgroundJobCount, showsTranscript: showsTranscript)
     return CGSize(
       width: cardWidth + shadowPadding.leading + shadowPadding.trailing,
       height: cardHeight + shadowPadding.top + shadowPadding.bottom
@@ -215,6 +225,10 @@ struct TranscriptionOverlayView: View {
       .help(L10n.Overlay.cancelHelp)
       }
 
+      if showsTranscript {
+        transcriptPreview
+      }
+
       if !appState.handsFreeBackgroundTranscriptionJobs.isEmpty {
         VStack(spacing: 6) {
           ForEach(appState.handsFreeBackgroundTranscriptionJobs) { job in
@@ -245,7 +259,10 @@ struct TranscriptionOverlayView: View {
     .padding(.vertical, 14)
     .frame(
       width: Self.cardWidth,
-      height: Self.cardHeight(backgroundJobCount: appState.handsFreeBackgroundTranscriptionJobs.count),
+      height: Self.cardHeight(
+        backgroundJobCount: appState.handsFreeBackgroundTranscriptionJobs.count,
+        showsTranscript: showsTranscript
+      ),
       alignment: .center
     )
     .background { glassFill }
@@ -254,6 +271,36 @@ struct TranscriptionOverlayView: View {
     .clipShape(cardShape)
     .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.12), radius: 16, y: 8)
     .animation(.easeInOut(duration: 0.22), value: appState.handsFreeBackgroundTranscriptionJobs.count)
+    .animation(.easeInOut(duration: 0.22), value: showsTranscript)
+  }
+
+  /// Whether the live deferred-commit transcript should be shown in the overlay.
+  private var showsTranscript: Bool {
+    appState.hasPendingHandsFreeTranscript
+  }
+
+  /// Read-only live preview of the accumulated hands-free transcript awaiting commit.
+  private var transcriptPreview: some View {
+    ScrollView {
+      Text(appState.pendingHandsFreeTranscript)
+        .font(.system(size: 13, weight: .regular, design: .rounded))
+        .foregroundStyle(.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+        .textSelection(.enabled)
+    }
+    .scrollIndicators(.automatic)
+    .frame(height: Self.transcriptRegionHeight)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background {
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.05))
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.12), lineWidth: 0.5)
+    }
   }
 
   private var cardShape: RoundedRectangle {

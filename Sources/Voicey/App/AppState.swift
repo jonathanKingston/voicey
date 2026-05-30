@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import VoiceyCore
 
 struct HandsFreeBackgroundTranscriptionJob: Identifiable, Equatable {
   let id: UUID
@@ -145,6 +146,9 @@ final class AppState: ObservableObject {
   /// In-flight utterance transcriptions while the mic stays open in hands-free mode.
   @Published private(set) var handsFreeBackgroundTranscriptionJobs: [HandsFreeBackgroundTranscriptionJob] =
     []
+  /// Accumulated, post-processed utterance text awaiting a hands-free commit, keyed by the
+  /// utterance sequence so out-of-order transcription completions still join in spoken order.
+  @Published private(set) var pendingHandsFreeUtterances: [Int: String] = [:]
   @Published var audioLevel: Float = 0.0
   @Published var currentModel: SpeechModel = SettingsManager.shared.selectedModel
   @Published var lastTranscription: String = ""
@@ -186,6 +190,24 @@ final class AppState: ObservableObject {
 
   var isHandsFreeBackgroundTranscribing: Bool {
     handsFreeSessionActive && !handsFreeBackgroundTranscriptionJobs.isEmpty
+  }
+
+  /// Accumulated hands-free transcript joined in spoken order for live preview / commit.
+  var pendingHandsFreeTranscript: String {
+    let ordered = pendingHandsFreeUtterances.keys.sorted().compactMap { pendingHandsFreeUtterances[$0] }
+    return TextCleanup.joinHandsFreeUtterances(ordered)
+  }
+
+  var hasPendingHandsFreeTranscript: Bool {
+    !pendingHandsFreeTranscript.isEmpty
+  }
+
+  func setPendingHandsFreeUtterance(seq: Int, text: String) {
+    pendingHandsFreeUtterances[seq] = text
+  }
+
+  func resetPendingHandsFreeUtterances() {
+    pendingHandsFreeUtterances = [:]
   }
 
   @discardableResult

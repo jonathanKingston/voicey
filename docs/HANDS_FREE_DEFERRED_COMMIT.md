@@ -6,10 +6,39 @@ in the floating overlay.
 
 ## Status
 
-Proposal. This revisits two items the original Hands-Free spec deferred
+Implemented. This revisits two items the original Hands-Free spec deferred
 (["live transcript view" and "live transcript streaming"](HANDS_FREE_RECORDING_MODE.md))
 because real-world usage shows the per-utterance paste model produces unnatural
 text after natural pauses.
+
+### What shipped
+
+- Hands-Free no longer pastes each utterance. Utterances are transcribed in the
+  background and **accumulated** into a session buffer
+  (`AppState.pendingHandsFreeUtterances`, keyed by spoken-order sequence).
+- The accumulated transcript is shown **live** in the floating overlay as a
+  read-only, scrollable region (`TranscriptionOverlayView.transcriptPreview`).
+- The buffer is pasted **once** on commit:
+  - **Hotkey** while a session is active (`commitHandsFreeSession`), or
+  - an **optional, much longer silence timeout** that auto-commits
+    (`handsFreeAutoCommitEnabled` setting, `autoCommitSilenceDuration` = 6s,
+    well above the 1.5s utterance hangover).
+- **Escape / overlay cancel discards** the buffer without pasting
+  (`discardHandsFreeSession`) — a deliberate change from the previous
+  paste-final-utterance-on-escape behavior.
+- A session token drops stale, in-flight utterance transcriptions when a session
+  is discarded, and the commit waits for all in-flight transcriptions to drain
+  before pasting so nothing is lost or reordered.
+
+### Known limitation
+
+Each utterance is still transcribed independently, so a segment-less model (Qwen)
+capitalizes/punctuates each utterance on its own. Joining (`TextCleanup
+.joinHandsFreeUtterances`) only handles spacing; it does not re-flow sentence
+boundaries across utterances. The structural wins delivered here are: no
+premature sentence-cutting on long pauses, a single paste, live visibility, and
+user-controlled commit. Cross-utterance re-punctuation (e.g. re-transcribing the
+combined audio at commit) is left as a follow-up.
 
 ## Problem
 

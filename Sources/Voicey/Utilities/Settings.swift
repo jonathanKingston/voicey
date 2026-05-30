@@ -40,6 +40,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.launchAtLogin: false,
       Keys.showDockIcon: false,
       Keys.recordingMode: RecordingMode.manual.rawValue,
+      Keys.handsFreeAutoCommitEnabled: false,
       Keys.autoPasteEnabled: false,  // Disabled by default - advanced feature requiring Accessibility
       Keys.restoreClipboardAfterPaste: true,  // Restore original clipboard after paste
       Keys.pauseMediaDuringTranscription: true,
@@ -61,6 +62,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let launchAtLogin = "launchAtLogin"
     static let showDockIcon = "showDockIcon"
     static let recordingMode = "recordingMode"
+    static let handsFreeAutoCommitEnabled = "handsFreeAutoCommitEnabled"
     static let autoPasteEnabled = "autoPasteEnabled"
     static let restoreClipboardAfterPaste = "restoreClipboardAfterPaste"
     static let pauseMediaDuringTranscription = "pauseMediaDuringTranscription"
@@ -131,6 +133,13 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       return RecordingMode(rawValue: rawValue) ?? .manual
     }
     set { defaults.set(newValue.rawValue, forKey: Keys.recordingMode) }
+  }
+
+  /// Hands-free only: when enabled, a long silence after the last utterance auto-commits
+  /// (pastes) the accumulated transcript instead of waiting for the hotkey.
+  var handsFreeAutoCommitEnabled: Bool {
+    get { defaults.bool(forKey: Keys.handsFreeAutoCommitEnabled) }
+    set { defaults.set(newValue, forKey: Keys.handsFreeAutoCommitEnabled) }
   }
 
   /// When enabled, Voicey attempts to auto-paste the transcription into the active app.

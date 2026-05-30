@@ -11,6 +11,7 @@ protocol SettingsProviding: AnyObject {
   var launchAtLogin: Bool { get set }
   var showDockIcon: Bool { get }
   var recordingMode: RecordingMode { get set }
+  var handsFreeAutoCommitEnabled: Bool { get set }
   var autoPasteEnabled: Bool { get set }
   var restoreClipboardAfterPaste: Bool { get set }
   var pauseMediaDuringTranscription: Bool { get set }
