@@ -188,6 +188,22 @@ final class AppState: ObservableObject {
     handsFreeSessionActive && !handsFreeBackgroundTranscriptionJobs.isEmpty
   }
 
+  /// True while a hands-free utterance is finishing via `flushAndFinish` (Qwen overlay job and/or barrier).
+  private(set) var handsFreeIncrementalFlushBarrierCount = 0
+
+  var isHandsFreeUtteranceFlushInProgress: Bool {
+    handsFreeSessionActive
+      && (isHandsFreeBackgroundTranscribing || handsFreeIncrementalFlushBarrierCount > 0)
+  }
+
+  func beginHandsFreeIncrementalFlushBarrier() {
+    handsFreeIncrementalFlushBarrierCount += 1
+  }
+
+  func endHandsFreeIncrementalFlushBarrier() {
+    handsFreeIncrementalFlushBarrierCount = max(0, handsFreeIncrementalFlushBarrierCount - 1)
+  }
+
   @discardableResult
   func addHandsFreeBackgroundTranscriptionJob(
     envelope: [Float],

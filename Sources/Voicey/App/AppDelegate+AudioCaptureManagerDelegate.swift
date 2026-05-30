@@ -20,7 +20,7 @@ extension AppDelegate: AudioCaptureManagerDelegate {
       guard self.appState.handsFreeSessionActive, self.appState.isWaitingForSpeech else { return }
       // Do not reset the incremental coordinator while the previous utterance is still
       // flushing; that races with flushAndFinish and can corrupt in-flight chunk state.
-      guard !self.appState.isHandsFreeBackgroundTranscribing else { return }
+      guard !self.appState.isHandsFreeUtteranceFlushInProgress else { return }
       self.cancelHandsFreeWaitTimeout()
       self.incrementalTranscriptionCoordinator?.reset()
       self.appState.partialTranscription = ""

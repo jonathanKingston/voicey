@@ -15,6 +15,7 @@ private struct HandsFreeIncrementalUtteranceRequest {
   let appendTrailingSpaceForNextUtterance: Bool
   let pasteToCurrentFrontmost: Bool
   let applyTrailingTrimHeuristic: Bool
+  let backgroundJobID: UUID?
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -1078,6 +1079,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let selectedModel = userFacingSelectedModel()
     let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
     let capturedAudio = CapturedAudio.inMemory(audioBuffer)
+    let backgroundJobID = registerHandsFreeBackgroundTranscriptionJobIfNeeded(
+      model: selectedModel,
+      capturedAudio: capturedAudio,
+      durationSec: durationSec
+    )
+    appState.beginHandsFreeIncrementalFlushBarrier()
 
     let request = HandsFreeIncrementalUtteranceRequest(
       capturedAudio: capturedAudio,
@@ -1085,10 +1092,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       continueHandsFreeSession: true,
       appendTrailingSpaceForNextUtterance: true,
       pasteToCurrentFrontmost: false,
-      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
+      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic,
+      backgroundJobID: backgroundJobID
     )
     Task {
-      defer { capturedAudio.removeSharedBufferIfNeeded() }
+      defer {
+        capturedAudio.removeSharedBufferIfNeeded()
+        appState.endHandsFreeIncrementalFlushBarrier()
+      }
       await processHandsFreeIncrementalUtterance(
         coordinator: incrementalTranscriptionCoordinator,
         request: request
@@ -1120,12 +1131,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     guard let audioBuffer = finalUtterance else {
       // Let an in-flight hands-free flush finish; cancel() races with flushAndFinish.
-      if !appState.isHandsFreeBackgroundTranscribing {
+      if !appState.isHandsFreeUtteranceFlushInProgress {
         incrementalTranscriptionCoordinator?.cancel()
       }
       appState.partialTranscription = ""
       appState.isCatchingUpTranscription = false
-      if !appState.isHandsFreeBackgroundTranscribing {
+      if !appState.isHandsFreeUtteranceFlushInProgress {
         appState.resetHandsFreeBackgroundTranscriptionJobs()
       }
       appState.transcriptionState = .idle
@@ -1140,12 +1151,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       AppLogger.audio.warning(
         "Hands-Free session end: utterance too short (\(String(format: "%.2f", durationSec))s)"
       )
-      if !appState.isHandsFreeBackgroundTranscribing {
+      if !appState.isHandsFreeUtteranceFlushInProgress {
         incrementalTranscriptionCoordinator?.cancel()
       }
       appState.partialTranscription = ""
       appState.isCatchingUpTranscription = false
-      if !appState.isHandsFreeBackgroundTranscribing {
+      if !appState.isHandsFreeUtteranceFlushInProgress {
         appState.resetHandsFreeBackgroundTranscriptionJobs()
       }
       appState.transcriptionState = .idle
@@ -1177,16 +1188,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
 
+    let backgroundJobID = registerHandsFreeBackgroundTranscriptionJobIfNeeded(
+      model: selectedModel,
+      capturedAudio: capturedAudio,
+      durationSec: durationSec
+    )
+    appState.beginHandsFreeIncrementalFlushBarrier()
+
     let request = HandsFreeIncrementalUtteranceRequest(
       capturedAudio: capturedAudio,
       durationSec: durationSec,
       continueHandsFreeSession: false,
       appendTrailingSpaceForNextUtterance: false,
       pasteToCurrentFrontmost: true,
-      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
+      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic,
+      backgroundJobID: backgroundJobID
     )
     Task {
-      defer { capturedAudio.removeSharedBufferIfNeeded() }
+      defer {
+        capturedAudio.removeSharedBufferIfNeeded()
+        appState.endHandsFreeIncrementalFlushBarrier()
+      }
       await processHandsFreeIncrementalUtterance(
         coordinator: incrementalTranscriptionCoordinator,
         request: request
@@ -1328,19 +1350,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     request: HandsFreeIncrementalUtteranceRequest
   ) async {
     let selectedModel = userFacingSelectedModel()
-    var backgroundJobID: UUID?
-    if request.continueHandsFreeSession {
+    if request.backgroundJobID != nil {
       await MainActor.run {
-        backgroundJobID = self.registerHandsFreeBackgroundTranscriptionJobIfNeeded(
-          model: selectedModel,
-          capturedAudio: request.capturedAudio,
-          durationSec: request.durationSec
-        )
         self.transcriptionOverlay?.syncLayout(to: self.appState)
       }
     }
     defer {
-      let jobID = backgroundJobID
+      let jobID = request.backgroundJobID
       Task { @MainActor in
         coordinator.reset()
         if request.continueHandsFreeSession {
