@@ -1,9 +1,11 @@
 import Foundation
 
-/// Constants and logic for filtering noise words from transcription output
+/// Whisper caption / silence artifact cleanup for segmented (benchmark) transcriptions.
+///
+/// Not used on the Qwen production path (`TranscriptionResult.segments` is empty).
 enum NoiseFilter {
-  /// Words/phrases that Whisper often outputs for non-speech sounds
-  /// These should be filtered out as they're typically noise artifacts
+  /// Words/phrases that Whisper often outputs for non-speech sounds.
+  /// These should be filtered out as they're typically noise artifacts.
   static let noiseWords: Set<String> = [
     // Whisper artifacts for silence
     "...", "…"

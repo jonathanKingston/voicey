@@ -23,7 +23,9 @@ Set `VOICEY_BENCHMARK_WARMUP=1` (default in `compare_benchmark_runtime.sh`) for 
 
 ## Post-process text (`postprocess/`)
 
-JSON fixtures for Rust `voicey-text` post-processing (issue #63). Each file defines input text, optional segments, voice-command settings, and expected output after the full pipeline.
+JSON fixtures for the **Qwen / segment-less** `voicey-text` post-process contract (expansions, voice commands, pass-through without Whisper caption cleanup). Each file defines input text, optional segments, voice-command settings, and expected output.
+
+Whisper noise-filter behavior is covered by `cargo test -p voicey-text --lib` (`noise_filter`, `postprocess` unit tests), not committed golden JSON.
 
 Linux CI: `cargo test -p voicey-text --test golden_postprocess`
 
