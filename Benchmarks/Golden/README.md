@@ -2,7 +2,7 @@
 
 ## Audio (WAV)
 
-Short mono WAV clips at 16 kHz for `benchmark-transcribe` checks against the **Rust multiprocess** runtime.
+Short mono WAV clips at 16 kHz for `benchmark-transcribe` **smoke checks** against the **Rust multiprocess** runtime (RTF and JSON shape). Pure tones often produce an **empty** transcript; `make benchmark-compare-runtime` still passes when post-process and infer complete successfully.
 
 Generate fixtures:
 

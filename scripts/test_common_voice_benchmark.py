@@ -50,15 +50,22 @@ class CommonVoiceBenchmarkTests(unittest.TestCase):
     self.assertEqual(metrics.word_errors, 1)
     self.assertEqual(metrics.wer, 0.5)
 
-  def test_voicey_runner_uses_benchmark_transcribe(self) -> None:
+  def test_voicey_runner_whisper_omits_multiprocess_flags(self) -> None:
     runners = benchmark.voicey_runners(["large-v3_turbo"], Path(".build/debug/Voicey"))
 
     self.assertEqual(len(runners), 1)
     self.assertEqual(runners[0].name, "large-v3_turbo")
     self.assertIn("benchmark-transcribe", runners[0].command_template)
+    self.assertNotIn("--runtime multiprocess", runners[0].command_template)
+    self.assertNotIn("--post-process", runners[0].command_template)
+    self.assertIn("{audio}", runners[0].command_template)
+
+  def test_voicey_runner_qwen_uses_multiprocess_and_post_process(self) -> None:
+    runners = benchmark.voicey_runners(["qwen3-asr-0.6b-6bit"], Path(".build/debug/Voicey"))
+
+    self.assertEqual(len(runners), 1)
     self.assertIn("--runtime multiprocess", runners[0].command_template)
     self.assertIn("--post-process", runners[0].command_template)
-    self.assertIn("{audio}", runners[0].command_template)
 
   def test_voicey_batch_runs_distinguish_incremental_mode(self) -> None:
     runs = benchmark.voicey_batch_runs(

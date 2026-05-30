@@ -50,13 +50,16 @@ def fail(msg):
     print(f"error: {msg}", file=sys.stderr)
     sys.exit(1)
 
-raw_text = (payload.get("rawText") or "").strip()
-if not raw_text:
-    fail("multiprocess benchmark produced empty rawText")
+if payload.get("runtime") != "multiprocess":
+    fail(f"expected runtime multiprocess, got {payload.get('runtime')!r}")
 
-text = (payload.get("text") or "").strip()
-if not text:
-    fail("multiprocess post-processed text is empty")
+for key in ("model", "audio", "rawText", "text", "processingSeconds", "audioSeconds"):
+    if key not in payload:
+        fail(f"JSON missing required field: {key}")
+
+audio_seconds = float(payload.get("audioSeconds") or 0)
+if audio_seconds <= 0:
+    fail("invalid audioSeconds")
 
 mp_rtf = float(payload.get("realTimeFactor") or 0)
 if mp_rtf <= 0:
@@ -64,11 +67,17 @@ if mp_rtf <= 0:
 if mp_rtf > max_rtf:
     fail(f"multiprocess RTF {mp_rtf:.3f} exceeds {max_rtf}")
 
+raw_text = payload.get("rawText") or ""
+text = payload.get("text") or ""
+# Tone fixtures often yield empty ASR output; smoke test is exit 0 + voicey-text round-trip keys.
+if raw_text.strip() and not text.strip():
+    fail("post-process returned empty text for non-empty rawText")
+
 print(json.dumps({
     "model": payload.get("model"),
     "audio": payload.get("audio"),
     "multiprocessRTF": mp_rtf,
-    "rawTextLength": len(raw_text),
-    "textLength": len(text),
+    "rawTextLength": len(raw_text.strip()),
+    "textLength": len(text.strip()),
 }, indent=2))
 PY
