@@ -20,7 +20,7 @@ System map and code ownership: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 Tracking issues:
 
-- [#74](https://github.com/jonathanKingston/voicey/issues/74) — Rust CI and Linux testability
+- [#74](https://github.com/jonathanKingston/voicey/issues/74) — Rust CI and Linux testability ([`ISSUE_74_PROGRESS.md`](ISSUE_74_PROGRESS.md))
 - [#70](https://github.com/jonathanKingston/voicey/issues/70) — Rust-first transition; **when Swift duplicate paths can be removed** (Phases 1–6)
 
 ### Can Swift duplicates be removed yet? (May 2026)
@@ -42,7 +42,7 @@ Phase 1 PCM pass-through for manual + hands-free Rust capture is landed (#82, #8
 
 | Tier | Job | Purpose |
 |------|-----|---------|
-| **1** | `rust-core` | Fast signal: protocol fixtures, supervisor `process.rs` unit tests (`--bin voicey-supervisor`), stub integration, capture IPC, worker builds, benchmark script smoke tests |
+| **1** | `rust-core` | Fast signal: protocol fixtures, supervisor `process.rs` unit tests (`--bin voicey-supervisor`), stub integration, capture IPC, fetch unit/HTTP tests, worker builds, benchmark script smoke tests |
 | **2** | `rust-workspace` | Full `cargo test --workspace`, `clippy -D warnings` (includes `voicey-capture` ALSA deps) |
 
 Workflow: [`.github/workflows/linux-rust-tests.yml`](../.github/workflows/linux-rust-tests.yml). Rust toolchain is pinned in [`rust-toolchain.toml`](../rust-toolchain.toml) (currently **1.86.0**).
