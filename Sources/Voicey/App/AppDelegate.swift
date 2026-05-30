@@ -1056,7 +1056,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     appState.clearRecordingWaveformDisplay()
-    appState.transcriptionState = .waitingForSpeech(startTime: Date())
 
     let durationSec = Double(audioBuffer.count) / 16000.0
     AppLogger.audio.info(
@@ -1068,11 +1067,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       incrementalTranscriptionCoordinator?.reset()
       appState.partialTranscription = ""
       appState.isCatchingUpTranscription = false
+      appState.transcriptionState = .waitingForSpeech(startTime: Date())
       return
     }
 
     guard let incrementalTranscriptionCoordinator else {
       AppLogger.audio.error("Hands-Free: Incremental transcription coordinator unavailable")
+      appState.transcriptionState = .waitingForSpeech(startTime: Date())
       return
     }
 
@@ -1085,6 +1086,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       durationSec: durationSec
     )
     appState.beginHandsFreeIncrementalFlushBarrier()
+    appState.transcriptionState = .waitingForSpeech(startTime: Date())
 
     let request = HandsFreeIncrementalUtteranceRequest(
       capturedAudio: capturedAudio,
