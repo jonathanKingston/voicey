@@ -1355,20 +1355,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.transcriptionOverlay?.syncLayout(to: self.appState)
       }
     }
-    defer {
-      let jobID = request.backgroundJobID
-      Task { @MainActor in
-        coordinator.reset()
-        if request.continueHandsFreeSession {
-          self.appState.partialTranscription = ""
-          self.appState.isCatchingUpTranscription = false
-        }
-        if let jobID {
-          self.appState.removeHandsFreeBackgroundTranscriptionJob(id: jobID)
-          self.transcriptionOverlay?.syncLayout(to: self.appState)
-        }
-      }
-    }
 
     do {
       debugPrint("🔄 Finishing hands-free incremental transcription...", category: "TRANSCRIBE")
@@ -1414,6 +1400,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.appState.transcriptionState = .error(message: error.localizedDescription)
         self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
         self.tryPerformPendingUpgrade()
+      }
+    }
+
+    // Await cleanup before the outer flush barrier ends. A fire-and-forget Task here let
+    // non-Qwen models accept speech-start and append samples, then reset() wiped them.
+    await MainActor.run {
+      coordinator.reset()
+      if request.continueHandsFreeSession {
+        self.appState.partialTranscription = ""
+        self.appState.isCatchingUpTranscription = false
+      }
+      if let jobID = request.backgroundJobID {
+        self.appState.removeHandsFreeBackgroundTranscriptionJob(id: jobID)
+        self.transcriptionOverlay?.syncLayout(to: self.appState)
       }
     }
   }
