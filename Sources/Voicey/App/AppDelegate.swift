@@ -1292,11 +1292,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    // Finish any queued pause chunks and transcribe the final tail.
+    // Finish pause chunks (AVFoundation) or transcribe the Rust capture PCM handle directly.
     Task {
       defer { capturedAudio.removeSharedBufferIfNeeded() }
       await processIncrementalTranscription(
         coordinator: incrementalTranscriptionCoordinator,
+        capturedAudio: capturedAudio,
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
       )
     }
@@ -1337,15 +1338,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func processIncrementalTranscription(
     coordinator: IncrementalTranscriptionCoordinator,
+    capturedAudio: CapturedAudio,
     applyTrailingTrimHeuristic: Bool
   ) async {
     do {
       debugPrint("🔄 Finishing incremental transcription...", category: "TRANSCRIBE")
-      let result = try await coordinator.flushAndFinish(
-        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+      let result = try await finishUtteranceTranscription(
+        coordinator: coordinator,
+        capturedAudio: capturedAudio,
+        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
+      )
       await handleTranscriptionResult(result)
     } catch {
       await handleTranscriptionError(error)
+    }
+  }
+
+  /// Completes an utterance after capture stops. `voicey-capture` returns a shared PCM file
+  /// without streaming float samples into the incremental coordinator, so those utterances
+  /// must be transcribed from the handle instead of `flushAndFinish` on an empty buffer.
+  private func finishUtteranceTranscription(
+    coordinator: IncrementalTranscriptionCoordinator,
+    capturedAudio: CapturedAudio,
+    applyTrailingTrimHeuristic: Bool
+  ) async throws -> TranscriptionResult {
+    switch capturedAudio {
+    case .sharedBuffer:
+      return try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
+    case .inMemory:
+      return try await coordinator.flushAndFinish(
+        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
     }
   }
 
@@ -1362,8 +1384,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     do {
       debugPrint("🔄 Finishing hands-free incremental transcription...", category: "TRANSCRIBE")
-      let result = try await coordinator.flushAndFinish(
-        applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic)
+      let result = try await finishUtteranceTranscription(
+        coordinator: coordinator,
+        capturedAudio: request.capturedAudio,
+        applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic
+      )
       let processedText = await postProcessor?.processAsync(result) ?? result.text
       debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
       AppLogger.transcription.info(
@@ -1492,13 +1517,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
+  private func transcribeWithSelectedEngine(capturedAudio: CapturedAudio) async throws -> TranscriptionResult {
     let selectedModel = userFacingSelectedModel()
     let decoderContext = TranscriptionSteeringContext.make()
     if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
       return try await VoiceyRuntimeSupervisor.shared.transcribe(
-        samples: audioBuffer,
+        capturedAudio: capturedAudio,
         model: selectedModel,
+        warmupAlreadyDone: multiprocessInferReady,
+        decoderContext: decoderContext
+      )
+    }
+    let audioBuffer = try capturedAudio.inMemorySamples()
+    return try await transcribeWithSelectedEngine(
+      audioBuffer: audioBuffer,
+      model: selectedModel,
+      decoderContext: decoderContext
+    )
+  }
+
+  private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
+    let selectedModel = userFacingSelectedModel()
+    let decoderContext = TranscriptionSteeringContext.make()
+    return try await transcribeWithSelectedEngine(
+      audioBuffer: audioBuffer,
+      model: selectedModel,
+      decoderContext: decoderContext
+    )
+  }
+
+  private func transcribeWithSelectedEngine(
+    audioBuffer: [Float],
+    model: SpeechModel,
+    decoderContext: String?
+  ) async throws -> TranscriptionResult {
+    if VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
+      return try await VoiceyRuntimeSupervisor.shared.transcribe(
+        samples: audioBuffer,
+        model: model,
         warmupAlreadyDone: multiprocessInferReady,
         decoderContext: decoderContext
       )
