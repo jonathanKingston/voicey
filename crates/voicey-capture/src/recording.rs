@@ -166,6 +166,26 @@ fn record_until_stop(
     Ok(())
 }
 
+fn append_resampled_chunk(target: &mut Vec<f32>, chunk: &[f32], input_rate: f64) {
+    if chunk.is_empty() {
+        return;
+    }
+    if (input_rate - TARGET_SAMPLE_RATE).abs() < 1.0 {
+        target.extend_from_slice(chunk);
+        return;
+    }
+    let output_len = ((chunk.len() as f64) * TARGET_SAMPLE_RATE / input_rate).ceil() as usize;
+    target.reserve(output_len);
+    for index in 0..output_len {
+        let src_index = (index as f64 * input_rate / TARGET_SAMPLE_RATE) as usize;
+        let sample = chunk
+            .get(src_index.min(chunk.len().saturating_sub(1)))
+            .copied()
+            .unwrap_or(0.0);
+        target.push(sample);
+    }
+}
+
 #[cfg(test)]
 impl LiveRecorder {
     /// Seeds an in-memory buffer without opening CoreAudio/ALSA (unit tests only).
@@ -220,25 +240,5 @@ mod tests {
             .drain_utterance(0, 1, false)
             .expect_err("expected not recording");
         assert!(error.contains("not recording"));
-    }
-}
-
-fn append_resampled_chunk(target: &mut Vec<f32>, chunk: &[f32], input_rate: f64) {
-    if chunk.is_empty() {
-        return;
-    }
-    if (input_rate - TARGET_SAMPLE_RATE).abs() < 1.0 {
-        target.extend_from_slice(chunk);
-        return;
-    }
-    let output_len = ((chunk.len() as f64) * TARGET_SAMPLE_RATE / input_rate).ceil() as usize;
-    target.reserve(output_len);
-    for index in 0..output_len {
-        let src_index = (index as f64 * input_rate / TARGET_SAMPLE_RATE) as usize;
-        let sample = chunk
-            .get(src_index.min(chunk.len().saturating_sub(1)))
-            .copied()
-            .unwrap_or(0.0);
-        target.push(sample);
     }
 }
