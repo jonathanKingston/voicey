@@ -100,6 +100,7 @@ fn record_fixture_writes_readable_pcm() {
     assert_eq!(response["sample_rate"], 16_000);
     assert!(shm_name.starts_with(voicey_pcm::NAME_PREFIX));
     assert_eq!(sample_count, 800, "0.05s at 16 kHz");
+    assert_eq!(response["non_zero_sample_count"], 0);
 
     let samples = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
     assert_eq!(samples.len(), sample_count);
@@ -141,6 +142,7 @@ fn load_wav_file_decodes_pcm_fixture() {
         .as_u64()
         .expect("sample_count") as usize;
     assert_eq!(sample_count, samples.len());
+    assert_eq!(response["non_zero_sample_count"], 3);
 
     let read_back = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
     assert_eq!(read_back.len(), samples.len());

@@ -11,7 +11,14 @@ struct VoiceyCaptureWorkerClient {
     _ = try send(request: ["type": "prewarm", "id": UUID().uuidString])
   }
 
-  func recordFixture(durationSeconds: Double) throws -> (shmName: String, sampleCount: Int, sampleRate: Int) {
+  struct RecordFixtureResult: Sendable {
+    let shmName: String
+    let sampleCount: Int
+    let sampleRate: Int
+    let nonZeroSampleCount: Int
+  }
+
+  func recordFixture(durationSeconds: Double) throws -> RecordFixtureResult {
     let response = try send(request: [
       "type": "record_fixture",
       "id": UUID().uuidString,
@@ -24,7 +31,13 @@ struct VoiceyCaptureWorkerClient {
       throw VoiceyCaptureWorkerError.failed(response["error"] as? String ?? "capture failed")
     }
     let sampleRate = response["sample_rate"] as? Int ?? 16_000
-    return (shmName, sampleCount, sampleRate)
+    let nonZeroSampleCount = response["non_zero_sample_count"] as? Int ?? 0
+    return RecordFixtureResult(
+      shmName: shmName,
+      sampleCount: sampleCount,
+      sampleRate: sampleRate,
+      nonZeroSampleCount: nonZeroSampleCount
+    )
   }
 
   func loadWavFile(path: String) throws -> PCMBufferHandle {
