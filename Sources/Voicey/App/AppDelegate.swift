@@ -1651,6 +1651,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func abortRecordingDueToCaptureError(_ error: Error) {
     AppLogger.audio.error("Capture error: \(error.localizedDescription, privacy: .public)")
+    // Best-effort teardown when Rust capture IPC failed mid-session (stop may fail again).
+    if let capturedAudio = try? audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false) {
+      capturedAudio.removeSharedBufferIfNeeded()
+    } else if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
+      VoiceyCaptureWorkerSession.shared.stop()
+    }
     hideOverlay()
     cancelHandsFreeWaitTimeout()
     appState.handsFreeSessionActive = false
