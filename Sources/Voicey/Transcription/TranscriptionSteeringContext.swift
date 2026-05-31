@@ -17,7 +17,7 @@ enum TranscriptionSteeringContext {
 
   private static func makeViaRustWorker(settings: SettingsProviding) async throws -> String? {
     let snapshot = settings.transcriptionScreenContextEnabled
-      ? ScreenContextStore.shared.consumeSnapshot()
+      ? ScreenContextStore.shared.currentSnapshot()
       : nil
 
     do {
@@ -38,7 +38,7 @@ enum TranscriptionSteeringContext {
 
   private static func makeInSwift(settings: SettingsProviding) -> String? {
     let snapshot = settings.transcriptionScreenContextEnabled
-      ? ScreenContextStore.shared.consumeSnapshot()
+      ? ScreenContextStore.shared.currentSnapshot()
       : nil
     let output = SteeringContextBuilder.build(
       SteeringContextBuilder.Input(
