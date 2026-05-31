@@ -72,6 +72,7 @@ pub fn rank_terms(
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.term.to_lowercase().cmp(&b.term.to_lowercase()))
     });
     term_scores
 }

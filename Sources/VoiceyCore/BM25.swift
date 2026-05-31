@@ -48,7 +48,10 @@ public enum BM25 {
     return
       termScores
       .map { (term: $0.key, score: $0.value) }
-      .sorted { $0.score > $1.score }
+      .sorted {
+        if $0.score != $1.score { return $0.score > $1.score }
+        return $0.term.localizedCaseInsensitiveCompare($1.term) == .orderedAscending
+      }
   }
 
   private static func termDocumentFrequency(_ docTokens: [[String]]) -> [String: Int] {
