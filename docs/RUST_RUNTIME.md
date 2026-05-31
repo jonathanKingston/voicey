@@ -13,7 +13,7 @@ This table is the **M5 allowlist** for [#74](https://github.com/jonathanKingston
 | `voicey-protocol` fixtures + serde contract | Yes (`make protocol-fixtures`, Swift fixture decode) | — |
 | Supervisor + stub workers (infer/capture/fetch) | Yes (integration tests, worker I/O) | — |
 | `voicey-fetch` HTTP listing/download (local test server) | Yes (`cargo test -p voicey-fetch`, Tier 1) | — |
-| `voicey-capture` JSONL IPC + PCM fixture path (no microphone) | Yes | — |
+| `voicey-capture` JSONL IPC + PCM fixture path (no microphone; includes `drain_hands_free_utterance`) | Yes | — |
 | `voicey-text` / `VoiceyCore` unit + golden postprocess | Yes (`cargo test -p voicey-text`, `linux-core-tests`) | — |
 | Benchmark harness **scripts** (Common Voice prep, parity matrix smoke) | Yes (`test-common-voice-benchmark`, Tier 1 script checks) | — |
 | Benchmark **Qwen transcribe RTF / WER** (needs MLX + models) | No | Yes (`make benchmark-compare-runtime`, parity targets) |
