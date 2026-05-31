@@ -42,7 +42,7 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     startSampleIndex: Int,
     endSampleIndex: Int,
     applyTrailingTrim: Bool = true
-  ) async throws -> [Float] {
+  ) async throws -> PCMBufferHandle {
     let response = try await client().send(
       request: [
         "type": "drain_hands_free_utterance",
@@ -59,8 +59,8 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     else {
       throw VoiceyCaptureWorkerError.invalidResponse
     }
-    defer { SharedMemoryPCM.remove(name: shmName) }
-    return try SharedMemoryPCM.read(name: shmName, sampleCount: sampleCount)
+    let sampleRate = response["sample_rate"] as? Int ?? 16_000
+    return PCMBufferHandle(shmName: shmName, sampleCount: sampleCount, sampleRate: sampleRate)
   }
 
   func startRecording(mode: RecordingMode = .manual) async throws {

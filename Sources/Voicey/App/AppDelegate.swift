@@ -1046,7 +1046,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.audio.info("Hands-Free: Finalizing utterance; capture continues")
 
     guard
-      let audioBuffer = audioCaptureManager?.finalizeHandsFreeUtterance(
+      let capturedAudio = audioCaptureManager?.finalizeHandsFreeUtterance(
         applyTrailingTrimHeuristic: true)
     else {
       AppLogger.audio.error("Hands-Free: Failed to finalize utterance buffer")
@@ -1057,12 +1057,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     appState.clearRecordingWaveformDisplay()
 
-    let durationSec = Double(audioBuffer.count) / 16000.0
+    let durationSec = capturedAudio.durationSeconds
     AppLogger.audio.info(
-      "Hands-Free utterance: \(audioBuffer.count) samples (~\(String(format: "%.1f", durationSec))s)"
+      "Hands-Free utterance: \(capturedAudio.sampleCount) samples (~\(String(format: "%.1f", durationSec))s)"
     )
 
     guard durationSec >= 0.5 else {
+      capturedAudio.removeSharedBufferIfNeeded()
       AppLogger.audio.warning("Hands-Free utterance too short; resuming listen")
       incrementalTranscriptionCoordinator?.reset()
       appState.partialTranscription = ""
@@ -1073,13 +1074,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     guard let incrementalTranscriptionCoordinator else {
       AppLogger.audio.error("Hands-Free: Incremental transcription coordinator unavailable")
+      capturedAudio.removeSharedBufferIfNeeded()
       appState.transcriptionState = .waitingForSpeech(startTime: Date())
       return
     }
 
     let selectedModel = userFacingSelectedModel()
     let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
-    let capturedAudio = CapturedAudio.inMemory(audioBuffer)
     let backgroundJobID = registerHandsFreeBackgroundTranscriptionJobIfNeeded(
       model: selectedModel,
       capturedAudio: capturedAudio,
@@ -1116,7 +1117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appState.handsFreeSessionActive = false
     handsFreeSeparateNextPasteWithSpace = false
 
-    var finalUtterance: [Float]?
+    var finalUtterance: CapturedAudio?
     if appState.isRecording {
       finalUtterance = audioCaptureManager?.finalizeHandsFreeUtteranceForSessionEnd(
         applyTrailingTrimHeuristic: true)
@@ -1131,7 +1132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       dependencies.mediaPlayback.resumeAfterTranscription()
     }
 
-    guard let audioBuffer = finalUtterance else {
+    guard let capturedAudio = finalUtterance else {
       // Let an in-flight hands-free flush finish; cancel() races with flushAndFinish.
       if !appState.isHandsFreeUtteranceFlushInProgress {
         incrementalTranscriptionCoordinator?.cancel()
@@ -1148,8 +1149,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    let durationSec = Double(audioBuffer.count) / 16000.0
+    let durationSec = capturedAudio.durationSeconds
     guard durationSec >= 0.5 else {
+      capturedAudio.removeSharedBufferIfNeeded()
       AppLogger.audio.warning(
         "Hands-Free session end: utterance too short (\(String(format: "%.2f", durationSec))s)"
       )
@@ -1170,7 +1172,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     appState.resetHandsFreeBackgroundTranscriptionJobs()
     let selectedModel = userFacingSelectedModel()
-    let capturedAudio = CapturedAudio.inMemory(audioBuffer)
     configureProcessingWaveformDisplay(
       capturedAudio: capturedAudio,
       durationSec: durationSec,
@@ -1287,6 +1288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       hideOverlay()
       appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
       dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
+      capturedAudio.removeSharedBufferIfNeeded()
       return
     }
 

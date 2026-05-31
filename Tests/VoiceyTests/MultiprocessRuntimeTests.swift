@@ -69,4 +69,28 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertEqual(captured.durationSeconds, 0.5, accuracy: 0.001)
     captured.removeSharedBufferIfNeeded()
   }
+
+  /// Hands-free Rust capture now transfers PCM-file ownership to the consumer via a
+  /// `.sharedBuffer` handle instead of reading `[Float]` in the drain call (#70 Phase 1).
+  /// The whole no-leak contract rests on `removeSharedBufferIfNeeded()` actually unlinking
+  /// that file once a consumer is done with it.
+  func testRemoveSharedBufferIfNeededUnlinksBackingFile() throws {
+    let name = try SharedMemoryPCM.write(samples: [0.0, 0.25, -0.5, 1.0])
+    let path = SharedMemoryPCM.fileURL(for: name).path
+    XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+
+    let captured = CapturedAudio.sharedBuffer(
+      PCMBufferHandle(shmName: name, sampleCount: 4, sampleRate: 16_000))
+    captured.removeSharedBufferIfNeeded()
+    XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+
+    // Idempotent: a second removal (e.g. a defensive double-free) must not throw.
+    captured.removeSharedBufferIfNeeded()
+  }
+
+  func testPCMBufferHandleDurationGuardsZeroSampleRate() {
+    let handle = PCMBufferHandle(shmName: "voicey_pcm_test", sampleCount: 16_000, sampleRate: 0)
+    XCTAssertEqual(handle.durationSeconds, 0)
+    XCTAssertEqual(CapturedAudio.sharedBuffer(handle).durationSeconds, 0)
+  }
 }
