@@ -25,3 +25,6 @@ jobs:
 
       - name: Build (SwiftPM + MLX Metal library)
         run: make build
+
+      - name: Hands-free flush barrier unit tests
+        run: swift test --filter HandsFreeFlushBarrierTests
