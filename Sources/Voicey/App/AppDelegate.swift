@@ -54,8 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var selectedModelObserver: Any?
   private var workspaceWakeObserver: Any?
 
-  // Model upgrade lock - prevents recording during model swap
-  private var isUpgradingModel = false
+  // Model engine switch lock — held during upgrades and settings-driven model loads.
+  private var isModelEngineSwitchInProgress = false
+  /// Settings UI may update selection while capture is active; engine swap runs when idle.
+  private var deferredModelEngineSwitch: SpeechModel?
   private var handsFreeWaitTimeoutTask: Task<Void, Never>?
   /// When true, the next hands-free deliver appends a trailing space for the following utterance.
   private var handsFreeSeparateNextPasteWithSpace = false
@@ -366,6 +368,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     appState.currentModel = model
+
+    let policy = appState.modelSessionLifecyclePolicy(
+      isModelEngineSwitchInProgress: isModelEngineSwitchInProgress
+    )
+    if policy.blocksModelEngineReconfiguration {
+      deferredModelEngineSwitch = model
+      debugPrint(
+        "⏳ Deferring model engine switch to \(model.displayName) until transcription is idle",
+        category: "MODEL"
+      )
+      return
+    }
+
+    await applyModelEngineSwitch(to: model)
+  }
+
+  @MainActor
+  private func applyModelEngineSwitch(to model: SpeechModel) async {
+    isModelEngineSwitchInProgress = true
+    defer { isModelEngineSwitchInProgress = false }
+
     await unloadInactiveEngines()
     ModelManager.shared.loadDownloadedModels()
 
@@ -374,14 +397,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    let wasIdle = appState.transcriptionState == .idle
     appState.modelStatus = .loading
-    appState.transcriptionState = .idle
+    if wasIdle {
+      appState.transcriptionState = .idle
+    }
     let preloadSucceeded = await preloadSelectedModel()
     if preloadSucceeded && isActiveEngineLoaded {
       appState.modelStatus = .ready
     } else {
       appState.modelStatus = .failed(modelLoadFailureMessage(for: model))
     }
+  }
+
+  @MainActor
+  private func flushDeferredModelEngineSwitchIfNeeded() async {
+    guard deferredModelEngineSwitch != nil else { return }
+
+    let policy = appState.modelSessionLifecyclePolicy(
+      isModelEngineSwitchInProgress: isModelEngineSwitchInProgress
+    )
+    guard !policy.blocksModelEngineReconfiguration else { return }
+
+    let model = deferredModelEngineSwitch!
+    deferredModelEngineSwitch = nil
+    await applyModelEngineSwitch(to: model)
   }
 
   @MainActor
@@ -458,17 +498,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    // Check state and set lock atomically to prevent race with startRecording
-    guard appState.transcriptionState == .idle && !isUpgradingModel else {
+    let policy = appState.modelSessionLifecyclePolicy(
+      isModelEngineSwitchInProgress: isModelEngineSwitchInProgress
+    )
+    guard appState.transcriptionState == .idle && !policy.blocksModelEngineReconfiguration else {
       debugPrint("⏳ Upgrade pending - waiting for transcription to complete...", category: "MODEL")
       return
     }
 
-    // Lock to prevent recording during upgrade
-    isUpgradingModel = true
-
-    // Perform the upgrade
     performModelUpgrade(to: pendingModel)
+  }
+
+  /// Called when transcription becomes idle — runs deferred model switches then pending upgrades.
+  private func onTranscriptionSessionIdleForModelLifecycle() {
+    Task { @MainActor in
+      await self.flushDeferredModelEngineSwitchIfNeeded()
+      self.tryPerformPendingUpgrade()
+    }
   }
 
   private func setupHotkey() {
@@ -620,7 +666,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         category: "MODEL"
       )
       ModelManager.shared.pendingUpgradeModel = targetModel
-      tryPerformPendingUpgrade()
+      onTranscriptionSessionIdleForModelLifecycle()
       return
     }
 
@@ -645,7 +691,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       await MainActor.run {
         dependencies.settings.lastAppliedDefaultModel = targetModel.rawValue
         ModelManager.shared.pendingUpgradeModel = targetModel
-        tryPerformPendingUpgrade()
+        onTranscriptionSessionIdleForModelLifecycle()
       }
     }
   }
@@ -656,15 +702,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint(
       "🔄 Upgrading from \(previousModel.displayName) → \(model.displayName)...", category: "MODEL")
 
-    Task {
-      // Release upgrade lock immediately so normal recording can continue while loading in background.
-      await MainActor.run {
-        self.isUpgradingModel = false
-      }
+    isModelEngineSwitchInProgress = true
+
+    Task { @MainActor in
+      defer { self.isModelEngineSwitchInProgress = false }
 
       do {
         debugPrint(
-          "📦 Background loading \(model.displayName) (you can keep recording with \(previousModel.displayName))...",
+          "📦 Loading \(model.displayName) (recording blocked until complete)...",
           category: "MODEL")
         let startTime = CFAbsoluteTimeGetCurrent()
 
@@ -804,6 +849,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startRecording() {
+    let policy = appState.modelSessionLifecyclePolicy(
+      isModelEngineSwitchInProgress: isModelEngineSwitchInProgress
+    )
+    if policy.blocksRecordingStart {
+      AppLogger.general.info("startRecording: blocked — model engine switch in progress")
+      dependencies.notifications.showModelLoading()
+      return
+    }
+
     // Refresh model status before recording
     ModelManager.shared.loadDownloadedModels()
 
@@ -1155,7 +1209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.transcriptionState = .idle
       appState.clearRecordingWaveformDisplay()
       hideOverlay()
-      tryPerformPendingUpgrade()
+      onTranscriptionSessionIdleForModelLifecycle()
       return
     }
 
@@ -1176,7 +1230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.transcriptionState = .idle
       appState.clearRecordingWaveformDisplay()
       hideOverlay()
-      tryPerformPendingUpgrade()
+      onTranscriptionSessionIdleForModelLifecycle()
       return
     }
 
@@ -1195,7 +1249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
       dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
       capturedAudio.removeSharedBufferIfNeeded()
-      tryPerformPendingUpgrade()
+      onTranscriptionSessionIdleForModelLifecycle()
       return
     }
 
@@ -1283,7 +1337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.transcriptionState = .idle
       dependencies.mediaPlayback.resumeAfterTranscription()
       // Check for pending model upgrade now that we're idle
-      tryPerformPendingUpgrade()
+      onTranscriptionSessionIdleForModelLifecycle()
       return
     }
 
@@ -1348,7 +1402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     dependencies.mediaPlayback.resumeAfterTranscription()
 
     // Check for pending model upgrade now that we're idle
-    tryPerformPendingUpgrade()
+    onTranscriptionSessionIdleForModelLifecycle()
   }
 
   private func processIncrementalTranscription(
@@ -1441,7 +1495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if request.continueHandsFreeSession, self.appState.handsFreeSessionActive {
           self.restoreHandsFreeWaitingForSpeechIfNotRecording()
           self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-          self.tryPerformPendingUpgrade()
+          self.onTranscriptionSessionIdleForModelLifecycle()
           return
         }
         self.hideOverlay()
@@ -1449,7 +1503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.appState.isCatchingUpTranscription = false
         self.appState.transcriptionState = .error(message: error.localizedDescription)
         self.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-        self.tryPerformPendingUpgrade()
+        self.onTranscriptionSessionIdleForModelLifecycle()
       }
     }
 
@@ -1486,12 +1540,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "processHandsFreeIncrementalUtterance: No text to deliver (empty/whitespace after processing)")
       if continueHandsFreeSession, appState.handsFreeSessionActive {
         restoreHandsFreeWaitingForSpeechIfNotRecording()
-        tryPerformPendingUpgrade()
+        onTranscriptionSessionIdleForModelLifecycle()
         return
       }
       hideOverlay()
       appState.transcriptionState = .idle
-      tryPerformPendingUpgrade()
+      onTranscriptionSessionIdleForModelLifecycle()
       return
     }
 
@@ -1517,12 +1571,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let self else { return }
         if continueHandsFreeSession, self.appState.handsFreeSessionActive {
           self.restoreHandsFreeWaitingForSpeechIfNotRecording()
-          self.tryPerformPendingUpgrade()
+          self.onTranscriptionSessionIdleForModelLifecycle()
           return
         }
         self.hideOverlay()
         self.appState.transcriptionState = .idle
-        self.tryPerformPendingUpgrade()
+        self.onTranscriptionSessionIdleForModelLifecycle()
       }
     )
 
@@ -1631,7 +1685,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           "processTranscription: No text to deliver (empty/whitespace after processing)")
         self.hideOverlay()
         self.appState.transcriptionState = .idle
-        self.tryPerformPendingUpgrade()
+        self.onTranscriptionSessionIdleForModelLifecycle()
         return
       }
 
@@ -1641,7 +1695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
         self?.hideOverlay()
         self?.appState.transcriptionState = .idle
-        self?.tryPerformPendingUpgrade()
+        self?.onTranscriptionSessionIdleForModelLifecycle()
       }
 
       self.recordingTargetPID = nil
@@ -1668,7 +1722,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     statusBarController?.updateIcon(recording: false)
     dependencies.notifications.showTranscriptionError(error.localizedDescription)
     dependencies.mediaPlayback.resumeAfterTranscription()
-    tryPerformPendingUpgrade()
+    onTranscriptionSessionIdleForModelLifecycle()
   }
 
   private func handleCaptureError(_ error: Error, endHandsFreeSession: Bool) async {
@@ -1693,7 +1747,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self?.appState.isCatchingUpTranscription = false
       self?.appState.transcriptionState = .error(message: error.localizedDescription)
       self?.dependencies.notifications.showTranscriptionError(error.localizedDescription)
-      self?.tryPerformPendingUpgrade()
+      self?.onTranscriptionSessionIdleForModelLifecycle()
     }
   }
 
