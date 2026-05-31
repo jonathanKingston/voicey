@@ -129,7 +129,7 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     coordinator.append(samples: speech(300))
     await gate.waitUntilEntered()
     coordinator.cancel()
-    gate.release()
+    await gate.release()
 
     let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
     XCTAssertEqual(combined.text, "")
@@ -155,7 +155,7 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     coordinator.append(samples: speech(200))
     await gate.waitUntilEntered()
     coordinator.cancel()
-    gate.release()
+    await gate.release()
 
     let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
     XCTAssertEqual(combined.text, "")
