@@ -198,6 +198,54 @@ fn invalid_request_json_returns_error() {
 }
 
 #[test]
+fn drain_hands_free_without_start_returns_not_recording() {
+    let mut session = CaptureSession::spawn();
+    let response = session.request_json(
+        r#"{"type":"drain_hands_free_utterance","id":"drain-1","start_sample_index":0,"end_sample_index":4,"apply_trailing_trim":false}"#,
+    );
+    assert_eq!(response["type"], "capture_fixture_result");
+    assert_eq!(response["ok"], false);
+    let message = response["error"].as_str().expect("error message");
+    assert!(
+        message.contains("not recording"),
+        "expected not-recording error, got {message:?}"
+    );
+}
+
+#[test]
+fn drain_hands_free_after_start_returns_readable_pcm() {
+    let mut session = CaptureSession::spawn();
+    let start = session.request_json(
+        r#"{"type":"start_recording","id":"start-1","mode":"hands_free"}"#,
+    );
+    assert_eq!(start["type"], "capture_ready");
+
+    let response = session.request_json(
+        r#"{"type":"drain_hands_free_utterance","id":"drain-2","start_sample_index":0,"end_sample_index":800,"apply_trailing_trim":false}"#,
+    );
+    assert_eq!(response["type"], "capture_fixture_result");
+    assert_eq!(response["ok"], true);
+
+    let shm_name = response["shm_name"]
+        .as_str()
+        .expect("shm_name")
+        .to_string();
+    let sample_count = response["sample_count"]
+        .as_u64()
+        .expect("sample_count") as usize;
+    assert_eq!(response["sample_rate"], 16_000);
+    assert!(shm_name.starts_with(voicey_pcm::NAME_PREFIX));
+
+    let read_back = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
+    assert_eq!(read_back.len(), sample_count);
+    voicey_pcm::remove(&shm_name);
+
+    let _ = session.request_json(
+        r#"{"type":"stop_recording","id":"stop-2","apply_trailing_trim":false}"#,
+    );
+}
+
+#[test]
 fn stop_recording_without_start_returns_not_recording() {
     let mut session = CaptureSession::spawn();
     let response =
