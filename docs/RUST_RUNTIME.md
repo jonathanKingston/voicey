@@ -22,7 +22,7 @@ This table is the **M5 allowlist** for [#74](https://github.com/jonathanKingston
 | Mic capture (CoreAudio), TCC, auto-paste | No | Yes |
 | Codesign, bundle, Sparkle, seatbelt on device | No | Yes (`make bundle-direct`, release scripts) |
 
-**Local quick check (Linux / Cloud Agent):** `make protocol-fixtures`, `cargo test -p voicey-protocol -p voicey-supervisor --bin voicey-supervisor -p voicey-fetch -p voicey-text`, `swiftlint lint Sources/`, `swift test --package-path . --filter VoiceyCoreTests`.
+**Local quick check (Linux / Cloud Agent):** `make protocol-fixtures`, `cargo test -p voicey-protocol -p voicey-supervisor --bin voicey-supervisor -p voicey-fetch -p voicey-text`, `swift test --filter VoiceyCoreTests`, `swiftlint lint Sources/`.
 
 **Local quick check (macOS):** `make build && make build-rust && make run-multiprocess`; before release: `make benchmark-compare-runtime` and spot-check hands-free ([#99](https://github.com/jonathanKingston/voicey/issues/99)).
 
