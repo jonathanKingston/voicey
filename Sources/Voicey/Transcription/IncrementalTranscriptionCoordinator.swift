@@ -298,13 +298,10 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
           return
         }
 
-        self.isProcessingChunk = false
-        self.processingTask = nil
-
         if self.generation == taskGeneration {
+          self.isProcessingChunk = false
+          self.processingTask = nil
           self.publishSnapshotLocked()
-        } else if !self.pendingChunks.isEmpty {
-          self.startProcessingIfNeededLocked()
         }
 
         continuation.resume()

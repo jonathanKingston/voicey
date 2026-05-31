@@ -164,6 +164,42 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     XCTAssertEqual(called.value, 1, "Queued chunk should not start after cancel")
   }
 
+  /// A stale processing task finishing after cancel() must not nil out a newer generation's task.
+  func testStaleFinishProcessingDoesNotClobberNewGeneration() async throws {
+    let config = makeConfiguration()
+    let staleGate = TranscriptionGate()
+    let freshGate = TranscriptionGate()
+    let transcribeCalls = Atomic(0)
+    let coordinator = IncrementalTranscriptionCoordinator(
+      configuration: config,
+      transcribe: { _ in
+        let call = transcribeCalls.increment()
+        if call == 1 {
+          await staleGate.waitUntilReleased()
+          return self.result("stale")
+        }
+        await freshGate.waitUntilReleased()
+        return self.result("fresh")
+      },
+      onUpdate: { _ in }
+    )
+
+    coordinator.append(samples: speech(200))
+    coordinator.append(samples: silence(config.pauseSampleCount + config.safetyTailSampleCount))
+    await staleGate.waitUntilEntered()
+    coordinator.cancel()
+
+    coordinator.append(samples: speech(200))
+    coordinator.append(samples: silence(config.pauseSampleCount + config.safetyTailSampleCount))
+    await waitUntil("fresh transcribe to start") { transcribeCalls.value >= 2 }
+    await freshGate.waitUntilEntered()
+    await staleGate.release()
+
+    let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
+    XCTAssertEqual(combined.text, "fresh")
+    await freshGate.release()
+  }
+
   /// reset() clears buffered audio so a subsequent flush returns empty output.
   func testResetClearsPendingAudio() async throws {
     let called = Atomic(0)
@@ -181,6 +217,22 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
     XCTAssertEqual(combined.text, "")
     XCTAssertEqual(called.value, 0)
+  }
+}
+
+private func waitUntil(
+  _ description: String,
+  timeoutNanoseconds: UInt64 = 5_000_000_000,
+  pollNanoseconds: UInt64 = 10_000_000,
+  condition: @escaping () -> Bool
+) async {
+  let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+  while !condition() {
+    if DispatchTime.now().uptimeNanoseconds > deadline {
+      XCTFail("Timed out waiting for \(description)")
+      return
+    }
+    try? await Task.sleep(nanoseconds: pollNanoseconds)
   }
 }
 
