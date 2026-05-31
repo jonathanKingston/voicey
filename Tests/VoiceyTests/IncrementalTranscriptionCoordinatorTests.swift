@@ -230,6 +230,27 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     XCTAssertEqual(combined.text, "")
     XCTAssertEqual(called.value, 0)
   }
+
+  /// `hasBufferedIncrementalAudio` gates the `voicey-capture` finish path: it must be
+  /// false on a fresh coordinator, true once streamed samples are buffered, and false
+  /// again after reset. (`append` is dispatched onto the coordinator's serial queue, so a
+  /// subsequent `stateQueue.sync` read deterministically observes the appended samples.)
+  func testHasBufferedIncrementalAudioReflectsStreamedSamples() async throws {
+    let coordinator = IncrementalTranscriptionCoordinator(
+      configuration: makeConfiguration(),
+      transcribe: { _ in self.result("x") },
+      onUpdate: { _ in }
+    )
+
+    XCTAssertFalse(coordinator.hasBufferedIncrementalAudio)
+
+    // Speech with no trailing pause stays in the live buffer (nothing sealed yet).
+    coordinator.append(samples: speech(50))
+    XCTAssertTrue(coordinator.hasBufferedIncrementalAudio)
+
+    coordinator.reset()
+    XCTAssertFalse(coordinator.hasBufferedIncrementalAudio)
+  }
 }
 
 private func waitUntil(
