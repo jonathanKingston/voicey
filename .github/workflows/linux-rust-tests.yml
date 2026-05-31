@@ -50,7 +50,7 @@ jobs:
       - name: Fetch worker unit tests (HTTP + manifest, local test server)
         run: cargo test -p voicey-fetch
 
-      - name: Text crate tests (unit + golden postprocess fixtures)
+      - name: Text crate tests (unit + golden postprocess + steering fixtures)
         run: cargo test -p voicey-text
 
       - name: Text worker IPC tests (black-box)

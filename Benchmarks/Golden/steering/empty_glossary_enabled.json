@@ -1,0 +1,8 @@
+{
+  "description": "Enabled manual glossary with whitespace-only input still yields built-in Voicey context",
+  "manual_glossary_enabled": true,
+  "manual_glossary": "  \n  ",
+  "screen_context_enabled": false,
+  "expected_terms": [],
+  "expected_decoder_context": "Glossary: Voicey"
+}

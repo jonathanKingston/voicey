@@ -37,3 +37,11 @@ Whisper noise-filter behavior is covered by `cargo test -p voicey-text --lib` (`
 Linux CI: `cargo test -p voicey-text --test golden_postprocess`
 
 macOS: compare against Swift `PostProcessor` on the same inputs when validating a release.
+
+## Steering / glossary (`steering/`)
+
+JSON fixtures for the `voicey-text` `build_steering_context` contract (manual glossary parsing, BM25 screen-term selection, decoder context formatting). Each file defines input flags, optional accessibility snapshot, and expected `terms` + `decoder_context`.
+
+Linux CI: `cargo test -p voicey-text --test golden_steering`
+
+macOS: compare against Swift `TranscriptionSteeringContext` on the same inputs when validating a release.
