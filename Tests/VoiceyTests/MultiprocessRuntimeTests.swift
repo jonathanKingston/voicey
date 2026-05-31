@@ -21,7 +21,7 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertFalse(VoiceyRuntimeConfiguration.usesInferWorker(for: .qwen3Small))
   }
 
-  func testPostProcessorSegmentLessOutputStable() {
+  func testPostProcessorSegmentLessOutputStable() throws {
     let result = TranscriptionResult(
       text: "hello world",
       segments: [],
@@ -36,7 +36,7 @@ final class MultiprocessRuntimeTests: XCTestCase {
     )
 
     SettingsManager.shared.voiceCommandsEnabled = false
-    let processed = PostProcessor().process(result)
+    let processed = try PostProcessor().process(result)
     XCTAssertEqual(processed, "hello world")
   }
 
