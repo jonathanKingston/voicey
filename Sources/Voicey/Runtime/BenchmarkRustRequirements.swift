@@ -59,6 +59,7 @@ enum BenchmarkRustRequirements {
   /// Workers used by benchmark-transcribe (multiprocess Qwen + Rust post-process).
   static func requireTranscribeBenchmarkStack() throws {
     try requireSupervisor()
+    try requireCapture()
     try requireInferWorker()
   }
 

@@ -27,6 +27,22 @@ struct VoiceyCaptureWorkerClient {
     return (shmName, sampleCount, sampleRate)
   }
 
+  func loadWavFile(path: String) throws -> PCMBufferHandle {
+    let response = try send(request: [
+      "type": "load_wav_file",
+      "id": UUID().uuidString,
+      "path": path
+    ])
+    guard (response["ok"] as? Bool) == true,
+      let shmName = response["shm_name"] as? String,
+      let sampleCount = response["sample_count"] as? Int
+    else {
+      throw VoiceyCaptureWorkerError.failed(response["error"] as? String ?? "load wav failed")
+    }
+    let sampleRate = response["sample_rate"] as? Int ?? 16_000
+    return PCMBufferHandle(shmName: shmName, sampleCount: sampleCount, sampleRate: sampleRate)
+  }
+
   private func send(request: [String: Any]) throws -> [String: Any] {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executablePath)

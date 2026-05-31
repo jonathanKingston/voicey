@@ -23,10 +23,9 @@ enum BenchmarkTranscribeCommand {
         try BenchmarkRustRequirements.requireTranscribeBenchmarkStack()
       }
 
-      let samples = try AudioFileSamples.load16kMonoFloatSamples(from: options.audioURL)
       let result = try await withStdoutRedirectedToStderr {
         try await TranscriptionRuntime.transcribe(
-          samples: samples,
+          audioURL: options.audioURL,
           model: options.model,
           runtime: options.runtime,
           warmupCount: options.warmupCount

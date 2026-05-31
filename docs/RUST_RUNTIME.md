@@ -127,7 +127,7 @@ Benchmark CLIs and harnesses exercise the **bundled Rust worker stack** (no Swif
 |------------------|----------|-------|
 | `make benchmark-golden-fixtures` | `cargo test -p voicey-text --test golden_postprocess` | Linux CI |
 | `make benchmark-compare-runtime` | `make build`, `make build-rust`, Qwen model | macOS; `BenchmarkRustRequirements` |
-| `benchmark-transcribe` (Qwen) | supervisor + infer-worker; `--post-process` → `voicey-text` | WAV decode still in Swift ([#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 3) |
+| `benchmark-transcribe` (Qwen) | supervisor + infer-worker + capture (`load_wav_file`); `--post-process` → `voicey-text` | Qwen multiprocess decodes WAV in Rust ([#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 3); in-process Whisper/Granite still use AVFoundation |
 | `make benchmark-runtime-parity-common-voice` | prepared Common Voice slice + workers | macOS WER/RTF matrix |
 | `python3 scripts/test_common_voice_benchmark.py` | none (harness smoke) | Linux CI Tier 1 |
 

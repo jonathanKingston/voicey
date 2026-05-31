@@ -118,6 +118,25 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     return (shmName, sampleCount, sampleRate)
   }
 
+  func loadWavFile(path: String) async throws -> PCMBufferHandle {
+    let response = try await client().send(
+      request: [
+        "type": "load_wav_file",
+        "id": UUID().uuidString,
+        "path": path
+      ],
+      timeout: 120
+    )
+    try VoiceyJSONLResponse.ensureSuccess(response, context: "load_wav_file")
+    guard let shmName = response["shm_name"] as? String,
+      let sampleCount = response["sample_count"] as? Int
+    else {
+      throw VoiceyCaptureWorkerError.invalidResponse
+    }
+    let sampleRate = response["sample_rate"] as? Int ?? 16_000
+    return PCMBufferHandle(shmName: shmName, sampleCount: sampleCount, sampleRate: sampleRate)
+  }
+
   func stop() {
     process?.stop()
     process = nil
