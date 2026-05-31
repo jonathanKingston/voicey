@@ -1,15 +1,16 @@
+mod audio;
 mod ipc;
 mod recording;
 mod trim;
+mod wav;
 
+use audio::{resample_to_16k, TARGET_SAMPLE_RATE};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use recording::{live_input_level, LiveRecorder};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-
-const TARGET_SAMPLE_RATE: f64 = 16_000.0;
 
 static LIVE_RECORDER: OnceLock<Mutex<LiveRecorder>> = OnceLock::new();
 
@@ -42,6 +43,7 @@ enum CaptureRequest {
         apply_trailing_trim: bool,
     },
     RecordFixture { id: String, duration_seconds: f64 },
+    LoadWavFile { id: String, path: String },
     Shutdown { id: String },
 }
 
@@ -193,6 +195,24 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
                 error: Some(message),
             },
         },
+        CaptureRequest::LoadWavFile { id, path } => match load_wav_file(&path) {
+            Ok((shm_name, count)) => CaptureResponse::CaptureFixtureResult {
+                id,
+                ok: true,
+                shm_name: Some(shm_name),
+                sample_count: Some(count),
+                sample_rate: Some(TARGET_SAMPLE_RATE as u32),
+                error: None,
+            },
+            Err(error) => CaptureResponse::CaptureFixtureResult {
+                id,
+                ok: false,
+                shm_name: None,
+                sample_count: None,
+                sample_rate: None,
+                error: Some(error),
+            },
+        },
         CaptureRequest::RecordFixture {
             id,
             duration_seconds,
@@ -232,6 +252,16 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
 
 fn default_apply_trailing_trim() -> bool {
     true
+}
+
+fn load_wav_file(path: &str) -> Result<(String, usize), String> {
+    let path = std::path::Path::new(path);
+    if !path.is_file() {
+        return Err(format!("audio file does not exist: {}", path.display()));
+    }
+    let samples = wav::load_wav_to_16k_mono_f32(path).map_err(|error| error.to_string())?;
+    let shm_name = voicey_pcm::write_f32_samples(&samples).map_err(|error| error.to_string())?;
+    Ok((shm_name, samples.len()))
 }
 
 fn stop_live_recording(apply_trailing_trim: bool) -> Result<(String, usize), String> {
@@ -311,24 +341,4 @@ fn capture_live_samples(duration_seconds: f64) -> std::io::Result<Vec<f32>> {
 
     let raw = buffer.lock().expect("lock").clone();
     resample_to_16k(raw, sample_rate)
-}
-
-fn resample_to_16k(input: Vec<f32>, input_rate: f64) -> std::io::Result<Vec<f32>> {
-    if input.is_empty() {
-        return Ok(input);
-    }
-    if (input_rate - TARGET_SAMPLE_RATE).abs() < 1.0 {
-        return Ok(input);
-    }
-    let output_len = ((input.len() as f64) * TARGET_SAMPLE_RATE / input_rate).ceil() as usize;
-    let mut output = Vec::with_capacity(output_len);
-    for index in 0..output_len {
-        let src_index = (index as f64 * input_rate / TARGET_SAMPLE_RATE) as usize;
-        let sample = input
-            .get(src_index.min(input.len() - 1))
-            .copied()
-            .unwrap_or(0.0);
-        output.push(sample);
-    }
-    Ok(output)
 }

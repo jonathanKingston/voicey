@@ -33,10 +33,9 @@ enum BenchmarkTranscribeBatchCommand {
     case .qwenMLX:
       try BenchmarkRustRequirements.requireTranscribeBenchmarkStack()
       for sample in samples {
-        let audio = try sample.audioSamples()
         let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
           try await TranscriptionRuntime.transcribe(
-            samples: audio,
+            audioURL: sample.audioURL,
             model: model,
             runtime: .multiprocess,
             warmupCount: 0
