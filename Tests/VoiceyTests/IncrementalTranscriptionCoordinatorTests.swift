@@ -183,36 +183,23 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
 }
 
 /// Blocks the fake transcribe closure until `release()` so tests can call `cancel()` mid-flight.
-private final class TranscriptionGate: @unchecked Sendable {
-  private let lock = NSLock()
+private actor TranscriptionGate {
   private var enteredContinuation: CheckedContinuation<Void, Never>?
   private var releaseContinuation: CheckedContinuation<Void, Never>?
 
   func waitUntilEntered() async {
-    await withCheckedContinuation { continuation in
-      lock.lock()
-      enteredContinuation = continuation
-      lock.unlock()
-    }
+    await withCheckedContinuation { enteredContinuation = $0 }
   }
 
   func waitUntilReleased() async {
-    lock.lock()
     enteredContinuation?.resume()
     enteredContinuation = nil
-    lock.unlock()
-    await withCheckedContinuation { continuation in
-      lock.lock()
-      releaseContinuation = continuation
-      lock.unlock()
-    }
+    await withCheckedContinuation { releaseContinuation = $0 }
   }
 
   func release() {
-    lock.lock()
     releaseContinuation?.resume()
     releaseContinuation = nil
-    lock.unlock()
   }
 }
 
