@@ -61,6 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var handsFreeWaitTimeoutTask: Task<Void, Never>?
   /// When true, the next hands-free deliver appends a trailing space for the following utterance.
   private var handsFreeSeparateNextPasteWithSpace = false
+  /// Model pinned at utterance start; cleared when the transcription session goes idle.
+  private var transcriptionModelPin = TranscriptionSessionModelPin<SpeechModel>()
 
   /// Held open with `flock(LOCK_NB)` so a second Voicey cannot register the same global shortcut.
   private var singleInstanceLockFileDescriptor: Int32 = -1
@@ -244,6 +246,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       "Benchmark-only model \(model.rawValue) must not reach the app transcription path"
     )
     return model
+  }
+
+  func pinTranscriptionModelForUtterance() {
+    transcriptionModelPin.pin(userFacingSelectedModel())
+  }
+
+  private func transcriptionModelForSession() -> SpeechModel {
+    transcriptionModelPin.resolved(fallback: userFacingSelectedModel())
   }
 
   /// Best available Qwen fallback when the selected model cannot load.
@@ -507,6 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   /// Called when transcription becomes idle — runs deferred model switches then pending upgrades.
   private func onTranscriptionSessionIdleForModelLifecycle() {
+    transcriptionModelPin.clear()
     Task { @MainActor in
       await self.flushDeferredModelEngineSwitchIfNeeded()
       self.tryPerformPendingUpgrade()
@@ -987,6 +998,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       scheduleHandsFreeWaitTimeout()
       AppLogger.audio.info("Hands-Free: Armed and waiting for speech")
     } else {
+      pinTranscriptionModelForUtterance()
       appState.transcriptionState = .recording(startTime: Date())
     }
 
@@ -1142,10 +1154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    let selectedModel = userFacingSelectedModel()
-    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
+    let utteranceModel = transcriptionModelForSession()
+    let applyTrailingTrimHeuristic = !utteranceModel.isGraniteModel
     let backgroundJobID = registerHandsFreeBackgroundTranscriptionJobIfNeeded(
-      model: selectedModel,
+      model: utteranceModel,
       capturedAudio: capturedAudio,
       durationSec: durationSec
     )
@@ -1234,11 +1246,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     appState.resetHandsFreeBackgroundTranscriptionJobs()
-    let selectedModel = userFacingSelectedModel()
+    let utteranceModel = transcriptionModelForSession()
     configureProcessingWaveformDisplay(
       capturedAudio: capturedAudio,
       durationSec: durationSec,
-      model: selectedModel
+      model: utteranceModel
     )
     appState.transcriptionState = .processing
     showOverlay()
@@ -1252,10 +1264,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
+    let applyTrailingTrimHeuristic = !utteranceModel.isGraniteModel
 
     let backgroundJobID = registerHandsFreeBackgroundTranscriptionJobIfNeeded(
-      model: selectedModel,
+      model: utteranceModel,
       capturedAudio: capturedAudio,
       durationSec: durationSec
     )
@@ -1294,8 +1306,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       statusBarController?.updateIcon(recording: false)
     }
 
-    let selectedModel = userFacingSelectedModel()
-    let applyTrailingTrimHeuristic = !selectedModel.isGraniteModel
+    let utteranceModel = transcriptionModelForSession()
+    let applyTrailingTrimHeuristic = !utteranceModel.isGraniteModel
 
     // Stop audio capture. The coordinator already received the streamed samples;
     // the returned buffer is used for duration/minimum-audio checks only.
@@ -1348,7 +1360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     configureProcessingWaveformDisplay(
       capturedAudio: capturedAudio,
       durationSec: durationSec,
-      model: selectedModel
+      model: utteranceModel
     )
     appState.transcriptionState = .processing
 
@@ -1443,7 +1455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     coordinator: IncrementalTranscriptionCoordinator,
     request: HandsFreeIncrementalUtteranceRequest
   ) async {
-    let selectedModel = userFacingSelectedModel()
+    let utteranceModel = transcriptionModelForSession()
     if request.backgroundJobID != nil {
       await MainActor.run {
         self.transcriptionOverlay?.syncLayout(to: self.appState)
@@ -1471,7 +1483,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let hasDeliverableText =
         processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
-      if selectedModel.isQwenModel {
+      if utteranceModel.isQwenModel {
         await MainActor.run {
           appState.recordQwenTranscriptionRTF(result.performanceMetrics.realTimeFactor)
         }
@@ -1592,12 +1604,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func transcribeWithSelectedEngine(capturedAudio: CapturedAudio) async throws -> TranscriptionResult {
-    let selectedModel = userFacingSelectedModel()
+    let utteranceModel = transcriptionModelForSession()
     let decoderContext = try await TranscriptionSteeringContext.make()
-    if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
+    if VoiceyRuntimeConfiguration.usesInferWorker(for: utteranceModel) {
       return try await VoiceyRuntimeSupervisor.shared.transcribe(
         capturedAudio: capturedAudio,
-        model: selectedModel,
+        model: utteranceModel,
         warmupAlreadyDone: multiprocessInferReady,
         decoderContext: decoderContext
       )
@@ -1605,17 +1617,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let audioBuffer = try capturedAudio.inMemorySamples()
     return try await transcribeWithSelectedEngine(
       audioBuffer: audioBuffer,
-      model: selectedModel,
+      model: utteranceModel,
       decoderContext: decoderContext
     )
   }
 
   private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
-    let selectedModel = userFacingSelectedModel()
+    let utteranceModel = transcriptionModelForSession()
     let decoderContext = try await TranscriptionSteeringContext.make()
     return try await transcribeWithSelectedEngine(
       audioBuffer: audioBuffer,
-      model: selectedModel,
+      model: utteranceModel,
       decoderContext: decoderContext
     )
   }
@@ -1663,8 +1675,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let hasDeliverableText =
       processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
-    let selectedModel = SettingsManager.shared.selectedModel
-    if selectedModel.isQwenModel {
+    let utteranceModel = transcriptionModelForSession()
+    if utteranceModel.isQwenModel {
       await MainActor.run {
         appState.recordQwenTranscriptionRTF(result.performanceMetrics.realTimeFactor)
       }

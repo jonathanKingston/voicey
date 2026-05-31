@@ -22,6 +22,7 @@ extension AppDelegate: AudioCaptureManagerDelegate {
       // flushing; that races with flushAndFinish and can corrupt in-flight chunk state.
       guard !self.appState.isHandsFreeUtteranceFlushInProgress else { return }
       self.cancelHandsFreeWaitTimeout()
+      self.pinTranscriptionModelForUtterance()
       self.incrementalTranscriptionCoordinator?.reset()
       self.appState.partialTranscription = ""
       self.appState.isCatchingUpTranscription = false

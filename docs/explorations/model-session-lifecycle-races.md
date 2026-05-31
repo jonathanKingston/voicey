@@ -2,7 +2,7 @@
 
 ## Status
 
-Partially implemented (PR follows #108). Remaining: capture a stable `SpeechModel` per transcription session instead of re-reading settings mid-flight.
+Implemented (#108 lifecycle gate in #140; stable per-utterance `SpeechModel` in #139).
 
 ## Summary
 
