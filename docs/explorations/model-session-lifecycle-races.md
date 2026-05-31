@@ -52,7 +52,7 @@ Relevant files:
 
 ## Implementation (landed)
 
-- `Sources/VoiceyCore/ModelSessionLifecyclePolicy.swift` + `ModelSessionLifecyclePolicy+AppState.swift`
+- `Sources/VoiceyCore/ModelSessionLifecyclePolicy.swift` + `Sources/Voicey/App/ModelSessionLifecyclePolicy+AppState.swift`
 - `Sources/VoiceyCore/TranscriptionSessionBusySignals.swift` — shared busy-session inputs for Linux tests
 - `AppDelegate`: `isModelEngineSwitchInProgress`, `deferredModelEngineSwitch`, `onTranscriptionSessionIdleForModelLifecycle()`
 - `Sources/VoiceyCore/TranscriptionSessionModelPin.swift` — pin at utterance start, clear on idle
