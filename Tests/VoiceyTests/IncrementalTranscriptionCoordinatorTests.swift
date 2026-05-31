@@ -194,10 +194,10 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     await waitUntil("fresh transcribe to start") { transcribeCalls.value >= 2 }
     await freshGate.waitUntilEntered()
     await staleGate.release()
+    await freshGate.release()
 
     let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
     XCTAssertEqual(combined.text, "fresh")
-    await freshGate.release()
   }
 
   /// reset() clears buffered audio so a subsequent flush returns empty output.
