@@ -2,7 +2,23 @@
 
 ## Status
 
-Exploratory proposal.
+Implemented. This exploration drove the cancellation work that landed on `main` in
+commit `f56ea29` (PR #148, tracking issue #147). The "Proposed direction" and "Acceptance
+criteria" below are kept as the original design record; see the **Resolution** section for how
+each was met. The remaining open item on #147 is a manual macOS confirmation.
+
+## Resolution
+
+- `reset()` now captures `processingTask` (and `publishSnapshotTask`) under the state lock,
+  clears coordinator state, and cancels both tasks outside the lock; `cancel()` calls `reset()`.
+- `processQueue(generation:)` already observes `Task.isCancelled`, so the cancelled task exits
+  promptly and late transcribe results are discarded by the generation guard.
+- Regression coverage lives in
+  `Tests/VoiceyTests/IncrementalTranscriptionCoordinatorTests.swift`:
+  `testCancelDuringActiveTranscriptionDiscardsInFlightWork` and
+  `testCancelClearsQueuedChunksBehindInFlightTranscription`.
+- Still pending on #147: manual macOS check that pressing Escape during a long incremental
+  partial returns the overlay to idle with no late partial text.
 
 ## Summary
 
