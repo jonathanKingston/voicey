@@ -263,6 +263,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn drain_utterance_requires_active_recording() {
         let recorder = LiveRecorder::new();
         let error = recorder

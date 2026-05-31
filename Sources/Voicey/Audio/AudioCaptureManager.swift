@@ -515,10 +515,10 @@ final class AudioCaptureManager {
 
   private func streamRustCapturedSamplesIfNeeded(totalSamplesCaptured: Int) {
     guard usesRustCaptureWorker, totalSamplesCaptured > rustStreamedSampleIndex else { return }
+    let readFromIndex = rustStreamedSampleIndex
     do {
       let read = try runSynchronously {
-        try await VoiceyCaptureWorkerSession.shared.readCapturedSamples(
-          since: rustStreamedSampleIndex)
+        try await VoiceyCaptureWorkerSession.shared.readCapturedSamples(since: readFromIndex)
       }
       rustStreamedSampleIndex = read.totalSampleCount
       guard !read.samples.isEmpty else { return }
