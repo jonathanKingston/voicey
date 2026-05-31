@@ -2,7 +2,17 @@
 
 ## Status
 
-Implemented (#108 lifecycle gate in #140; stable per-utterance `SpeechModel` in #139).
+Implemented on `main`:
+
+| PR | Delivers |
+|----|----------|
+| #140 | `ModelSessionLifecyclePolicy` gate — block recording during engine switch; defer settings-driven swaps while transcription is busy |
+| #141 | Flush `deferredModelEngineSwitch` when `performModelUpgrade` finishes (not only on the next idle session) |
+| #142 / #139 | `TranscriptionSessionModelPin` — stable `SpeechModel` per utterance |
+| #144 | `TranscriptionSessionBusySignals` — shared busy-session inputs + Linux regression table tests |
+
+Regression tests: `TranscriptionSessionBusySignalsTests`, `ModelSessionLifecyclePolicyTests`,
+`TranscriptionSessionModelPinTests` (Linux / VoiceyCore).
 
 ## Summary
 
@@ -11,7 +21,9 @@ or transcription session is running. The current flow has separate guards for so
 paths, but no single session coordinator owns the invariant that the selected model, app state,
 and loaded inference engine remain stable for an active transcription.
 
-## Evidence
+## Historical evidence (pre-#140)
+
+These behaviors motivated the gate; they are **not** current after #140–#142:
 
 - `AppDelegate.tryPerformPendingUpgrade()` sets `isUpgradingModel` only after checking that
   `appState.transcriptionState == .idle`.
@@ -38,21 +50,12 @@ Relevant files:
   can disagree during an in-flight transcription.
 - Failures are likely intermittent because they depend on model load timing and user input.
 
-## Proposed direction
+## Implementation (landed)
 
-Introduce one model/session lifecycle gate owned on the main actor. It should make model swaps
-and recording starts mutually exclusive, and it should capture the model used by a transcription
-session at session start.
-
-Possible implementation shape:
-
-1. Add a small `RecordingSessionCoordinator` or `ModelLifecycleCoordinator`.
-2. Represent active model transitions explicitly, for example `.ready(model)`,
-   `.switching(from:to:)`, and `.failed(model,message)`.
-3. Reject or queue model changes while `TranscriptionState.isActive` or hands-free mode is
-   active.
-4. Capture a per-session `SpeechModel` and pass it through transcription instead of repeatedly
-   reading `SettingsManager.shared.selectedModel`.
+- `Sources/VoiceyCore/ModelSessionLifecyclePolicy.swift` + `Sources/Voicey/App/ModelSessionLifecyclePolicy+AppState.swift`
+- `Sources/VoiceyCore/TranscriptionSessionBusySignals.swift` — shared busy-session inputs for Linux tests
+- `AppDelegate`: `isModelEngineSwitchInProgress`, `deferredModelEngineSwitch`, `onTranscriptionSessionIdleForModelLifecycle()`
+- `Sources/VoiceyCore/TranscriptionSessionModelPin.swift` — pin at utterance start, clear on idle
 
 ## Acceptance criteria
 
@@ -67,7 +70,7 @@ Possible implementation shape:
 ## Validation plan
 
 - [x] Linux `VoiceyCore` tests for busy-session signals (recording, hands-free session, flush) and
-  model pin stability (`TranscriptionSessionBusySignalsTests`, `ModelSessionLifecyclePolicyTests`).
-- [ ] On macOS, manually verify: start recording, trigger a model change, and confirm the user gets
-  clear feedback instead of a silent reset.
+  model pin stability (`TranscriptionSessionBusySignalsTests`, `ModelSessionLifecyclePolicyTests`,
+  `TranscriptionSessionModelPinTests`).
+- [ ] On macOS, manually verify: start recording, trigger a model change, and confirm clear feedback instead of a silent reset.
 - [ ] On macOS, manually verify a pending upgrade cannot overlap rapid hotkey start/stop sequences.
