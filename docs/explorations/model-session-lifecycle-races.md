@@ -2,7 +2,7 @@
 
 ## Status
 
-Exploratory proposal.
+Partially implemented (PR follows #108). Remaining: capture a stable `SpeechModel` per transcription session instead of re-reading settings mid-flight.
 
 ## Summary
 
