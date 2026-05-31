@@ -73,6 +73,7 @@ fn decode_to_mono_f32(mut reader: WavReader<std::io::BufReader<std::fs::File>>, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::TARGET_SAMPLE_RATE;
     use hound::{WavSpec, WavWriter};
     use std::io::Cursor;
 
