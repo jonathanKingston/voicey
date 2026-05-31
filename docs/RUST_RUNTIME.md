@@ -39,12 +39,12 @@ Tracking issues:
 |-------|------|------------------------------|
 | Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` fallback (`VOICEY_USE_RUST_CAPTURE=0`, dev disable) |
 | Fetch | `voicey-fetch` | `HuggingFaceDownloader` fallback |
-| Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` fallback on worker error / `VOICEY_USE_RUST_TEXT=0`; Whisper caption noise filter only when `segments` non-empty (benchmark) |
+| Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` only when worker absent or `VOICEY_USE_RUST_TEXT=0` / `VOICEY_DISABLE_RUST_WORKERS=1`; worker errors fail fast (no silent Swift duplicate path) |
 | Text / glossary | `voicey-text` | `VoiceyCore` in host |
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
 
-Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). Utterances captured via `voicey-capture` must transcribe from that handle — the incremental coordinator only receives streamed samples on the AVFoundation capture path. Deletion of fallbacks is Phase 2 in #70. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
+Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). Utterances captured via `voicey-capture` transcribe from that handle — the incremental coordinator only receives streamed samples on the AVFoundation capture path. Phase 2 (#70) is in progress: post-process no longer falls back to Swift when `voicey-text` is bundled and enabled. Deletion of remaining fallbacks (capture/fetch/infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
 
 ## CI tiers (Rust on Ubuntu)
 

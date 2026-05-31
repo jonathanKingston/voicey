@@ -24,30 +24,22 @@ final class PostProcessor {
 
   // MARK: - Processing
 
-  /// Synchronous entry point (benchmark CLI). Prefer `processAsync` on async call paths.
-  func process(_ result: TranscriptionResult) -> String {
+  /// Synchronous entry point (tests / legacy CLI). Prefer `processAsync` on async call paths.
+  func process(_ result: TranscriptionResult) throws -> String {
     if VoiceyRuntimeConfiguration.useRustTextPostProcess {
-      if let processed = processViaRustWorkerSync(result) {
-        return processed
-      }
-      AppLogger.transcription.warning(
-        "PostProcessor: Rust text worker failed; falling back to Swift path")
+      return try processViaRustWorkerSync(result)
     }
     return processInSwift(result)
   }
 
-  func processAsync(_ result: TranscriptionResult) async -> String {
+  func processAsync(_ result: TranscriptionResult) async throws -> String {
     if VoiceyRuntimeConfiguration.useRustTextPostProcess {
-      if let processed = await processViaRustWorker(result) {
-        return processed
-      }
-      AppLogger.transcription.warning(
-        "PostProcessor: Rust text worker failed; falling back to Swift path")
+      return try await processViaRustWorker(result)
     }
     return processInSwift(result)
   }
 
-  private func processViaRustWorker(_ result: TranscriptionResult) async -> String? {
+  private func processViaRustWorker(_ result: TranscriptionResult) async throws -> String {
     do {
       return try await VoiceyTextWorkerSession.shared.postprocess(
         text: result.text,
@@ -58,19 +50,28 @@ final class PostProcessor {
     } catch {
       AppLogger.transcription.error(
         "PostProcessor: Rust text worker error: \(error.localizedDescription, privacy: .public)")
-      return nil
+      throw error
     }
   }
 
-  private func processViaRustWorkerSync(_ result: TranscriptionResult) -> String? {
+  private func processViaRustWorkerSync(_ result: TranscriptionResult) throws -> String {
     let group = DispatchGroup()
     var processedText: String?
+    var thrown: Error?
     group.enter()
     Task {
       defer { group.leave() }
-      processedText = await processViaRustWorker(result)
+      do {
+        processedText = try await processViaRustWorker(result)
+      } catch {
+        thrown = error
+      }
     }
     group.wait()
+    if let thrown { throw thrown }
+    guard let processedText else {
+      throw VoiceyTextWorkerError.invalidResponse
+    }
     return processedText
   }
 

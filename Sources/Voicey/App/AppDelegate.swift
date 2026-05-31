@@ -1389,7 +1389,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         capturedAudio: request.capturedAudio,
         applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic
       )
-      let processedText = await postProcessor?.processAsync(result) ?? result.text
+      let processedText: String
+      do {
+        processedText = try await postProcessor?.processAsync(result) ?? result.text
+      } catch {
+        await handleTranscriptionError(error)
+        return
+      }
       debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
       AppLogger.transcription.info(
         "processHandsFreeIncrementalUtterance: Processed text: \"\(processedText)\" (length: \(processedText.count))"
@@ -1575,7 +1581,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
 
     // Post-process text
-    let processedText = await postProcessor?.processAsync(result) ?? result.text
+    let processedText: String
+    do {
+      processedText = try await postProcessor?.processAsync(result) ?? result.text
+    } catch {
+      await handleTranscriptionError(error)
+      return
+    }
     debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
     AppLogger.transcription.info(
       "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
