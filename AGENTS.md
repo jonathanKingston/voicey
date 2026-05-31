@@ -4,7 +4,7 @@ This document helps AI agents understand and work with this codebase effectively
 
 ## Project Overview
 
-Voicey is a macOS menubar app for voice-to-text transcription using WhisperKit. It runs locally on-device with no cloud dependencies.
+Voicey is a macOS menubar app for voice-to-text transcription. It is Qwen-first, using native Swift MLX inference (WhisperKit and Granite backends are retained only for benchmarking and runtime parity). It runs locally on-device with no cloud dependencies.
 
 ## Key Files for Understanding the Codebase
 

@@ -725,7 +725,7 @@ help:
 	@echo "  show-identities   - Show detected signing certificates"
 	@echo ""
 	@echo "Direct Distribution:"
-	@echo "  bundle-direct     - Create bundle with clipboard-only mode"
+	@echo "  bundle-direct     - Create direct-distribution release bundle (Sparkle-enabled)"
 	@echo "  sign-direct       - Sign for notarization (requires DEVELOPER_ID)"
 	@echo "  notarize          - Notarize the app (requires APPLE_ID, TEAM_ID, APP_PASSWORD)"
 	@echo "  dmg               - Create notarized DMG for distribution"
