@@ -1,7 +1,9 @@
 //! Text gathered from the accessibility tree for vocabulary steering.
 
+use serde::{Deserialize, Serialize};
+
 /// Text gathered from the accessibility tree for vocabulary steering (platform-agnostic).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScreenContextSnapshot {
     /// Focused value, selection, and similar high-signal text used as the BM25 query.
     pub query_text: String,
