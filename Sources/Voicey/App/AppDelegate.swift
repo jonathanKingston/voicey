@@ -1540,7 +1540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func transcribeWithSelectedEngine(capturedAudio: CapturedAudio) async throws -> TranscriptionResult {
     let selectedModel = userFacingSelectedModel()
-    let decoderContext = TranscriptionSteeringContext.make()
+    let decoderContext = try await TranscriptionSteeringContext.make()
     if VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) {
       return try await VoiceyRuntimeSupervisor.shared.transcribe(
         capturedAudio: capturedAudio,
@@ -1559,7 +1559,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
     let selectedModel = userFacingSelectedModel()
-    let decoderContext = TranscriptionSteeringContext.make()
+    let decoderContext = try await TranscriptionSteeringContext.make()
     return try await transcribeWithSelectedEngine(
       audioBuffer: audioBuffer,
       model: selectedModel,

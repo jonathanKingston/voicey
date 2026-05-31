@@ -35,6 +35,15 @@ final class ScreenContextStore: @unchecked Sendable {
     return value
   }
 
+  /// Consumes and returns the accessibility snapshot captured at record start.
+  func consumeSnapshot() -> ScreenContextSnapshot? {
+    lock.lock()
+    defer { lock.unlock() }
+    let captured = snapshot
+    snapshot = nil
+    return captured
+  }
+
   /// Consumes the snapshot and returns BM25-ranked screen terms (manual glossary is query-only).
   func consumeScreenTerms(
     manualGlossaryForQuery: String,
