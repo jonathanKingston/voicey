@@ -181,8 +181,7 @@ public enum PostProcessBuilder {
     } else if pauseBeforeSegment > 0.6 {
       return inferSentenceEndPunctuation(segment)
     } else if pauseBeforeSegment > 0.3 && !segmentText.isEmpty
-      && !TextCleanup.isConjunction(segmentText)
-    {
+      && !TextCleanup.isConjunction(segmentText) {
       return ","
     }
     return ""
@@ -202,8 +201,7 @@ public enum PostProcessBuilder {
 
       var segmentText = segment.text
       if index > 0, let lastChar = processedSegments[index - 1].punctuation.last,
-        ".!?".contains(lastChar)
-      {
+        ".!?".contains(lastChar) {
         segmentText = TextCleanup.capitalizeFirst(segmentText)
       }
 
@@ -218,7 +216,7 @@ public enum PostProcessBuilder {
     let questionStarters = [
       "what", "where", "when", "why", "who", "how", "which", "whose", "whom",
       "is it", "are you", "do you", "can you", "will you", "would you",
-      "could you", "should", "have you", "has", "does", "did",
+      "could you", "should", "have you", "has", "does", "did"
     ]
 
     for starter in questionStarters where text.hasPrefix(starter) || text.contains(" \(starter) ") {
@@ -239,8 +237,7 @@ public enum PostProcessBuilder {
     return result
   }
 
-  private static func processVoiceCommands(_ text: String, voiceCommands: [VoiceCommand]) -> String
-  {
+  private static func processVoiceCommands(_ text: String, voiceCommands: [VoiceCommand]) -> String {
     var result = text
 
     for command in voiceCommands {

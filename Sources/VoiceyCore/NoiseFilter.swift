@@ -6,7 +6,7 @@ import Foundation
 public enum NoiseFilter {
   /// Words/phrases that Whisper often outputs for non-speech sounds.
   public static let noiseWords: Set<String> = [
-    "...", "…",
+    "...", "…"
   ]
 
   public static let noisePatterns: [String] = [
@@ -14,18 +14,18 @@ public enum NoiseFilter {
     "^\\s*\\[[^\\]]+\\]\\s*$",
     "^\\s*\\([^)]+\\)\\s*$",
     "^\\s*\\.+\\s*$",
-    "^\\s*…+\\s*$",
+    "^\\s*…+\\s*$"
   ]
 
   public static let noiseAnnotationKeywords = [
     "music", "noise", "silence", "inaudible", "unintelligible", "typing",
-    "keyboard", "applause",
+    "keyboard", "applause"
   ]
 
   public static let trailingRepeatedArtifactPatterns: [String] = [
     "(?:\\bthank you\\b[\\s,.!?]*){2,}$",
     "(?:\\bthanks\\b[\\s,.!?]*){2,}$",
-    "(?:\\bthanks you\\b[\\s,.!?]*){2,}$",
+    "(?:\\bthanks you\\b[\\s,.!?]*){2,}$"
   ]
 
   public static func isNoiseAnnotation(_ text: String) -> Bool {
