@@ -407,11 +407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    let wasIdle = appState.transcriptionState == .idle
     appState.modelStatus = .loading
-    if wasIdle {
-      appState.transcriptionState = .idle
-    }
     let preloadSucceeded = await preloadSelectedModel()
     if preloadSucceeded && isActiveEngineLoaded {
       appState.modelStatus = .ready
@@ -716,7 +712,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     isModelEngineSwitchInProgress = true
 
     Task { @MainActor in
-      defer { self.isModelEngineSwitchInProgress = false }
+      defer {
+        self.isModelEngineSwitchInProgress = false
+        self.onTranscriptionSessionIdleForModelLifecycle()
+      }
 
       do {
         debugPrint(
