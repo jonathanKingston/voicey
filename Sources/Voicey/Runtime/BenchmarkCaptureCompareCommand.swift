@@ -24,19 +24,15 @@ enum BenchmarkCaptureCompareCommand {
 
       let rustClient = VoiceyCaptureWorkerClient(path: capturePath)
       let rustFixture = try rustClient.recordFixture(durationSeconds: options.durationSeconds)
-      let rustSamples = try SharedMemoryPCM.read(
-        name: rustFixture.shmName,
-        sampleCount: rustFixture.sampleCount
-      )
-      defer { SharedMemoryPCM.remove(name: rustFixture.shmName) }
+      defer { PCMBufferHandle(shmName: rustFixture.shmName, sampleCount: rustFixture.sampleCount, sampleRate: rustFixture.sampleRate).remove() }
 
       let expectedSamples = Int(options.durationSeconds * 16_000.0)
       let payload: [String: Any] = [
-        "rustSampleCount": rustSamples.count,
+        "rustSampleCount": rustFixture.sampleCount,
         "expectedSampleCount": expectedSamples,
         "sampleRate": rustFixture.sampleRate,
         "durationSeconds": options.durationSeconds,
-        "nonZeroSamples": rustSamples.filter { abs($0) > 0.0001 }.count
+        "nonZeroSamples": rustFixture.nonZeroSampleCount
       ]
       let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
       guard let json = String(data: data, encoding: .utf8) else {
@@ -44,7 +40,7 @@ enum BenchmarkCaptureCompareCommand {
       }
       print(json)
 
-      let withinTolerance = abs(rustSamples.count - expectedSamples) <= Int(Float(expectedSamples) * 0.15)
+      let withinTolerance = abs(rustFixture.sampleCount - expectedSamples) <= Int(Float(expectedSamples) * 0.15)
       return withinTolerance ? 0 : 2
     } catch {
       fputs("error: \(error.localizedDescription)\n", stderr)
