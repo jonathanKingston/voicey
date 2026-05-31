@@ -49,4 +49,4 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 
 ## Related PRs
 
-#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip)
+#75, #76, #86, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #128 (`drain_hands_free_utterance` IPC + recorder unit tests)
