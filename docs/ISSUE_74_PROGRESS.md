@@ -34,7 +34,8 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 ### M5 — Reduce macOS-only gates
 
 - [x] Linux CI vs macOS ownership table in [`RUST_RUNTIME.md`](RUST_RUNTIME.md)
-- [ ] Move logic from Swift runtime helpers into Rust / `VoiceyCore` (ongoing — see [#70](https://github.com/jonathanKingston/voicey/issues/70); golden steering fixtures in PR #134)
+- [x] Move steering/glossary golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (PR #134, follow-up Swift parity)
+- [ ] Remaining Swift runtime helpers → Rust / `VoiceyCore` (see [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ fallback deletion)
 
 ### M6 — Longer term (deferred)
 
