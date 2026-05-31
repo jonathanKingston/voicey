@@ -1074,6 +1074,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     guard let incrementalTranscriptionCoordinator else {
       AppLogger.audio.error("Hands-Free: Incremental transcription coordinator unavailable")
+      capturedAudio.removeSharedBufferIfNeeded()
       appState.transcriptionState = .waitingForSpeech(startTime: Date())
       return
     }
@@ -1287,6 +1288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       hideOverlay()
       appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
       dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
+      capturedAudio.removeSharedBufferIfNeeded()
       return
     }
 
