@@ -37,14 +37,14 @@ Tracking issues:
 
 | Layer | Rust | Swift still required because |
 |-------|------|------------------------------|
-| Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` fallback (`VOICEY_USE_RUST_CAPTURE=0`, dev disable) |
+| Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` only when worker absent or `VOICEY_USE_RUST_CAPTURE=0` / `VOICEY_DISABLE_RUST_WORKERS=1`; worker errors fail fast (no silent empty capture) |
 | Fetch | `voicey-fetch` | `HuggingFaceDownloader` fallback |
 | Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` only when worker absent or `VOICEY_USE_RUST_TEXT=0` / `VOICEY_DISABLE_RUST_WORKERS=1`; worker errors fail fast (no silent Swift duplicate path) |
 | Text / glossary | `voicey-text` | `VoiceyCore` in host |
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
 
-Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). Utterances captured via `voicey-capture` transcribe from that handle — the incremental coordinator only receives streamed samples on the AVFoundation capture path. Phase 2 (#70) is in progress: post-process no longer falls back to Swift when `voicey-text` is bundled and enabled. Deletion of remaining fallbacks (capture/fetch/infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
+Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). Utterances captured via `voicey-capture` transcribe from that handle — the incremental coordinator only receives streamed samples on the AVFoundation capture path. Phase 2 (#70) is in progress: post-process and capture no longer fall back to Swift when bundled workers are enabled; worker errors surface to the user. Deletion of remaining opt-out fallbacks (AVAudioEngine / Hub / infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
 
 ## CI tiers (Rust on Ubuntu)
 
@@ -107,7 +107,7 @@ After infer returns raw text, the host may delegate to `voicey-text` over JSONL 
 - **Voice commands:** host sends enabled commands as structured JSON; settings are snapshotted per request.
 - **Golden parity:** `Benchmarks/Golden/postprocess/*.json` — `cargo test -p voicey-text --test golden_postprocess`.
 
-Swift falls back to in-process `PostProcessor` if the worker is missing or returns an error.
+Swift uses in-process `PostProcessor` only when the worker is missing or opted out (`VOICEY_USE_RUST_TEXT=0`); bundled worker errors propagate to the host.
 
 ## Build & run
 

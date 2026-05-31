@@ -941,7 +941,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     showOverlay()
 
     // Start audio capture
-    audioCaptureManager?.startCapture(mode: recordingMode)
+    do {
+      try audioCaptureManager?.startCapture(mode: recordingMode)
+    } catch {
+      abortRecordingDueToCaptureError(error)
+      return
+    }
 
     // Update menubar
     statusBarController?.updateIcon(recording: true)
@@ -1045,10 +1050,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     AppLogger.audio.info("Hands-Free: Finalizing utterance; capture continues")
 
-    guard
-      let capturedAudio = audioCaptureManager?.finalizeHandsFreeUtterance(
+    let capturedAudio: CapturedAudio?
+    do {
+      capturedAudio = try audioCaptureManager?.finalizeHandsFreeUtterance(
         applyTrailingTrimHeuristic: true)
-    else {
+    } catch {
+      Task { await self.handleCaptureError(error, endHandsFreeSession: true) }
+      return
+    }
+    guard let capturedAudio else {
       AppLogger.audio.error("Hands-Free: Failed to finalize utterance buffer")
       audioCaptureManager?.recoverHandsFreeDetectorForNextUtterance()
       appState.transcriptionState = .waitingForSpeech(startTime: Date())
@@ -1119,11 +1129,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     var finalUtterance: CapturedAudio?
     if appState.isRecording {
-      finalUtterance = audioCaptureManager?.finalizeHandsFreeUtteranceForSessionEnd(
+      finalUtterance = try? audioCaptureManager?.finalizeHandsFreeUtteranceForSessionEnd(
         applyTrailingTrimHeuristic: true)
     }
 
-    if let discardedCapture = audioCaptureManager?.stopCapture() {
+    if let discardedCapture = try? audioCaptureManager?.stopCapture() {
       discardedCapture.removeSharedBufferIfNeeded()
     }
     statusBarController?.updateIcon(recording: false)
@@ -1236,10 +1246,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Stop audio capture. The coordinator already received the streamed samples;
     // the returned buffer is used for duration/minimum-audio checks only.
-    guard
-      let capturedAudio = audioCaptureManager?.stopCapture(
-        applyTrailingTrimHeuristic: false)
-    else {
+    let capturedAudio: CapturedAudio?
+    do {
+      capturedAudio = try audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false)
+    } catch {
+      Task { await self.handleCaptureError(error, endHandsFreeSession: false) }
+      dependencies.mediaPlayback.resumeAfterTranscription()
+      return
+    }
+    guard let capturedAudio else {
       debugPrint("❌ No audio buffer!", category: "ERROR")
       AppLogger.audio.error("No audio buffer!")
       hideOverlay()
@@ -1320,7 +1335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     incrementalTranscriptionCoordinator?.cancel()
 
     // Stop and discard audio (release shared PCM file if capture used voicey-capture).
-    if let capturedAudio = audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false) {
+    if let capturedAudio = try? audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false) {
       capturedAudio.removeSharedBufferIfNeeded()
     }
 
@@ -1631,6 +1646,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       self.recordingTargetPID = nil
       self.recordingTargetScreen = nil
+    }
+  }
+
+  private func abortRecordingDueToCaptureError(_ error: Error) {
+    AppLogger.audio.error("Capture error: \(error.localizedDescription, privacy: .public)")
+    hideOverlay()
+    cancelHandsFreeWaitTimeout()
+    appState.handsFreeSessionActive = false
+    appState.clearRecordingWaveformDisplay()
+    appState.partialTranscription = ""
+    appState.isCatchingUpTranscription = false
+    incrementalTranscriptionCoordinator?.cancel()
+    appState.transcriptionState = .error(message: error.localizedDescription)
+    statusBarController?.updateIcon(recording: false)
+    dependencies.notifications.showTranscriptionError(error.localizedDescription)
+    dependencies.mediaPlayback.resumeAfterTranscription()
+    tryPerformPendingUpgrade()
+  }
+
+  private func handleCaptureError(_ error: Error, endHandsFreeSession: Bool) async {
+    debugPrint("❌ Capture error: \(error)", category: "ERROR")
+    await MainActor.run { [weak self] in
+      guard let self else { return }
+      if endHandsFreeSession {
+        self.cancelHandsFreeWaitTimeout()
+        self.appState.handsFreeSessionActive = false
+        self.handsFreeSeparateNextPasteWithSpace = false
+      }
+      self.abortRecordingDueToCaptureError(error)
     }
   }
 
