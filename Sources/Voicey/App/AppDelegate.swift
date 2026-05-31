@@ -1434,9 +1434,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// Completes an utterance after capture stops. `voicey-capture` returns a shared PCM file
-  /// without streaming float samples into the incremental coordinator, so those utterances
-  /// must be transcribed from the handle instead of `flushAndFinish` on an empty buffer.
+  /// Completes an utterance after capture stops. When `voicey-capture` streams samples into
+  /// the incremental coordinator, finish via `flushAndFinish`; otherwise transcribe the PCM handle.
   private func finishUtteranceTranscription(
     coordinator: IncrementalTranscriptionCoordinator,
     capturedAudio: CapturedAudio,
@@ -1444,6 +1443,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   ) async throws -> TranscriptionResult {
     switch UtteranceTranscriptionFinish.route(for: capturedAudio) {
     case .sharedPCMHandle:
+      if coordinator.hasBufferedIncrementalAudio {
+        return try await coordinator.flushAndFinish(
+          applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+      }
       return try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
     case .incrementalCoordinatorFlush:
       return try await coordinator.flushAndFinish(

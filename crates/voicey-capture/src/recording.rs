@@ -75,6 +75,17 @@ impl LiveRecorder {
         Ok(())
     }
 
+    /// Copies samples `[start_sample_index..len]` without mutating the live buffer.
+    pub fn read_samples_since(&self, start_sample_index: usize) -> Result<Vec<f32>, String> {
+        let handle = self
+            .handle
+            .as_ref()
+            .ok_or_else(|| "capture not recording".to_string())?;
+        let guard = handle.samples.lock().expect("lock");
+        let start = start_sample_index.min(guard.len());
+        Ok(guard[start..].to_vec())
+    }
+
     pub fn drain_utterance(
         &self,
         start_sample_index: usize,
@@ -234,6 +245,24 @@ mod tests {
     }
 
     #[test]
+    fn read_samples_since_returns_suffix_without_draining() {
+        let mut recorder = LiveRecorder::new();
+        recorder.start_with_buffered_samples_for_test(vec![1.0, 2.0, 3.0, 4.0]);
+        let read = recorder.read_samples_since(1).expect("read");
+        assert_eq!(read, vec![2.0, 3.0, 4.0]);
+        assert_eq!(recorder.sample_count(), 4);
+        let _ = recorder.stop();
+    }
+
+    #[test]
+    fn read_samples_since_requires_active_recording() {
+        let recorder = LiveRecorder::new();
+        assert_eq!(
+            recorder.read_samples_since(0).unwrap_err(),
+            "capture not recording"
+        );
+    }
+
     fn drain_utterance_requires_active_recording() {
         let recorder = LiveRecorder::new();
         let error = recorder

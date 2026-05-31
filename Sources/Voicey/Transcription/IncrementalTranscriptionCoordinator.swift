@@ -81,6 +81,13 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
     reset()
   }
 
+  /// True when streamed samples or in-flight pause chunks are present (Rust capture path).
+  var hasBufferedIncrementalAudio: Bool {
+    stateQueue.sync {
+      !bufferedSamples.isEmpty || !pendingChunks.isEmpty || !completedChunks.isEmpty
+    }
+  }
+
   func flushAndFinish(applyTrailingTrimHeuristic: Bool) async throws -> TranscriptionResult {
     stateQueue.sync {
       sealRemainingAudioLocked(applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)

@@ -38,6 +38,8 @@ final class AudioCaptureManager {
 
   private var levelTimer: Timer?
   private var usesRustCaptureWorker = false
+  /// Index of the next sample to read from `voicey-capture` for incremental transcription streaming.
+  private var rustStreamedSampleIndex = 0
   private var recordingMode: RecordingMode = .manual
   private var handsFreeDetector: HandsFreeSpeechDetector?
   private var captureStartedAt: Date?
@@ -75,6 +77,7 @@ final class AudioCaptureManager {
         Task {
           do {
             let snapshot = try await VoiceyCaptureWorkerSession.shared.currentCaptureLevelSnapshot()
+            self.streamRustCapturedSamplesIfNeeded(totalSamplesCaptured: snapshot.sampleCount)
             self.handleCaptureLevel(
               snapshot.level,
               totalSamplesCaptured: snapshot.sampleCount
@@ -179,6 +182,7 @@ final class AudioCaptureManager {
 
     if usesRustCaptureWorker {
       do {
+        try streamRustCapturedSamplesBeforeStop()
         let handle = try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.drainHandsFreeUtterance(
             startSampleIndex: startIndex,
@@ -189,6 +193,7 @@ final class AudioCaptureManager {
         let remainingSamples = try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.currentCaptureLevelSnapshot().sampleCount
         }
+        self.rustStreamedSampleIndex = remainingSamples
         bufferQueue.sync {
           guard var detector = self.handsFreeDetector else { return }
           detector.prepareForNextUtterance(sampleBaseline: remainingSamples)
@@ -256,6 +261,7 @@ final class AudioCaptureManager {
       levelTimer = nil
       delegate?.audioCaptureManager(self, didUpdateLevel: 0)
       do {
+        try streamRustCapturedSamplesBeforeStop()
         let handle = try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.stopRecording(
             applyTrailingTrim: applyTrailingTrimHeuristic)
@@ -494,6 +500,7 @@ final class AudioCaptureManager {
   private func prepareForCapture(mode: RecordingMode) {
     recordingMode = mode
     captureStartedAt = Date()
+    rustStreamedSampleIndex = 0
     handsFreeDetector = mode == .handsFree
       ? HandsFreeSpeechDetector(configuration: handsFreeConfiguration)
       : nil
@@ -503,6 +510,30 @@ final class AudioCaptureManager {
     captureStartedAt = nil
     handsFreeDetector = nil
     recordingMode = .manual
+    rustStreamedSampleIndex = 0
+  }
+
+  private func streamRustCapturedSamplesIfNeeded(totalSamplesCaptured: Int) {
+    guard usesRustCaptureWorker, totalSamplesCaptured > rustStreamedSampleIndex else { return }
+    do {
+      let read = try runSynchronously {
+        try await VoiceyCaptureWorkerSession.shared.readCapturedSamples(
+          since: rustStreamedSampleIndex)
+      }
+      rustStreamedSampleIndex = read.totalSampleCount
+      guard !read.samples.isEmpty else { return }
+      delegate?.audioCaptureManager(self, didCaptureSamples: read.samples)
+    } catch {
+      AppLogger.audio.error(
+        "voicey-capture read_captured_samples failed: \(error.localizedDescription)")
+    }
+  }
+
+  private func streamRustCapturedSamplesBeforeStop() throws {
+    let total = try runSynchronously {
+      try await VoiceyCaptureWorkerSession.shared.currentCaptureLevelSnapshot().sampleCount
+    }
+    streamRustCapturedSamplesIfNeeded(totalSamplesCaptured: total)
   }
 
   private func handleCaptureLevel(_ level: Float, totalSamplesCaptured: Int) {
