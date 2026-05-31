@@ -51,4 +51,8 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 
 ## Related PRs
 
-#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #134–#137 (M5 golden parity)
+#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #134–#137 (M5 golden parity), #138 (in progress — Rust capture PCM streaming for incremental transcription)
+
+## Active implementation priority (May 2026)
+
+Model/session lifecycle (#108, #140–#142) is complete on `main`. Highest-priority open code PR: [#138](https://github.com/jonathanKingston/voicey/pull/138) (`read_captured_samples` → incremental coordinator). Merge gate: macOS QA on hotkey + hands-free incremental partials.
