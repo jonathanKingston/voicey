@@ -37,21 +37,19 @@ enum TranscriptionSteeringContext {
   }
 
   private static func makeInSwift(settings: SettingsProviding) -> String? {
-    var manualTerms: [String] = []
-    var screenTerms: [String] = []
-    if settings.transcriptionGlossaryEnabled {
-      manualTerms = TranscriptionGlossary.parseTerms(settings.transcriptionGlossary)
-    }
-    if settings.transcriptionScreenContextEnabled {
-      screenTerms = ScreenContextStore.shared.consumeScreenTerms(
-        manualGlossaryForQuery: settings.transcriptionGlossary
+    let snapshot = settings.transcriptionScreenContextEnabled
+      ? ScreenContextStore.shared.consumeSnapshot()
+      : nil
+    let output = SteeringContextBuilder.build(
+      SteeringContextBuilder.Input(
+        manualGlossaryEnabled: settings.transcriptionGlossaryEnabled,
+        manualGlossary: settings.transcriptionGlossary,
+        screenContextEnabled: settings.transcriptionScreenContextEnabled,
+        snapshot: snapshot
       )
-    }
-
-    let terms = manualTerms + screenTerms
-    let context = TranscriptionGlossary.decodingContext(terms: terms)
-    logSteeringResult(terms: terms, context: context, settings: settings)
-    return context
+    )
+    logSteeringResult(terms: output.terms, context: output.decoderContext, settings: settings)
+    return output.decoderContext
   }
 
   private static func logSteeringResult(
