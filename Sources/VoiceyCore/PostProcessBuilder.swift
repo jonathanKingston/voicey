@@ -75,10 +75,12 @@ public enum PostProcessBuilder {
     for noiseWord in NoiseFilter.noiseWords {
       let pattern =
         "(?:^|\\s)\\*?\(NSRegularExpression.escapedPattern(for: noiseWord))\\*?[.,!?]*(?:\\s|$)"
-      guard let regex = try? NSRegularExpression(
-        pattern: pattern,
-        options: .caseInsensitive
-      ) else { continue }
+      guard
+        let regex = try? NSRegularExpression(
+          pattern: pattern,
+          options: .caseInsensitive
+        )
+      else { continue }
       result = regex.stringByReplacingMatches(
         in: result,
         range: NSRange(result.startIndex..., in: result),
@@ -93,10 +95,12 @@ public enum PostProcessBuilder {
     let bracketPatterns = ["\\[[^\\]]*\\]", "\\([^)]*\\)"]
 
     for pattern in bracketPatterns {
-      guard let regex = try? NSRegularExpression(
-        pattern: pattern,
-        options: .caseInsensitive
-      ) else { continue }
+      guard
+        let regex = try? NSRegularExpression(
+          pattern: pattern,
+          options: .caseInsensitive
+        )
+      else { continue }
 
       let matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
       for match in matches.reversed() {
@@ -111,10 +115,12 @@ public enum PostProcessBuilder {
   }
 
   private static func removeAsteriskWrappedWords(from text: String) -> String {
-    guard let regex = try? NSRegularExpression(
-      pattern: "\\*[^*]+\\*",
-      options: .caseInsensitive
-    ) else { return text }
+    guard
+      let regex = try? NSRegularExpression(
+        pattern: "\\*[^*]+\\*",
+        options: .caseInsensitive
+      )
+    else { return text }
     return regex.stringByReplacingMatches(
       in: text,
       range: NSRange(text.startIndex..., in: text),
@@ -175,7 +181,8 @@ public enum PostProcessBuilder {
     } else if pauseBeforeSegment > 0.6 {
       return inferSentenceEndPunctuation(segment)
     } else if pauseBeforeSegment > 0.3 && !segmentText.isEmpty
-      && !TextCleanup.isConjunction(segmentText) {
+      && !TextCleanup.isConjunction(segmentText)
+    {
       return ","
     }
     return ""
@@ -195,7 +202,8 @@ public enum PostProcessBuilder {
 
       var segmentText = segment.text
       if index > 0, let lastChar = processedSegments[index - 1].punctuation.last,
-        ".!?".contains(lastChar) {
+        ".!?".contains(lastChar)
+      {
         segmentText = TextCleanup.capitalizeFirst(segmentText)
       }
 
@@ -210,7 +218,7 @@ public enum PostProcessBuilder {
     let questionStarters = [
       "what", "where", "when", "why", "who", "how", "which", "whose", "whom",
       "is it", "are you", "do you", "can you", "will you", "would you",
-      "could you", "should", "have you", "has", "does", "did"
+      "could you", "should", "have you", "has", "does", "did",
     ]
 
     for starter in questionStarters where text.hasPrefix(starter) || text.contains(" \(starter) ") {
@@ -231,15 +239,18 @@ public enum PostProcessBuilder {
     return result
   }
 
-  private static func processVoiceCommands(_ text: String, voiceCommands: [VoiceCommand]) -> String {
+  private static func processVoiceCommands(_ text: String, voiceCommands: [VoiceCommand]) -> String
+  {
     var result = text
 
     for command in voiceCommands {
       let pattern = "\\b\(NSRegularExpression.escapedPattern(for: command.phrase))\\b"
-      guard let regex = try? NSRegularExpression(
-        pattern: pattern,
-        options: .caseInsensitive
-      ) else { continue }
+      guard
+        let regex = try? NSRegularExpression(
+          pattern: pattern,
+          options: .caseInsensitive
+        )
+      else { continue }
       result = applyVoiceCommand(command, regex: regex, to: result)
     }
 
@@ -270,10 +281,12 @@ public enum PostProcessBuilder {
 
   private static func applyScratchThat(command: VoiceCommand, to text: String) -> String {
     var result = text
-    guard let range = result.range(
-      of: command.phrase,
-      options: [.caseInsensitive, .backwards]
-    ) else { return result }
+    guard
+      let range = result.range(
+        of: command.phrase,
+        options: [.caseInsensitive, .backwards]
+      )
+    else { return result }
 
     let beforeCommand = result[..<range.lowerBound]
     if let lastSentenceEnd = beforeCommand.lastIndex(where: { ".!?".contains($0) }) {

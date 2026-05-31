@@ -135,7 +135,8 @@ private struct GoldenFixture: Decodable {
     segments = try container.decodeIfPresent([WireSegment].self, forKey: .segments) ?? []
     voiceCommandsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .voiceCommandsEnabled) ?? false
-    voiceCommands = try container.decodeIfPresent([WireVoiceCommand].self, forKey: .voiceCommands) ?? []
+    voiceCommands =
+      try container.decodeIfPresent([WireVoiceCommand].self, forKey: .voiceCommands) ?? []
     expected = try container.decode(String.self, forKey: .expected)
   }
 }
