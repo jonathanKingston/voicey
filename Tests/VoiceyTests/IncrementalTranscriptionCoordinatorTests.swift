@@ -114,6 +114,54 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     XCTAssertEqual(called.value, 0)
   }
 
+  /// cancel() ends in-flight chunk processing so flush does not wait on a stale transcribe.
+  func testCancelDuringActiveTranscriptionDiscardsInFlightWork() async throws {
+    let gate = TranscriptionGate()
+    let coordinator = IncrementalTranscriptionCoordinator(
+      configuration: makeConfiguration(),
+      transcribe: { _ in
+        await gate.waitUntilReleased()
+        return self.result("stale")
+      },
+      onUpdate: { _ in }
+    )
+
+    coordinator.append(samples: speech(300))
+    await gate.waitUntilEntered()
+    coordinator.cancel()
+    gate.release()
+
+    let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
+    XCTAssertEqual(combined.text, "")
+  }
+
+  /// cancel() drops sealed chunks still waiting in the queue behind an in-flight transcribe.
+  func testCancelClearsQueuedChunksBehindInFlightTranscription() async throws {
+    let config = makeConfiguration()
+    let called = Atomic(0)
+    let gate = TranscriptionGate()
+    let coordinator = IncrementalTranscriptionCoordinator(
+      configuration: config,
+      transcribe: { _ in
+        _ = called.increment()
+        await gate.waitUntilReleased()
+        return self.result("stale")
+      },
+      onUpdate: { _ in }
+    )
+
+    coordinator.append(samples: speech(200))
+    coordinator.append(samples: silence(config.pauseSampleCount + config.safetyTailSampleCount))
+    coordinator.append(samples: speech(200))
+    await gate.waitUntilEntered()
+    coordinator.cancel()
+    gate.release()
+
+    let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
+    XCTAssertEqual(combined.text, "")
+    XCTAssertEqual(called.value, 1, "Queued chunk should not start after cancel")
+  }
+
   /// reset() clears buffered audio so a subsequent flush returns empty output.
   func testResetClearsPendingAudio() async throws {
     let called = Atomic(0)
@@ -131,6 +179,40 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
     XCTAssertEqual(combined.text, "")
     XCTAssertEqual(called.value, 0)
+  }
+}
+
+/// Blocks the fake transcribe closure until `release()` so tests can call `cancel()` mid-flight.
+private final class TranscriptionGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var enteredContinuation: CheckedContinuation<Void, Never>?
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func waitUntilEntered() async {
+    await withCheckedContinuation { continuation in
+      lock.lock()
+      enteredContinuation = continuation
+      lock.unlock()
+    }
+  }
+
+  func waitUntilReleased() async {
+    lock.lock()
+    enteredContinuation?.resume()
+    enteredContinuation = nil
+    lock.unlock()
+    await withCheckedContinuation { continuation in
+      lock.lock()
+      releaseContinuation = continuation
+      lock.unlock()
+    }
+  }
+
+  func release() {
+    lock.lock()
+    releaseContinuation?.resume()
+    releaseContinuation = nil
+    lock.unlock()
   }
 }
 

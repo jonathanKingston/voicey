@@ -47,8 +47,13 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
   }
 
   func reset() {
-    stateQueue.sync {
+    let tasksToCancel: (Task<Void, Never>?, Task<Void, Never>?) = stateQueue.sync {
+      let processing = processingTask
+      let publish = publishSnapshotTask
       generation += 1
+      processingTask = nil
+      publishSnapshotTask = nil
+      isProcessingChunk = false
       bufferedSamples.removeAll()
       bufferStartSampleIndex = 0
       nextChunkID = 0
@@ -58,7 +63,10 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
       completedChunks.removeAll()
       firstError = nil
       publishSnapshotLocked()
+      return (processing, publish)
     }
+    tasksToCancel.0?.cancel()
+    tasksToCancel.1?.cancel()
   }
 
   func append(samples: [Float]) {
@@ -213,8 +221,12 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
 
       do {
         let result = try await transcribe(chunk.samples)
+        guard !Task.isCancelled else { break }
         await complete(chunk: chunk, result: result, generation: taskGeneration)
       } catch {
+        if Task.isCancelled {
+          break
+        }
         await fail(error: error, generation: taskGeneration)
         break
       }
