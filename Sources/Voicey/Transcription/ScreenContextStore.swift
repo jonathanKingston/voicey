@@ -9,8 +9,33 @@ final class ScreenContextStore: @unchecked Sendable {
   private let lock = NSLock()
   private var snapshot: ScreenContextSnapshot?
   private var exposure: ScreenContextExposureAssessment.Result?
+  private let captureGate = ScreenContextCaptureGate()
 
   private init() {}
+
+  /// Clears stored context and starts a capture gate for the new recording.
+  func beginCaptureSession() {
+    lock.lock()
+    defer { lock.unlock() }
+    snapshot = nil
+    exposure = nil
+    captureGate.beginSession()
+  }
+
+  /// Ends the capture gate without waiting (screen context disabled or prerequisites missing).
+  func deactivateCaptureSession() {
+    captureGate.deactivateSession()
+  }
+
+  /// Signals that the detached capture task finished (or was skipped with an empty snapshot).
+  func markCaptureComplete() {
+    captureGate.markReady()
+  }
+
+  /// Waits up to `ScreenContextCaptureGate.defaultWaitNanoseconds` when a capture session is active.
+  func waitForCaptureIfNeeded() async -> ScreenContextCaptureWaitOutcome {
+    await captureGate.waitForReady()
+  }
 
   func set(_ snapshot: ScreenContextSnapshot, exposure: ScreenContextExposureAssessment.Result? = nil) {
     lock.lock()
@@ -24,6 +49,7 @@ final class ScreenContextStore: @unchecked Sendable {
     defer { lock.unlock() }
     snapshot = nil
     exposure = nil
+    captureGate.reset()
   }
 
   /// Last exposure assessment for the captured snapshot (consumed with the snapshot).

@@ -1069,15 +1069,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startScreenContextCaptureIfNeeded() {
-    ScreenContextStore.shared.clear()
+    ScreenContextStore.shared.beginCaptureSession()
 
-    guard dependencies.settings.transcriptionScreenContextEnabled else { return }
+    guard dependencies.settings.transcriptionScreenContextEnabled else {
+      ScreenContextStore.shared.deactivateCaptureSession()
+      return
+    }
     guard dependencies.permissions.checkAccessibilityPermission() else {
       AppLogger.transcription.warning(
         "Screen context enabled but Accessibility permission is not granted")
+      ScreenContextStore.shared.deactivateCaptureSession()
       return
     }
-    guard let targetPID = recordingTargetPID else { return }
+    guard let targetPID = recordingTargetPID else {
+      ScreenContextStore.shared.deactivateCaptureSession()
+      return
+    }
 
     Task.detached(priority: .utility) {
       let windowImage = ScreenContextOCR.grabFrontWindowImageSync(targetPID: targetPID)
@@ -1097,6 +1104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
 
       ScreenContextStore.shared.set(snapshot, exposure: captured.exposure)
+      ScreenContextStore.shared.markCaptureComplete()
     }
   }
 
