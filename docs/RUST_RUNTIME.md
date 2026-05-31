@@ -44,7 +44,7 @@ Tracking issues:
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
 
-Phase 1 PCM pass-through for manual + hands-free Rust capture is landed (#82, #84). Deletion of fallbacks is Phase 2 in #70.
+Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). Deletion of fallbacks is Phase 2 in #70. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
 
 ## CI tiers (Rust on Ubuntu)
 
