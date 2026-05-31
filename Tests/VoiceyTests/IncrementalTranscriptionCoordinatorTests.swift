@@ -184,22 +184,25 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
 
 /// Blocks the fake transcribe closure until `release()` so tests can call `cancel()` mid-flight.
 private actor TranscriptionGate {
-  private var enteredContinuation: CheckedContinuation<Void, Never>?
-  private var releaseContinuation: CheckedContinuation<Void, Never>?
+  private var transcribeEntered = false
+  private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+  private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
 
   func waitUntilEntered() async {
-    await withCheckedContinuation { enteredContinuation = $0 }
+    if transcribeEntered { return }
+    await withCheckedContinuation { enteredWaiters.append($0) }
   }
 
   func waitUntilReleased() async {
-    enteredContinuation?.resume()
-    enteredContinuation = nil
-    await withCheckedContinuation { releaseContinuation = $0 }
+    transcribeEntered = true
+    enteredWaiters.forEach { $0.resume() }
+    enteredWaiters.removeAll()
+    await withCheckedContinuation { releaseWaiters.append($0) }
   }
 
   func release() {
-    releaseContinuation?.resume()
-    releaseContinuation = nil
+    releaseWaiters.forEach { $0.resume() }
+    releaseWaiters.removeAll()
   }
 }
 
