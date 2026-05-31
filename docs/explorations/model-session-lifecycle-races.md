@@ -26,7 +26,7 @@ Relevant files:
 
 - `Sources/Voicey/App/AppDelegate.swift`
 - `Sources/Voicey/App/AppState.swift`
-- `Sources/Voicey/Model/ModelManager.swift`
+- `Sources/Voicey/Transcription/ModelManager.swift`
 - `Sources/Voicey/Runtime/VoiceyRuntimeSupervisor.swift`
 
 ## Risks
