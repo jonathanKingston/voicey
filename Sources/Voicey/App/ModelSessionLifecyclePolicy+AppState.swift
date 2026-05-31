@@ -1,4 +1,5 @@
 import Foundation
+import VoiceyCore
 
 extension AppState {
   /// True while transcription, hands-free capture, or a hands-free flush owns the session.
