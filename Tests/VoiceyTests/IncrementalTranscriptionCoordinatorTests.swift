@@ -116,9 +116,10 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
 
   /// cancel() ends in-flight chunk processing so flush does not wait on a stale transcribe.
   func testCancelDuringActiveTranscriptionDiscardsInFlightWork() async throws {
+    let config = makeConfiguration()
     let gate = TranscriptionGate()
     let coordinator = IncrementalTranscriptionCoordinator(
-      configuration: makeConfiguration(),
+      configuration: config,
       transcribe: { _ in
         await gate.waitUntilReleased()
         return self.result("stale")
@@ -127,6 +128,7 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     )
 
     coordinator.append(samples: speech(300))
+    coordinator.append(samples: silence(config.pauseSampleCount + config.safetyTailSampleCount))
     await gate.waitUntilEntered()
     coordinator.cancel()
     await gate.release()
