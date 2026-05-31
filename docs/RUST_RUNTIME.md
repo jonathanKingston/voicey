@@ -106,7 +106,7 @@ After infer returns raw text, the host may delegate to `voicey-text` over JSONL 
 - **Segmented backends (benchmark Whisper):** optional `segments` with `start_time` / `end_time` enable noise filter and pause-based punctuation.
 - **Voice commands:** host sends enabled commands as structured JSON; settings are snapshotted per request.
 - **Steering / glossary:** host sends manual glossary settings and optional accessibility snapshot; worker returns decoder context via BM25 term selection in Rust.
-- **Golden parity:** `Benchmarks/Golden/postprocess/*.json` — `cargo test -p voicey-text --test golden_postprocess`; `Benchmarks/Golden/steering/*.json` — `cargo test -p voicey-text --test golden_steering`.
+- **Golden parity:** `Benchmarks/Golden/postprocess/*.json` — `cargo test -p voicey-text --test golden_postprocess`, `swift test --filter GoldenPostprocessFixtureTests`; `Benchmarks/Golden/steering/*.json` — `cargo test -p voicey-text --test golden_steering`, `swift test --filter GoldenSteeringFixtureTests`.
 
 Swift uses in-process `PostProcessor` only when the worker is missing or opted out (`VOICEY_USE_RUST_TEXT=0`); bundled worker errors propagate to the host.
 

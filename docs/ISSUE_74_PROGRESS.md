@@ -34,7 +34,8 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 ### M5 — Reduce macOS-only gates
 
 - [x] Linux CI vs macOS ownership table in [`RUST_RUNTIME.md`](RUST_RUNTIME.md)
-- [x] Move steering/glossary golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (#134, #135)
+- [x] Move steering/glossary golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (#134, #135, #136)
+- [x] Move post-process golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (#137)
 - [ ] Remaining Swift runtime helpers → Rust / `VoiceyCore` (see [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ fallback deletion)
 
 ### M6 — Longer term (deferred)
@@ -50,4 +51,4 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 
 ## Related PRs
 
-#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip)
+#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #134–#137 (M5 golden parity)

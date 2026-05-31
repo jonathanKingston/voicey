@@ -34,7 +34,7 @@ JSON fixtures for the **Qwen / segment-less** `voicey-text` post-process contrac
 
 Whisper noise-filter behavior is covered by `cargo test -p voicey-text --lib` (`noise_filter`, `postprocess` unit tests), not committed golden JSON.
 
-Linux CI: `cargo test -p voicey-text --test golden_postprocess`
+Linux CI: `cargo test -p voicey-text --test golden_postprocess`, `swift test --filter GoldenPostprocessFixtureTests` (VoiceyCore on Ubuntu)
 
 macOS: compare against Swift `PostProcessor` on the same inputs when validating a release.
 
