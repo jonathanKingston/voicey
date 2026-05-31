@@ -66,7 +66,8 @@ Possible implementation shape:
 
 ## Validation plan
 
-- Add focused tests around the lifecycle gate with mocked model loading.
-- On macOS, manually verify: start recording, trigger a model change, and confirm the user gets
+- [x] Linux `VoiceyCore` tests for busy-session signals (recording, hands-free session, flush) and
+  model pin stability (`TranscriptionSessionBusySignalsTests`, `ModelSessionLifecyclePolicyTests`).
+- [ ] On macOS, manually verify: start recording, trigger a model change, and confirm the user gets
   clear feedback instead of a silent reset.
-- On macOS, manually verify a pending upgrade cannot overlap rapid hotkey start/stop sequences.
+- [ ] On macOS, manually verify a pending upgrade cannot overlap rapid hotkey start/stop sequences.
