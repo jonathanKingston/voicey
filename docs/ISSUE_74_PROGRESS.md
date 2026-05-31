@@ -55,4 +55,4 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 
 ## Active implementation priority (May 2026)
 
-Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is complete on `main`. Highest-priority open code PR: [#138](https://github.com/jonathanKingston/voicey/pull/138) (`read_captured_samples` → incremental coordinator). Merge gate: macOS QA on hotkey + hands-free incremental partials.
+Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is complete on `main`. Highest-priority open code PR: [#138](https://github.com/jonathanKingston/voicey/pull/138) (`read_captured_samples` → incremental coordinator). Merge gate: macOS QA ([#145](https://github.com/jonathanKingston/voicey/issues/145)) on hotkey + hands-free incremental partials.

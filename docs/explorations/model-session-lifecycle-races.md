@@ -72,5 +72,6 @@ Relevant files:
 - [x] Linux `VoiceyCore` tests for busy-session signals (recording, hands-free session, flush) and
   model pin stability (`TranscriptionSessionBusySignalsTests`, `ModelSessionLifecyclePolicyTests`,
   `TranscriptionSessionModelPinTests`).
+- [ ] **macOS manual QA** — tracked in [#145](https://github.com/jonathanKingston/voicey/issues/145) (includes #138 `read_captured_samples` merge gate and the checks below).
 - [ ] On macOS, manually verify: start recording, trigger a model change, and confirm clear feedback instead of a silent reset.
 - [ ] On macOS, manually verify a pending upgrade cannot overlap rapid hotkey start/stop sequences.
