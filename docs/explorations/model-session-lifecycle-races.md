@@ -9,6 +9,7 @@ Implemented on `main`:
 | #140 | `ModelSessionLifecyclePolicy` gate — block recording during engine switch; defer settings-driven swaps while transcription is busy |
 | #141 | Flush `deferredModelEngineSwitch` when `performModelUpgrade` finishes (not only on the next idle session) |
 | #142 / #139 | `TranscriptionSessionModelPin` — stable `SpeechModel` per utterance |
+| #144 | `TranscriptionSessionBusySignals` — shared busy-session inputs + Linux regression table tests |
 
 Regression tests: `TranscriptionSessionBusySignalsTests`, `ModelSessionLifecyclePolicyTests`,
 `TranscriptionSessionModelPinTests` (Linux / VoiceyCore).
