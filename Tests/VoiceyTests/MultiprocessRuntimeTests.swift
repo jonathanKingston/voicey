@@ -22,6 +22,17 @@ final class MultiprocessRuntimeTests: XCTestCase {
   }
 
   func testPostProcessorSegmentLessOutputStable() throws {
+    // Pin Swift post-process path: bundled macOS builds ship voicey-text by default.
+    let priorRustText = ProcessInfo.processInfo.environment["VOICEY_USE_RUST_TEXT"]
+    defer {
+      if let priorRustText {
+        setenv("VOICEY_USE_RUST_TEXT", priorRustText, 1)
+      } else {
+        unsetenv("VOICEY_USE_RUST_TEXT")
+      }
+    }
+    setenv("VOICEY_USE_RUST_TEXT", "0", 1)
+
     let result = TranscriptionResult(
       text: "hello world",
       segments: [],
