@@ -193,10 +193,22 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     coordinator.append(samples: silence(config.pauseSampleCount + config.safetyTailSampleCount))
     await waitUntil("fresh transcribe to start") { transcribeCalls.value >= 2 }
     await freshGate.waitUntilEntered()
+
+    // Flush the new generation while its chunk is still in flight; flush must
+    // keep waiting for it. Run concurrently so the gates can be released below
+    // *while flush is polling* — that is the window in which a clobber would
+    // make flush observe no work and return early (dropping the fresh chunk).
+    async let flushed = coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
+
+    // Let the stale task finish first: its finishProcessing must not clear the
+    // fresh generation's processingTask/isProcessingChunk.
     await staleGate.release()
+    try await Task.sleep(nanoseconds: 100_000_000)
+
+    // Now let the fresh chunk complete so flush returns its text.
     await freshGate.release()
 
-    let combined = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
+    let combined = try await flushed
     XCTAssertEqual(combined.text, "fresh")
   }
 
