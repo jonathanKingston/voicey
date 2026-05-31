@@ -6,17 +6,25 @@ System map and code ownership: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Linux CI vs macOS validation
 
-| Area | Linux CI (`linux-rust-tests`, `linux-core-tests`) | macOS CI / manual |
-|------|---------------------------------------------------|-------------------|
-| `voicey-protocol` fixtures + serde contract | Yes | — |
-| Supervisor + stub workers (infer/capture/fetch) | Yes | — |
-| `voicey-fetch` HTTP listing/download (local test server) | Yes | — |
+This table is the **M5 allowlist** for [#74](https://github.com/jonathanKingston/voicey/issues/74): what every PR must pass on Ubuntu vs what still needs a Mac.
+
+| Area | Linux CI owns | macOS CI / manual only |
+|------|---------------|------------------------|
+| `voicey-protocol` fixtures + serde contract | Yes (`make protocol-fixtures`, Swift fixture decode) | — |
+| Supervisor + stub workers (infer/capture/fetch) | Yes (integration tests, worker I/O) | — |
+| `voicey-fetch` HTTP listing/download (local test server) | Yes (`cargo test -p voicey-fetch`, Tier 1) | — |
 | `voicey-capture` JSONL IPC + PCM fixture path (no microphone) | Yes | — |
-| `voicey-text` / `VoiceyCore` unit tests | Yes (Rust + Swift) | — |
-| Full SwiftUI app compile (`make build`) | No | Yes (`build.yml`) |
-| MLX Qwen infer-worker, WER/RTF parity | No | Yes (`make run-multiprocess`, benchmark targets) |
+| `voicey-text` / `VoiceyCore` unit + golden postprocess | Yes (`cargo test -p voicey-text`, `linux-core-tests`) | — |
+| Benchmark harness **scripts** (Common Voice prep, parity matrix smoke) | Yes (`test-common-voice-benchmark`, Tier 1 script checks) | — |
+| Benchmark **Qwen transcribe RTF / WER** (needs MLX + models) | No | Yes (`make benchmark-compare-runtime`, parity targets) |
+| Full SwiftUI app compile | No | Yes (`build.yml`) |
+| MLX Qwen `infer-worker`, live dictation | No | Yes (`make run-multiprocess`) |
 | Mic capture (CoreAudio), TCC, auto-paste | No | Yes |
-| Codesign, bundle, Sparkle, seatbelt on device | No | Yes |
+| Codesign, bundle, Sparkle, seatbelt on device | No | Yes (`make bundle-direct`, release scripts) |
+
+**Local quick check (Linux / Cloud Agent):** `make protocol-fixtures`, `cargo test -p voicey-protocol -p voicey-supervisor --bin voicey-supervisor -p voicey-fetch -p voicey-text`, `swiftlint lint Sources/`, `swift test --package-path . --filter VoiceyCoreTests`.
+
+**Local quick check (macOS):** `make build && make build-rust && make run-multiprocess`; before release: `make benchmark-compare-runtime` and spot-check hands-free ([#99](https://github.com/jonathanKingston/voicey/issues/99)).
 
 Tracking issues:
 
@@ -109,11 +117,21 @@ make build-rust-release  # release workers (strip debug symbols; see Cargo.toml 
 make run-multiprocess    # bundle-debug + sign + open Voicey.app
 ```
 
-Release workers use the workspace `[profile.release]` profile (`strip = true`). Thin LTO is deferred until release build time is measured on macOS ([#73](https://github.com/jonathanKingston/voicey/issues/73)).
+Release workers use the workspace `[profile.release]` profile (`strip = true`, merged in [#119](https://github.com/jonathanKingston/voicey/pull/119)). Thin LTO (`lto = "thin"`, `codegen-units = 1`) is deferred until `make build-rust-release` wall time is measured on macOS — track in a follow-up comment on closed [#73](https://github.com/jonathanKingston/voicey/issues/73).
 
 ## Benchmarks
 
-See commands in the previous sections of this doc (`benchmark-transcribe --runtime`, `make benchmark-runtime-parity-common-voice`, etc.).
+Benchmark CLIs and harnesses exercise the **bundled Rust worker stack** (no Swift duplicate fallbacks on the Qwen path). Merged in [#105](https://github.com/jonathanKingston/voicey/pull/105); golden notes in [`Benchmarks/Golden/README.md`](../Benchmarks/Golden/README.md).
+
+| Command / target | Requires | Notes |
+|------------------|----------|-------|
+| `make benchmark-golden-fixtures` | `cargo test -p voicey-text --test golden_postprocess` | Linux CI |
+| `make benchmark-compare-runtime` | `make build`, `make build-rust`, Qwen model | macOS; `BenchmarkRustRequirements` |
+| `benchmark-transcribe` (Qwen) | supervisor + infer-worker; `--post-process` → `voicey-text` | WAV decode still in Swift ([#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 3) |
+| `make benchmark-runtime-parity-common-voice` | prepared Common Voice slice + workers | macOS WER/RTF matrix |
+| `python3 scripts/test_common_voice_benchmark.py` | none (harness smoke) | Linux CI Tier 1 |
+
+Qwen benchmarks reject `VOICEY_RUNTIME=in-process`. Whisper/Granite remain for parity tooling only, not the settings UI hot path.
 
 ## XPC (P4)
 
