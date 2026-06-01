@@ -2,14 +2,14 @@ import Foundation
 
 // MARK: - Voice Command Types
 
-public enum VoiceCommandAction: Codable, Equatable {
+public enum VoiceCommandAction: Codable, Equatable, Sendable {
   case newLine
   case newParagraph
   case scratchThat
   case custom(String)
 }
 
-public struct VoiceCommand: Identifiable, Codable, Equatable {
+public struct VoiceCommand: Identifiable, Codable, Equatable, Sendable {
   public let id: UUID
   public var phrase: String
   public var action: VoiceCommandAction

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare in-process vs multiprocess benchmark-transcribe over a TSV clip list."""
+"""Run multiprocess benchmark-transcribe over a TSV clip list (Rust runtime path)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ def run_transcribe(
     voicey: Path,
     model: str,
     audio: Path,
-    runtime: str,
     warmup: int,
 ) -> dict:
     cmd = [
@@ -29,7 +28,7 @@ def run_transcribe(
         "--json",
         "--post-process",
         "--runtime",
-        runtime,
+        "multiprocess",
         "--warmup",
         str(warmup),
     ]
@@ -79,47 +78,36 @@ def main() -> int:
 
     for index, (rel, audio) in enumerate(rows, start=1):
         print(f"[{index}/{len(rows)}] {rel}", file=sys.stderr)
-        in_payload = run_transcribe(
-            args.voicey, args.model, audio, "in-process", args.warmup
-        )
-        mp_payload = run_transcribe(
-            args.voicey, args.model, audio, "multiprocess", args.warmup
-        )
-        in_rtf = float(in_payload.get("realTimeFactor") or 0)
-        mp_rtf = float(mp_payload.get("realTimeFactor") or 0)
+        payload = run_transcribe(args.voicey, args.model, audio, args.warmup)
+        rtf = float(payload.get("realTimeFactor") or 0)
         results.append(
             {
                 "path": rel,
-                "rawTextMatch": in_payload.get("rawText") == mp_payload.get("rawText"),
-                "textMatch": in_payload.get("text") == mp_payload.get("text"),
-                "inProcessRTF": in_rtf,
-                "multiprocessRTF": mp_rtf,
-                "rtfRatio": (mp_rtf / in_rtf) if in_rtf > 0 else None,
-                "inProcessProcessingSeconds": in_payload.get("processingSeconds"),
-                "multiprocessProcessingSeconds": mp_payload.get("processingSeconds"),
-                "audioSeconds": in_payload.get("audioSeconds"),
+                "hasRawText": bool((payload.get("rawText") or "").strip()),
+                "hasText": bool((payload.get("text") or "").strip()),
+                "multiprocessRTF": rtf,
+                "processingSeconds": payload.get("processingSeconds"),
+                "audioSeconds": payload.get("audioSeconds"),
             }
         )
 
-    ratios = [r["rtfRatio"] for r in results if r.get("rtfRatio") is not None]
+    rtfs = [r["multiprocessRTF"] for r in results if r.get("multiprocessRTF")]
     summary = {
         "model": args.model,
         "warmup": args.warmup,
         "clipCount": len(results),
-        "rawTextMatches": sum(1 for r in results if r["rawTextMatch"]),
-        "textMatches": sum(1 for r in results if r["textMatch"]),
-        "rtfRatioMedian": statistics.median(ratios) if ratios else None,
-        "rtfRatioMean": statistics.mean(ratios) if ratios else None,
-        "rtfRatioMax": max(ratios) if ratios else None,
-        "rtfRatioMin": min(ratios) if ratios else None,
-        "clipsOver105Ratio": sum(1 for r in ratios if r > 1.05),
+        "rawTextPresent": sum(1 for r in results if r["hasRawText"]),
+        "textPresent": sum(1 for r in results if r["hasText"]),
+        "rtfMedian": statistics.median(rtfs) if rtfs else None,
+        "rtfMean": statistics.mean(rtfs) if rtfs else None,
+        "rtfMax": max(rtfs) if rtfs else None,
+        "rtfMin": min(rtfs) if rtfs else None,
+        "clipsOver100RTF": sum(1 for r in rtfs if r > 1.0),
     }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as handle:
         handle.write(json.dumps({"summary": summary, "clips": results}, indent=2))
-        handle.write("\n")
-
     print(json.dumps(summary, indent=2))
     return 0
 

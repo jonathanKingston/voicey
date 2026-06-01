@@ -139,8 +139,8 @@ The codebase still includes WhisperKit and Granite backends for benchmarking, co
 
 Voicey cleans up and delivers transcriptions with:
 
-- **Noise filtering** for common ASR artifacts
-- **Punctuation and normalization** in the post-processing pipeline
+- **Text expansions and normalization** in the post-processing pipeline (Qwen path)
+- **Whisper caption noise filtering** only for benchmark / segmented transcriptions (not used for Qwen)
 - **Clipboard delivery** by default
 - **Optional auto-insert** into the focused field using Accessibility
 - **Optional clipboard restoration** after auto-insert

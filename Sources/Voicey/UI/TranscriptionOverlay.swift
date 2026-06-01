@@ -398,7 +398,7 @@ struct TranscriptionOverlayView: View {
   }
 
   private var statusText: String {
-    if appState.isWaitingForSpeech, appState.isHandsFreeBackgroundTranscribing {
+    if appState.isWaitingForSpeech, appState.isHandsFreeUtteranceFlushInProgress {
       return L10n.State.waitingForSpeechWhileTranscribing
     }
     if appState.transcriptionState.isRecording && appState.isCatchingUpTranscription {

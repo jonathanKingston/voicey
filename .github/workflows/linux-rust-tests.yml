@@ -47,7 +47,10 @@ jobs:
       - name: Capture worker IPC tests (fixture path, no microphone)
         run: cargo test -p voicey-capture --test capture_ipc
 
-      - name: Text crate tests (unit + golden postprocess fixtures)
+      - name: Fetch worker unit tests (HTTP + manifest, local test server)
+        run: cargo test -p voicey-fetch
+
+      - name: Text crate tests (unit + golden postprocess + steering fixtures)
         run: cargo test -p voicey-text
 
       - name: Text worker IPC tests (black-box)

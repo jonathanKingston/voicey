@@ -1,0 +1,8 @@
+{
+  "description": "Manual glossary only; built-in Voicey term prepended in decoder context",
+  "manual_glossary_enabled": true,
+  "manual_glossary": "Cursor, Composer",
+  "screen_context_enabled": false,
+  "expected_terms": ["Cursor", "Composer"],
+  "expected_decoder_context": "Glossary: Voicey, Cursor, Composer"
+}

@@ -21,7 +21,18 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertFalse(VoiceyRuntimeConfiguration.usesInferWorker(for: .qwen3Small))
   }
 
-  func testPostProcessorSegmentLessOutputStable() {
+  func testPostProcessorSegmentLessOutputStable() throws {
+    // Pin Swift post-process path: bundled macOS builds ship voicey-text by default.
+    let priorRustText = ProcessInfo.processInfo.environment["VOICEY_USE_RUST_TEXT"]
+    defer {
+      if let priorRustText {
+        setenv("VOICEY_USE_RUST_TEXT", priorRustText, 1)
+      } else {
+        unsetenv("VOICEY_USE_RUST_TEXT")
+      }
+    }
+    setenv("VOICEY_USE_RUST_TEXT", "0", 1)
+
     let result = TranscriptionResult(
       text: "hello world",
       segments: [],
@@ -36,7 +47,7 @@ final class MultiprocessRuntimeTests: XCTestCase {
     )
 
     SettingsManager.shared.voiceCommandsEnabled = false
-    let processed = PostProcessor().process(result)
+    let processed = try PostProcessor().process(result)
     XCTAssertEqual(processed, "hello world")
   }
 
@@ -68,5 +79,35 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertEqual(captured.sampleCount, 8_000)
     XCTAssertEqual(captured.durationSeconds, 0.5, accuracy: 0.001)
     captured.removeSharedBufferIfNeeded()
+  }
+
+  /// Hands-free Rust capture now transfers PCM-file ownership to the consumer via a
+  /// `.sharedBuffer` handle instead of reading `[Float]` in the drain call (#70 Phase 1).
+  /// The whole no-leak contract rests on `removeSharedBufferIfNeeded()` actually unlinking
+  /// that file once a consumer is done with it.
+  func testRemoveSharedBufferIfNeededUnlinksBackingFile() throws {
+    let name = try SharedMemoryPCM.write(samples: [0.0, 0.25, -0.5, 1.0])
+    let path = SharedMemoryPCM.fileURL(for: name).path
+    XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+
+    let captured = CapturedAudio.sharedBuffer(
+      PCMBufferHandle(shmName: name, sampleCount: 4, sampleRate: 16_000))
+    captured.removeSharedBufferIfNeeded()
+    XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+
+    // Idempotent: a second removal (e.g. a defensive double-free) must not throw.
+    captured.removeSharedBufferIfNeeded()
+  }
+
+  func testPCMBufferHandleDurationGuardsZeroSampleRate() {
+    let handle = PCMBufferHandle(shmName: "voicey_pcm_test", sampleCount: 16_000, sampleRate: 0)
+    XCTAssertEqual(handle.durationSeconds, 0)
+    XCTAssertEqual(CapturedAudio.sharedBuffer(handle).durationSeconds, 0)
+  }
+
+  func testCapturedAudioSharedBufferUsesPCMHandleTranscriptionPath() {
+    let handle = PCMBufferHandle(shmName: "voicey_pcm_test", sampleCount: 4, sampleRate: 16_000)
+    XCTAssertTrue(CapturedAudio.sharedBuffer(handle).finishesViaSharedPCMHandleTranscription)
+    XCTAssertFalse(CapturedAudio.inMemory([0.1]).finishesViaSharedPCMHandleTranscription)
   }
 }

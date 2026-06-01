@@ -68,4 +68,10 @@ enum CapturedAudio: Sendable {
       handle.remove()
     }
   }
+
+  /// `voicey-capture` returns `.sharedBuffer` without streaming `[Float]` into the incremental coordinator.
+  var finishesViaSharedPCMHandleTranscription: Bool {
+    if case .sharedBuffer = self { return true }
+    return false
+  }
 }
