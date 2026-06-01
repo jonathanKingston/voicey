@@ -69,4 +69,11 @@ Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
 **Automation assessment (Jun 2026, post-#167):** #167 closes [#162](https://github.com/jonathanKingston/voicey/issues/162) (steering-echo sanitization in `voicey-text` `postprocess`; Swift post-process/steering fallbacks removed). It also completes the **text layer** of [#152](https://github.com/jonathanKingston/voicey/issues/152). **Does not** unblock capture fallback deletion until [#150](https://github.com/jonathanKingston/voicey/pull/150) merges. **Highest priority next work:** review/merge #150 and #169 (macOS spot-check where noted). Do not duplicate #150 or #169.
 
+**Automation assessment (Jun 2026, post-#172):** [#172](https://github.com/jonathanKingston/voicey/pull/172) aligns [#147](https://github.com/jonathanKingston/voicey/issues/147) cancel rows in [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md) with the closed issue; it does **not** unblock new implementation PRs. Priority queue unchanged: merge [#150](https://github.com/jonathanKingston/voicey/pull/150) and [#169](https://github.com/jonathanKingston/voicey/pull/169) on macOS; then [#152](https://github.com/jonathanKingston/voicey/issues/152) capture fallback deletion.
+
+**Suggested GitHub issue comments** (Cloud Agent token lacks `issues: write` — paste manually if helpful):
+
+- **#152:** Text/post-process layer done in #167. Capture (`AVAudioEngine`) deletion remains blocked until #150 merges + macOS QA. Do not open duplicate PRs for #150 / #169.
+- **#163:** Fix is in draft PR #169 (`UtteranceTranscriptionFinishPolicy`); merge gate is macOS hands-free multi-utterance repro per [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
+
 **Next implementation tranche (after #150 merge):** [#152](https://github.com/jonathanKingston/voicey/issues/152) capture layer (`AudioCaptureManager` AVFoundation path deletion), then fetch Hub fallback. Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).
