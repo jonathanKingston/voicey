@@ -28,7 +28,7 @@ func log(_ message: String) {
 func debugPrint(_ message: String, category: String = "DEBUG") {
   let formatter = ISO8601DateFormatter()
   let timestamp = formatter.string(from: Date())
-  AppLogger.general.debug("[\(category, privacy: .public)] \(message, privacy: .public)")
+  AppLogger.general.debug("[\(category, privacy: .public)] \(message, privacy: .private)")
   let line = "[\(timestamp)] [\(category)] \(message)\n"
   if RuntimeOutputMode.reservesStdoutForMachineReadableOutput {
     fputs(line, stderr)

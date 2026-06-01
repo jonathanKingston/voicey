@@ -2,7 +2,10 @@
 
 ## Status
 
-Exploratory proposal.
+Exploratory proposal. **Logging slice** (raw/processed transcription + deliver path) is implemented
+separately from screen-context consent UX; see open PR for #113 follow-up. Screen-context opt-in /
+onboarding remains deferred until [#150](https://github.com/jonathanKingston/voicey/pull/150) merges
+to avoid overlapping with the capture gate work.
 
 ## Summary
 
