@@ -100,6 +100,24 @@ fn postprocess_applies_voice_command_new_line() {
 }
 
 #[test]
+fn build_steering_context_manual_glossary() {
+    let mut session = TextSession::spawn();
+    let response = session.request_json(
+        r#"{"type":"build_steering_context","id":"sc-1","manual_glossary_enabled":true,"manual_glossary":"Cursor, Composer","screen_context_enabled":false}"#,
+    );
+    assert_eq!(response["type"], "steering_context_result");
+    assert_eq!(response["id"], "sc-1");
+    assert_eq!(response["ok"], true);
+    assert_eq!(response["terms"], serde_json::json!(["Cursor", "Composer"]));
+    assert!(
+        response["decoder_context"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Cursor")
+    );
+}
+
+#[test]
 fn invalid_request_json_returns_error() {
     let mut session = TextSession::spawn();
     let response = session.request_json(r#"{"type":"not_a_text_message","id":"x"}"#);

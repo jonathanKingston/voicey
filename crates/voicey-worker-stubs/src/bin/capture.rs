@@ -23,6 +23,8 @@ enum CaptureResponse {
         shm_name: Option<String>,
         sample_count: Option<usize>,
         sample_rate: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        non_zero_sample_count: Option<usize>,
         error: Option<String>,
     },
     Error { id: String, message: String },
@@ -58,6 +60,7 @@ fn handle_line(line: &str) -> String {
                     shm_name: None,
                     sample_count: None,
                     sample_rate: None,
+                    non_zero_sample_count: None,
                     error: Some("duration out of range".into()),
                 }
             } else {
@@ -70,6 +73,7 @@ fn handle_line(line: &str) -> String {
                         shm_name: Some(shm_name),
                         sample_count: Some(samples.len()),
                         sample_rate: Some(16_000),
+                        non_zero_sample_count: Some(0),
                         error: None,
                     },
                     Err(error) => CaptureResponse::CaptureFixtureResult {
@@ -78,6 +82,7 @@ fn handle_line(line: &str) -> String {
                         shm_name: None,
                         sample_count: None,
                         sample_rate: None,
+                        non_zero_sample_count: None,
                         error: Some(error.to_string()),
                     },
                 }

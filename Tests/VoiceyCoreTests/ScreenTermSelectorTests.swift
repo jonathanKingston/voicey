@@ -37,6 +37,25 @@ final class ScreenTermSelectorTests: XCTestCase {
     XCTAssertFalse(terms.contains("Voicey"))
   }
 
+  /// Matches `Benchmarks/Golden/steering/screen_context_bm25.json` — tie-break order must stay stable across hosts.
+  func testSelectRanksSnapshotTermsDeterministicallyOnScoreTies() {
+    let snapshot = ScreenContextSnapshot(
+      queryText: "metformin dosage",
+      corpusChunks: [
+        "Patient metformin dosage increased",
+        "File Edit View Help"
+      ]
+    )
+
+    let terms = ScreenTermSelector.select(
+      snapshot: snapshot,
+      manualGlossary: "Voicey",
+      manualGlossaryEnabled: false
+    )
+
+    XCTAssertEqual(terms, ["dosage", "increased", "metformin", "Patient"])
+  }
+
   func testDedupePreservesFirstCasing() {
     let terms = ScreenTermSelector.dedupePreservingOrder(
       ["Voicey", "voicey", "VOICEY", "Qwen"],

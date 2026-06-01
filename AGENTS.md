@@ -4,7 +4,7 @@ This document helps AI agents understand and work with this codebase effectively
 
 ## Project Overview
 
-Voicey is a macOS menubar app for voice-to-text transcription using WhisperKit. It runs locally on-device with no cloud dependencies.
+Voicey is a macOS menubar app for voice-to-text transcription. It is Qwen-first, using native Swift MLX inference (WhisperKit and Granite backends are retained only for benchmarking and runtime parity). It runs locally on-device with no cloud dependencies.
 
 ## Key Files for Understanding the Codebase
 
@@ -140,3 +140,15 @@ See [`docs/RUST_RUNTIME.md`](docs/RUST_RUNTIME.md). Build workers with `make bui
 ### macOS dev restart (agents on Mac)
 
 After rebuilds or permission issues on a **Mac** (not Cloud Linux), use [`.cursor/skills/voicey-macos-dev-restart/SKILL.md`](.cursor/skills/voicey-macos-dev-restart/SKILL.md): `make dev-restart` by default; `make reset-permissions-direct-relaunch` only when TCC is stale.
+
+### Implementation priority (agents)
+
+Canonical status: [`docs/ISSUE_74_PROGRESS.md`](docs/ISSUE_74_PROGRESS.md).
+
+| Priority | Work | Cloud Agent? |
+|----------|------|----------------|
+| 1 | macOS QA for open PRs [#138](https://github.com/jonathanKingston/voicey/pull/138), [#150](https://github.com/jonathanKingston/voicey/pull/150) — checklist in [`docs/MACOS_MANUAL_QA.md`](docs/MACOS_MANUAL_QA.md), tracking [#145](https://github.com/jonathanKingston/voicey/issues/145) | No (macOS only) |
+| 2 | Do **not** open duplicate PRs for `read_captured_samples`, incremental Rust capture streaming, or screen-context capture gate | — |
+| 3 | After #138/#150 merge: [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ — delete Swift hot-path fallbacks (`AVAudioEngine`, Hub fetch, Swift post-process) once bundled workers are the only path | Partial (Linux tests/docs; fallback removal needs macOS spot-check) |
+
+Incremental cancel ([#147](https://github.com/jonathanKingston/voicey/issues/147)) is implemented on `main`; only the Escape/cancel row in the macOS checklist remains.

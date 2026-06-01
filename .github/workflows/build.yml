@@ -25,3 +25,6 @@ jobs:
 
       - name: Build (SwiftPM + MLX Metal library)
         run: make build
+
+      - name: macOS unit tests (hands-free + incremental transcription)
+        run: swift test --filter 'HandsFreeFlushBarrierTests|IncrementalTranscriptionCoordinatorTests'

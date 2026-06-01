@@ -460,3 +460,25 @@ fn infer_stub_malformed_json_line_surfaces_transcribe_error() {
         other => panic!("expected transcribe_result error, got {other:?}"),
     }
 }
+
+#[test]
+fn infer_stub_hang_on_request_times_out() {
+    let mut session = SupervisorSession::spawn(&[
+        ("VOICEY_INFER_STUB_MODE", "hang_on_request"),
+        ("VOICEY_WORKER_REQUEST_TIMEOUT_MS", "500"),
+    ]);
+    let response = session.request(&HostRequest::LoadModel {
+        id: "load-timeout".into(),
+        model_id: "qwen3-asr-0.6b-6bit".into(),
+    });
+    match response {
+        HostResponse::Error { id, message } => {
+            assert_eq!(id, "load-timeout");
+            assert!(
+                message.contains("timed out"),
+                "expected timeout message, got {message:?}"
+            );
+        }
+        other => panic!("expected load timeout error, got {other:?}"),
+    }
+}

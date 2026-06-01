@@ -1,0 +1,8 @@
+{
+  "description": "Both glossary and screen context disabled returns empty steering",
+  "manual_glossary_enabled": false,
+  "manual_glossary": "",
+  "screen_context_enabled": false,
+  "expected_terms": [],
+  "expected_decoder_context": null
+}

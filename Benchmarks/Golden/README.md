@@ -2,7 +2,7 @@
 
 ## Audio (WAV)
 
-Short mono WAV clips at 16 kHz for `benchmark-transcribe` parity checks.
+Short mono WAV clips at 16 kHz for `benchmark-transcribe` **smoke checks** against the **Rust multiprocess** runtime (RTF and JSON shape). Pure tones often produce an **empty** transcript; `make benchmark-compare-runtime` still passes when post-process and infer complete successfully.
 
 Generate fixtures:
 
@@ -10,21 +10,38 @@ Generate fixtures:
 python3 scripts/generate_golden_fixtures.py
 ```
 
-Compare in-process vs multiprocess (requires a downloaded Qwen model):
+Run golden transcribe benchmark (requires `make build`, `make build-rust`, and a downloaded Qwen model):
 
 ```bash
 make build
+make build-rust
 make benchmark-compare-runtime
-make benchmark-runtime-parity-common-voice   # full prepared Common Voice slice (25 clips)
+make benchmark-runtime-parity-common-voice   # prepared Common Voice slice (25 clips)
 make benchmark-measure-runtime-memory
 ```
+
+Benchmark CLI defaults:
+
+- `--runtime multiprocess` (Qwen rejects in-process)
+- `--post-process` uses `voicey-text` (no Swift PostProcessor fallback)
+- Model downloads use `voicey-fetch`
 
 Set `VOICEY_BENCHMARK_WARMUP=1` (default in `compare_benchmark_runtime.sh`) for fair RTF. Override model: `BENCHMARK_RUNTIME_PARITY_MODEL=qwen3-asr-1.7b-bf16`.
 
 ## Post-process text (`postprocess/`)
 
-JSON fixtures for Rust `voicey-text` post-processing (issue #63). Each file defines input text, optional segments, voice-command settings, and expected output after the full pipeline.
+JSON fixtures for the **Qwen / segment-less** `voicey-text` post-process contract (expansions, voice commands, pass-through without Whisper caption cleanup). Each file defines input text, optional segments, voice-command settings, and expected output.
 
-Linux CI: `cargo test -p voicey-text --test golden_postprocess`
+Whisper noise-filter behavior is covered by `cargo test -p voicey-text --lib` (`noise_filter`, `postprocess` unit tests), not committed golden JSON.
+
+Linux CI: `cargo test -p voicey-text --test golden_postprocess`, `swift test --filter GoldenPostprocessFixtureTests` (VoiceyCore on Ubuntu)
 
 macOS: compare against Swift `PostProcessor` on the same inputs when validating a release.
+
+## Steering / glossary (`steering/`)
+
+JSON fixtures for the `voicey-text` `build_steering_context` contract (manual glossary parsing, BM25 screen-term selection, decoder context formatting). Each file defines input flags, optional accessibility snapshot, and expected `terms` + `decoder_context`.
+
+Linux CI: `cargo test -p voicey-text --test golden_steering`, `swift test --filter GoldenSteeringFixtureTests` (VoiceyCore on Ubuntu)
+
+macOS: compare against Swift `TranscriptionSteeringContext` on the same inputs when validating a release.
