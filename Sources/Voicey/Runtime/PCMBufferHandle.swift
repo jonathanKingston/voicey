@@ -69,6 +69,19 @@ enum CapturedAudio: Sendable {
     }
   }
 
+  /// Bar heights for the transcription overlay progress view.
+  func waveformEnvelope() -> [Float] {
+    switch self {
+    case .inMemory(let samples):
+      return AudioWaveformEnvelope.normalizedBars(from: samples)
+    case .sharedBuffer(let handle):
+      if let bars = try? AudioWaveformEnvelope.normalizedBars(fromSharedBuffer: handle) {
+        return bars
+      }
+      return Array(repeating: 0.08, count: AudioWaveformEnvelope.displayBarCount)
+    }
+  }
+
   var finishesViaSharedPCMHandleTranscription: Bool {
     UtteranceTranscriptionFinish.route(for: self) == .sharedPCMHandle
   }

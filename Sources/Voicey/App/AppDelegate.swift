@@ -1790,13 +1790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     durationSec: Double
   ) -> UUID? {
     guard model.isQwenModel else { return nil }
-    let envelope: [Float]
-    switch capturedAudio {
-    case .inMemory(let samples):
-      envelope = AudioWaveformEnvelope.normalizedBars(from: samples)
-    case .sharedBuffer:
-      envelope = Array(repeating: 0.08, count: AudioWaveformEnvelope.displayBarCount)
-    }
+    let envelope = capturedAudio.waveformEnvelope()
     let estimatedRTF = estimatedTranscriptionRTF(for: model)
     return appState.addHandsFreeBackgroundTranscriptionJob(
       envelope: envelope,
@@ -1827,13 +1821,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     model: SpeechModel
   ) {
     guard model.isQwenModel else { return }
-    let envelope: [Float]
-    switch capturedAudio {
-    case .inMemory(let samples):
-      envelope = AudioWaveformEnvelope.normalizedBars(from: samples)
-    case .sharedBuffer:
-      envelope = Array(repeating: 0.08, count: AudioWaveformEnvelope.displayBarCount)
-    }
+    let envelope = capturedAudio.waveformEnvelope()
     let estimatedRTF = estimatedTranscriptionRTF(for: model)
     appState.prepareTranscriptionProgressDisplay(
       envelope: envelope,
