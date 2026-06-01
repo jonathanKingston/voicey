@@ -22,6 +22,7 @@ protocol SettingsProviding: AnyObject {
   var transcriptionScreenContextOCREnabled: Bool { get set }
   var transcriptionLanguageID: String { get set }
   var enableDetailedLogging: Bool { get set }
+  var keepDictationHistoryLocally: Bool { get set }
 
   func configureLaunchAtLogin(enabled: Bool)
   func resetToDefaults()

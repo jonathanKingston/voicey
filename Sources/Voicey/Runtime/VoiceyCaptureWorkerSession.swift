@@ -1,4 +1,5 @@
 import Foundation
+import VoiceyCore
 
 /// Long-lived `voicey-capture` JSONL session.
 final class VoiceyCaptureWorkerSession: @unchecked Sendable {
@@ -115,6 +116,53 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     }
     let sampleRate = response["sample_rate"] as? Int ?? 16_000
     return PCMBufferHandle(shmName: shmName, sampleCount: sampleCount, sampleRate: sampleRate)
+  }
+
+  func archiveUtterance(
+    archiveRoot: URL,
+    audio: [String: Any],
+    metadata: [String: Any],
+    snapshot: UtteranceArchiveScreenSnapshot?,
+    maxEntries: Int = SessionArchiveStore.defaultMaxEntries
+  ) async throws {
+    var request: [String: Any] = [
+      "type": "archive_utterance",
+      "id": UUID().uuidString,
+      "archive_root": archiveRoot.path,
+      "max_entries": maxEntries,
+      "audio": audio,
+      "metadata": metadata
+    ]
+    if let snapshot {
+      request["snapshot"] = [
+        "query_text": snapshot.queryText,
+        "corpus_chunks": snapshot.corpusChunks
+      ]
+    }
+    let response = try await client().send(request: request, timeout: 120)
+    guard response["type"] as? String == "archive_result" else {
+      throw VoiceyCaptureWorkerError.invalidResponse
+    }
+    guard response["ok"] as? Bool == true else {
+      throw VoiceyCaptureWorkerError.failed(response["error"] as? String ?? "archive_utterance failed")
+    }
+  }
+
+  func deleteArchive(archiveRoot: URL) async throws {
+    let response = try await client().send(
+      request: [
+        "type": "delete_archive",
+        "id": UUID().uuidString,
+        "archive_root": archiveRoot.path
+      ],
+      timeout: 30
+    )
+    guard response["type"] as? String == "delete_archive_result" else {
+      throw VoiceyCaptureWorkerError.invalidResponse
+    }
+    guard response["ok"] as? Bool == true else {
+      throw VoiceyCaptureWorkerError.failed(response["error"] as? String ?? "delete_archive failed")
+    }
   }
 
   func prewarm() async throws {
