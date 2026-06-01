@@ -64,23 +64,23 @@ public final class ScreenContextCaptureGate: @unchecked Sendable {
     let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
     while DispatchTime.now().uptimeNanoseconds < deadline {
       if Task.isCancelled {
-        return lock.withLock {
-          guard sessionActive else { return .inactive }
-          return isReady ? .ready : .timeout
-        }
+        lock.lock()
+        defer { lock.unlock() }
+        guard sessionActive else { return .inactive }
+        return isReady ? .ready : .timeout
       }
 
-      let snapshot = lock.withLock { () -> (Bool, Bool) in
-        (sessionActive, isReady)
-      }
+      lock.lock()
+      let snapshot = (sessionActive, isReady)
+      lock.unlock()
       if !snapshot.0 { return .inactive }
       if snapshot.1 { return .ready }
       try? await Task.sleep(nanoseconds: Self.pollIntervalNanoseconds)
     }
 
-    return lock.withLock {
-      guard sessionActive else { return .inactive }
-      return isReady ? .ready : .timeout
-    }
+    lock.lock()
+    defer { lock.unlock() }
+    guard sessionActive else { return .inactive }
+    return isReady ? .ready : .timeout
   }
 }
