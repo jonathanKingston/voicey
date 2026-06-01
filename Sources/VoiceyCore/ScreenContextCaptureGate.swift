@@ -16,17 +16,24 @@ public final class ScreenContextCaptureGate: @unchecked Sendable {
   private static let pollIntervalNanoseconds: UInt64 = 10_000_000
 
   private let lock = NSLock()
+  private var sessionToken: UInt64 = 0
   private var sessionActive = false
   private var isReady = false
 
   public init() {}
 
   /// Begins a new capture session. Call when recording starts and screen context may run.
-  public func beginSession() {
+  ///
+  /// Returns a token that detached capture work must pass to `markReady(sessionToken:)`.
+  @discardableResult
+  public func beginSession() -> UInt64 {
     lock.lock()
     defer { lock.unlock() }
+    sessionToken &+= 1
+    let token = sessionToken
     sessionActive = true
     isReady = false
+    return token
   }
 
   /// Marks the session inactive without waiting (screen context disabled or blocked).
@@ -38,9 +45,10 @@ public final class ScreenContextCaptureGate: @unchecked Sendable {
   }
 
   /// Signals that capture finished (successfully or with an empty snapshot).
-  public func markReady() {
+  public func markReady(sessionToken: UInt64) {
     lock.lock()
     defer { lock.unlock() }
+    guard sessionActive, sessionToken == self.sessionToken else { return }
     isReady = true
   }
 

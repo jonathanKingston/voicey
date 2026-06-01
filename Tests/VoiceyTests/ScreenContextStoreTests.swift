@@ -37,4 +37,20 @@ final class ScreenContextStoreTests: XCTestCase {
     store.clear()
     XCTAssertNil(store.currentSnapshot())
   }
+
+  func testStaleCaptureCannotOverwriteNewSessionSnapshot() {
+    let staleToken = store.beginCaptureSession()
+    let currentToken = store.beginCaptureSession()
+
+    store.set(
+      ScreenContextSnapshot(queryText: "stale", corpusChunks: ["stale"]),
+      sessionToken: staleToken
+    )
+    store.set(
+      ScreenContextSnapshot(queryText: "current", corpusChunks: ["current"]),
+      sessionToken: currentToken
+    )
+
+    XCTAssertEqual(store.currentSnapshot()?.queryText, "current")
+  }
 }

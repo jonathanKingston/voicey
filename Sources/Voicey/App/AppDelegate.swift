@@ -1069,7 +1069,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startScreenContextCaptureIfNeeded() {
-    ScreenContextStore.shared.beginCaptureSession()
+    let captureSessionToken = ScreenContextStore.shared.beginCaptureSession()
 
     guard dependencies.settings.transcriptionScreenContextEnabled else {
       ScreenContextStore.shared.deactivateCaptureSession()
@@ -1087,7 +1087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     Task.detached(priority: .utility) {
-      defer { ScreenContextStore.shared.markCaptureComplete() }
+      defer { ScreenContextStore.shared.markCaptureComplete(sessionToken: captureSessionToken) }
       let windowImage = ScreenContextOCR.grabFrontWindowImageSync(targetPID: targetPID)
       let captured = ScreenContextCollector.captureWithExposure(targetPID: targetPID)
       var snapshot = captured.snapshot
@@ -1104,7 +1104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           "ScreenContext OCR enabled but Screen Recording permission is not granted")
       }
 
-      ScreenContextStore.shared.set(snapshot, exposure: captured.exposure)
+      ScreenContextStore.shared.set(
+        snapshot, exposure: captured.exposure, sessionToken: captureSessionToken)
     }
   }
 

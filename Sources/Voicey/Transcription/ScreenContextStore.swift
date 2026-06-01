@@ -9,17 +9,21 @@ final class ScreenContextStore: @unchecked Sendable {
   private let lock = NSLock()
   private var snapshot: ScreenContextSnapshot?
   private var exposure: ScreenContextExposureAssessment.Result?
+  private var captureSessionToken: UInt64 = 0
   private let captureGate = ScreenContextCaptureGate()
 
   private init() {}
 
   /// Clears stored context and starts a capture gate for the new recording.
-  func beginCaptureSession() {
+  @discardableResult
+  func beginCaptureSession() -> UInt64 {
     lock.lock()
     defer { lock.unlock() }
     snapshot = nil
     exposure = nil
-    captureGate.beginSession()
+    let token = captureGate.beginSession()
+    captureSessionToken = token
+    return token
   }
 
   /// Ends the capture gate without waiting (screen context disabled or prerequisites missing).
@@ -28,8 +32,8 @@ final class ScreenContextStore: @unchecked Sendable {
   }
 
   /// Signals that the detached capture task finished (or was skipped with an empty snapshot).
-  func markCaptureComplete() {
-    captureGate.markReady()
+  func markCaptureComplete(sessionToken: UInt64) {
+    captureGate.markReady(sessionToken: sessionToken)
   }
 
   /// Waits up to `ScreenContextCaptureGate.defaultWaitNanoseconds` when a capture session is active.
@@ -37,9 +41,14 @@ final class ScreenContextStore: @unchecked Sendable {
     await captureGate.waitForReady()
   }
 
-  func set(_ snapshot: ScreenContextSnapshot, exposure: ScreenContextExposureAssessment.Result? = nil) {
+  func set(
+    _ snapshot: ScreenContextSnapshot,
+    exposure: ScreenContextExposureAssessment.Result? = nil,
+    sessionToken: UInt64? = nil
+  ) {
     lock.lock()
     defer { lock.unlock() }
+    if let sessionToken, sessionToken != captureSessionToken { return }
     self.snapshot = snapshot
     self.exposure = exposure
   }
