@@ -226,7 +226,7 @@ final class QwenEngine: @unchecked Sendable {
 
     if transcribedText.isEmpty {
       AppLogger.transcription.warning(
-        "QwenEngine: Empty transcript after stripping steering echo / chunk merge"
+        "QwenEngine: Empty transcript after chunk merge"
       )
     }
 
@@ -252,6 +252,8 @@ final class QwenEngine: @unchecked Sendable {
     AppLogger.transcription.info(
       "QwenEngine: Transcribing \(String(format: "%.1f", audioDuration))s audio with maxTokens=\(maxTokens)"
     )
+    // Steering echo stripping happens later in the text post-process pipeline
+    // (`voicey-text`), so the raw model output is returned verbatim here (issue #162).
     let rawText = qwenModel.transcribe(
       audio: audioBuffer,
       sampleRate: 16000,
@@ -259,14 +261,7 @@ final class QwenEngine: @unchecked Sendable {
       maxTokens: maxTokens,
       context: decoderContext
     )
-    let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let stripped = TranscriptionGlossary.strippingEchoedDecoderContext(trimmed, decoderContext: decoderContext)
-    if stripped.isEmpty, !trimmed.isEmpty {
-      AppLogger.transcription.warning(
-        "QwenEngine: Model echoed decoder context instead of speech; treating segment as empty"
-      )
-    }
-    return stripped
+    return rawText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   func resetPerformanceTracking() {

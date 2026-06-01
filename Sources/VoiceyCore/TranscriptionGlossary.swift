@@ -36,48 +36,6 @@ public enum TranscriptionGlossary {
     return body
   }
 
-  /// Removes decoder steering text when the model echoes it instead of transcribing speech.
-  public static func strippingEchoedDecoderContext(_ text: String, decoderContext: String?) -> String {
-    guard let decoderContext else { return text }
-    let normalizedContext = decoderContext.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalizedContext.isEmpty else { return text }
-
-    var remainder = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !remainder.isEmpty else { return remainder }
-
-    var prefixes = [normalizedContext]
-    prefixes.append(contentsOf: TranscriptionDecoderContext.steeringFragmentsToStrip(from: normalizedContext))
-    var seen: Set<String> = []
-    let uniquePrefixes =
-      prefixes
-      .filter { prefix in
-        guard !prefix.isEmpty, !seen.contains(prefix) else { return false }
-        seen.insert(prefix)
-        return true
-      }
-      .sorted { $0.count > $1.count }
-
-    var changed = true
-    while changed {
-      changed = false
-      for prefix in uniquePrefixes {
-        if remainder == prefix {
-          return ""
-        }
-        if remainder.hasPrefix(prefix) {
-          remainder = String(remainder.dropFirst(prefix.count))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-          if remainder.hasPrefix(",") || remainder.hasPrefix(":") {
-            remainder = remainder.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
-          }
-          changed = true
-          break
-        }
-      }
-    }
-    return remainder
-  }
-
   /// Splits comma- or newline-separated glossary entries.
   public static func parseTerms(_ raw: String) -> [String] {
     raw.components(separatedBy: CharacterSet(charactersIn: ",\n"))
