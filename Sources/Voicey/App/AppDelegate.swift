@@ -1487,10 +1487,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await handleTranscriptionError(error)
         return
       }
-      debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
-      AppLogger.transcription.info(
-        "processHandsFreeIncrementalUtterance: Processed text: \"\(processedText)\" (length: \(processedText.count))"
-      )
+      if dependencies.settings.enableDetailedLogging {
+        debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
+        AppLogger.transcription.info(
+          "processHandsFreeIncrementalUtterance: Processed text: \(processedText, privacy: .private) (length: \(processedText.count))"
+        )
+      } else {
+        debugPrint(
+          "✨ Processed text (length=\(processedText.count))", category: "TRANSCRIBE")
+        AppLogger.transcription.info(
+          "processHandsFreeIncrementalUtterance: Processed text length=\(processedText.count)"
+        )
+      }
       let hasDeliverableText =
         processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
@@ -1571,7 +1579,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
+    if dependencies.settings.enableDetailedLogging {
+      debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
+    } else {
+      debugPrint(
+        "📋 Copying to clipboard (length=\(processedText.count))", category: "OUTPUT")
+    }
 
     var deliverText = processedText
     if appendTrailingSpaceForNextUtterance || handsFreeSeparateNextPasteWithSpace {
@@ -1673,8 +1686,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func handleTranscriptionResult(_ result: TranscriptionResult) async {
-    debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
-    AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
+    if dependencies.settings.enableDetailedLogging {
+      debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
+      AppLogger.transcription.info(
+        "processTranscription: Got raw result: \(result.text, privacy: .private)")
+    } else {
+      debugPrint("📝 Raw result (length=\(result.text.count))", category: "TRANSCRIBE")
+      AppLogger.transcription.info(
+        "processTranscription: Got raw result length=\(result.text.count)")
+    }
 
     // Post-process text (post-processor strips regurgitated steering vocabulary, issue #162)
     let processedText: String
@@ -1688,10 +1708,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       await handleTranscriptionError(error)
       return
     }
-    debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
-    AppLogger.transcription.info(
-      "processTranscription: Processed text: \"\(processedText)\" (length: \(processedText.count))"
-    )
+    if dependencies.settings.enableDetailedLogging {
+      debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
+      AppLogger.transcription.info(
+        "processTranscription: Processed text: \(processedText, privacy: .private) (length: \(processedText.count))"
+      )
+    } else {
+      debugPrint("✨ Processed text (length=\(processedText.count))", category: "TRANSCRIBE")
+      AppLogger.transcription.info(
+        "processTranscription: Processed text length=\(processedText.count)")
+    }
     let hasDeliverableText =
       processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
@@ -1720,7 +1746,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return
       }
 
-      debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
+      if self.dependencies.settings.enableDetailedLogging {
+        debugPrint("📋 Copying to clipboard: \"\(processedText)\"", category: "OUTPUT")
+      } else {
+        debugPrint(
+          "📋 Copying to clipboard (length=\(processedText.count))", category: "OUTPUT")
+      }
 
       outputManager?.deliver(text: processedText, targetPID: self.recordingTargetPID) { [weak self] in
         debugPrint("✅ Text copied to clipboard", category: "OUTPUT")
