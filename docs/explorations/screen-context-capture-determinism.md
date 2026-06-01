@@ -3,7 +3,7 @@
 ## Status
 
 Exploration merged ([#109](https://github.com/jonathanKingston/voicey/pull/109)). Implementation in
-draft [#150](https://github.com/jonathanKingston/voicey/pull/150) (`ScreenContextCaptureGate`).
+open PR [#150](https://github.com/jonathanKingston/voicey/pull/150) (`ScreenContextCaptureGate`), pending macOS QA sign-off.
 macOS manual validation: [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md) § PR #150 ([#145](https://github.com/jonathanKingston/voicey/issues/145) closed; checklist retained).
 
 ## Summary
