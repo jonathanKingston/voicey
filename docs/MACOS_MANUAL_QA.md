@@ -52,6 +52,14 @@ From [`screen-context-incremental-reuse.md`](explorations/screen-context-increme
 
 - [ ] Dictate a term visible in the active window **before and after** a pause within one recording; steering applies consistently on both chunks.
 
+## Issue #162 / PR #167 — steering-echo sanitizer
+
+Implemented on `main` (`75c8142`); sanitization runs in bundled `voicey-text` before paste.
+
+- [ ] **Hands-free beep/silence:** with glossary + screen context enabled, frontmost window with rich text; short beeps or near-silence through utterance end → **no pasted term soup** (empty or real speech only).
+- [ ] **Normal dictation:** say a sentence that incidentally mentions a biased screen term (e.g. “open Cursor”) → transcript **not** falsely cleared.
+- [ ] **Incremental partials:** live overlay partials may still show steering echoes briefly; **final paste** after post-process should be clean.
+
 ## Sign-off
 
 When all sections needed for the current merge are checked, comment on [#145](https://github.com/jonathanKingston/voicey/issues/145) with build/commit, scenarios run, and pass/fail. Close [#147](https://github.com/jonathanKingston/voicey/issues/147) after the cancel row above passes.
@@ -62,8 +70,8 @@ Paste this template on [#145](https://github.com/jonathanKingston/voicey/issues/
 ## macOS manual QA sign-off
 
 - **Commit / build:** `$(git rev-parse HEAD)` after `make build-rust && make dev-restart`
-- **PRs exercised:** #138 (capture streaming) / #150 (screen-context gate) / `main` only — delete unused rows
-- **Scenarios:** hotkey incremental partials; hands-free multi-utterance; Escape cancel (#147); screen-context wait logs (#150); model-change during record (if on `main`)
+- **PRs exercised:** #150 (screen-context gate) / #169 (#163 hands-free finish) / #167 (#162 steering sanitizer) / `main` only — delete unused rows
+- **Scenarios:** hotkey incremental partials; hands-free multi-utterance + back-to-back utterance 2 (#163); Escape cancel (#147); screen-context wait logs (#150); steering-echo beep repro (#167); model-change during record (if on `main`)
 - **Result:** pass | fail
 - **Notes:** (failures, env, residual trim behavior)
 ```

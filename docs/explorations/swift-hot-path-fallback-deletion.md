@@ -4,7 +4,7 @@
 
 Exploratory proposal. Tracking issue: [#152](https://github.com/jonathanKingston/voicey/issues/152) (parent [#70](https://github.com/jonathanKingston/voicey/issues/70)).
 
-**Blocked on:** merge of [#138](https://github.com/jonathanKingston/voicey/pull/138) and [#150](https://github.com/jonathanKingston/voicey/pull/150), plus macOS QA sign-off ([#145](https://github.com/jonathanKingston/voicey/issues/145)).
+**Blocked on:** merge of [#150](https://github.com/jonathanKingston/voicey/pull/150). [#138](https://github.com/jonathanKingston/voicey/pull/138) and [#145](https://github.com/jonathanKingston/voicey/issues/145) gates are cleared; text/post-process layer landed in [#167](https://github.com/jonathanKingston/voicey/pull/167).
 
 ## Summary
 
@@ -83,7 +83,7 @@ Decide explicitly whether `VOICEY_DISABLE_RUST_WORKERS=1` remains for local dev 
 - Bundled `make bundle-debug` happy path emits no Swift fallback logs for capture, fetch, or post-process.
 - Linux CI unchanged or stricter (`VoiceyCore` / Rust tests).
 - macOS spot-check: hotkey dictation, hands-free multi-utterance, model download (see [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md)).
-- Capture PR lands only after #138 merge and #145 sign-off for incremental streaming.
+- Capture PR lands only after #150 merge (incremental streaming validated on `main`; #145 closed).
 
 ## Validation plan
 
