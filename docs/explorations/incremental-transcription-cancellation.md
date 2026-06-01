@@ -18,7 +18,7 @@ each was met. The remaining open item on #147 is a manual macOS confirmation.
   `testCancelDuringActiveTranscriptionDiscardsInFlightWork` and
   `testCancelClearsQueuedChunksBehindInFlightTranscription`.
 - Still pending on #147: manual macOS check that pressing Escape during a long incremental
-  partial returns the overlay to idle with no late partial text.
+  partial returns the overlay to idle with no late partial text (see [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md)).
 
 ## Summary
 

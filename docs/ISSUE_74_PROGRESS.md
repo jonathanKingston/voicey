@@ -55,4 +55,13 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 
 ## Active implementation priority (May 2026)
 
-Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is complete on `main`. Highest-priority open code PR: [#138](https://github.com/jonathanKingston/voicey/pull/138) (`read_captured_samples` → incremental coordinator). Merge gate: macOS QA ([#145](https://github.com/jonathanKingston/voicey/issues/145)) on hotkey + hands-free incremental partials.
+Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is complete on `main`. Incremental cancel (#147) is implemented on `main` (`f56ea29`, PR #148); exploration reconciled in PR #111 — remaining work is macOS QA only (see [#147](https://github.com/jonathanKingston/voicey/issues/147)).
+
+**Open code PRs (do not duplicate):**
+
+| PR | Scope | Gate |
+|----|-------|------|
+| [#138](https://github.com/jonathanKingston/voicey/pull/138) | `read_captured_samples` → incremental coordinator | [#145](https://github.com/jonathanKingston/voicey/issues/145) macOS QA |
+| [#150](https://github.com/jonathanKingston/voicey/pull/150) | Screen-context capture gate before steering (#109) | macOS QA (can combine with #145) |
+
+Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
