@@ -128,10 +128,14 @@ sensed — exactly the optimistic-concurrency guard a multi-actor reconciler nee
 Validation is **two-tier, with an unreachable tier**:
 
 - **Reachable (authoritative for its scope):** Linux CI — Rust crates,
-  `VoiceyCore`, SwiftLint. The system can and must run these.
-- **Unreachable oracle:** macOS build + mic/TCC/overlay manual QA. The
-  reconciler can *never* close this gate itself; it can only mark
-  `blocked(owner = macOS)`.
+  `VoiceyCore`, SwiftLint — plus the macOS CI job (`build.yml` on `macos-15`),
+  which compiles the macOS target and runs the macOS unit suite. The system can
+  and must treat all of these as observable, automatically-closing gates.
+- **Unreachable oracle:** live **mic / TCC / overlay manual QA** on a real Mac.
+  This is the gate the reconciler can *never* close itself — it can only mark
+  `blocked(owner = macOS)`. The distinction matters: a green macOS CI build
+  proves the code *compiles and unit-tests* on macOS, but says nothing about
+  on-device capture, permissions, or window behaviour.
 
 Design implication: **a `ready` state must encode its evidence boundary.**
 "Ready for review with Linux-green; macOS QA pending" is a distinct state from
