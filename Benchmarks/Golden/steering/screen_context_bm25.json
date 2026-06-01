@@ -1,0 +1,15 @@
+{
+  "description": "Screen snapshot BM25 selection without manual glossary output terms",
+  "manual_glossary_enabled": false,
+  "manual_glossary": "Voicey",
+  "screen_context_enabled": true,
+  "snapshot": {
+    "query_text": "metformin dosage",
+    "corpus_chunks": [
+      "Patient metformin dosage increased",
+      "File Edit View Help"
+    ]
+  },
+  "expected_terms": ["dosage", "increased", "metformin", "Patient"],
+  "expected_decoder_context": "Glossary: Voicey, dosage, increased, metformin, Patient"
+}

@@ -1,15 +1,16 @@
+mod audio;
 mod ipc;
 mod recording;
 mod trim;
+mod wav;
 
+use audio::{resample_to_16k, TARGET_SAMPLE_RATE};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use recording::{live_input_level, LiveRecorder};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
-
-const TARGET_SAMPLE_RATE: f64 = 16_000.0;
 
 static LIVE_RECORDER: OnceLock<Mutex<LiveRecorder>> = OnceLock::new();
 
@@ -42,6 +43,7 @@ enum CaptureRequest {
         apply_trailing_trim: bool,
     },
     RecordFixture { id: String, duration_seconds: f64 },
+    LoadWavFile { id: String, path: String },
     Shutdown { id: String },
 }
 
@@ -60,6 +62,8 @@ enum CaptureResponse {
         shm_name: Option<String>,
         sample_count: Option<usize>,
         sample_rate: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        non_zero_sample_count: Option<usize>,
         error: Option<String>,
     },
     CaptureLevel {
@@ -133,22 +137,10 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
         }
         CaptureRequest::StopRecording { id, apply_trailing_trim } => {
             match stop_live_recording(apply_trailing_trim) {
-                Ok((shm_name, count)) => CaptureResponse::CaptureFixtureResult {
-                    id,
-                    ok: true,
-                    shm_name: Some(shm_name),
-                    sample_count: Some(count),
-                    sample_rate: Some(TARGET_SAMPLE_RATE as u32),
-                    error: None,
-                },
-                Err(message) => CaptureResponse::CaptureFixtureResult {
-                    id,
-                    ok: false,
-                    shm_name: None,
-                    sample_count: None,
-                    sample_rate: None,
-                    error: Some(message),
-                },
+                Ok((shm_name, count, non_zero)) => {
+                    capture_fixture_ok(id, shm_name, count, non_zero)
+                }
+                Err(message) => capture_fixture_err(id, message),
             }
         }
         CaptureRequest::GetLevel { id } => CaptureResponse::CaptureLevel {
@@ -166,64 +158,26 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
             .expect("recorder lock")
             .drain_utterance(start_sample_index, end_sample_index, apply_trailing_trim)
         {
-            Ok(samples) => match voicey_pcm::write_f32_samples(&samples) {
-                Ok(shm_name) => CaptureResponse::CaptureFixtureResult {
-                    id,
-                    ok: true,
-                    shm_name: Some(shm_name),
-                    sample_count: Some(samples.len()),
-                    sample_rate: Some(TARGET_SAMPLE_RATE as u32),
-                    error: None,
-                },
-                Err(error) => CaptureResponse::CaptureFixtureResult {
-                    id,
-                    ok: false,
-                    shm_name: None,
-                    sample_count: None,
-                    sample_rate: None,
-                    error: Some(error.to_string()),
-                },
+            Ok(samples) => match write_pcm_fixture(&samples) {
+                Ok((shm_name, count, non_zero)) => capture_fixture_ok(id, shm_name, count, non_zero),
+                Err(message) => capture_fixture_err(id, message),
             },
-            Err(message) => CaptureResponse::CaptureFixtureResult {
-                id,
-                ok: false,
-                shm_name: None,
-                sample_count: None,
-                sample_rate: None,
-                error: Some(message),
-            },
+            Err(message) => capture_fixture_err(id, message),
+        },
+        CaptureRequest::LoadWavFile { id, path } => match load_wav_file(&path) {
+            Ok((shm_name, count, non_zero)) => capture_fixture_ok(id, shm_name, count, non_zero),
+            Err(message) => capture_fixture_err(id, message),
         },
         CaptureRequest::RecordFixture {
             id,
             duration_seconds,
         } => {
             if duration_seconds <= 0.0 || duration_seconds > 30.0 {
-                return CaptureResponse::CaptureFixtureResult {
-                    id,
-                    ok: false,
-                    shm_name: None,
-                    sample_count: None,
-                    sample_rate: None,
-                    error: Some("duration out of range".into()),
-                };
+                return capture_fixture_err(id, "duration out of range".into());
             }
             match record_silence_fixture(duration_seconds) {
-                Ok((shm_name, count)) => CaptureResponse::CaptureFixtureResult {
-                    id,
-                    ok: true,
-                    shm_name: Some(shm_name),
-                    sample_count: Some(count),
-                    sample_rate: Some(TARGET_SAMPLE_RATE as u32),
-                    error: None,
-                },
-                Err(error) => CaptureResponse::CaptureFixtureResult {
-                    id,
-                    ok: false,
-                    shm_name: None,
-                    sample_count: None,
-                    sample_rate: None,
-                    error: Some(error.to_string()),
-                },
+                Ok((shm_name, count, non_zero)) => capture_fixture_ok(id, shm_name, count, non_zero),
+                Err(error) => capture_fixture_err(id, error.to_string()),
             }
         }
         CaptureRequest::Shutdown { id } => CaptureResponse::Pong { id },
@@ -234,12 +188,64 @@ fn default_apply_trailing_trim() -> bool {
     true
 }
 
-fn stop_live_recording(apply_trailing_trim: bool) -> Result<(String, usize), String> {
+const NON_ZERO_SAMPLE_THRESHOLD: f32 = 0.0001;
+
+fn non_zero_sample_count(samples: &[f32]) -> usize {
+    samples
+        .iter()
+        .filter(|sample| sample.abs() > NON_ZERO_SAMPLE_THRESHOLD)
+        .count()
+}
+
+fn write_pcm_fixture(samples: &[f32]) -> Result<(String, usize, usize), String> {
+    let non_zero = non_zero_sample_count(samples);
+    let shm_name = voicey_pcm::write_f32_samples(samples).map_err(|error| error.to_string())?;
+    Ok((shm_name, samples.len(), non_zero))
+}
+
+fn capture_fixture_ok(
+    id: String,
+    shm_name: String,
+    sample_count: usize,
+    non_zero_sample_count: usize,
+) -> CaptureResponse {
+    CaptureResponse::CaptureFixtureResult {
+        id,
+        ok: true,
+        shm_name: Some(shm_name),
+        sample_count: Some(sample_count),
+        sample_rate: Some(TARGET_SAMPLE_RATE as u32),
+        non_zero_sample_count: Some(non_zero_sample_count),
+        error: None,
+    }
+}
+
+fn capture_fixture_err(id: String, message: String) -> CaptureResponse {
+    CaptureResponse::CaptureFixtureResult {
+        id,
+        ok: false,
+        shm_name: None,
+        sample_count: None,
+        sample_rate: None,
+        non_zero_sample_count: None,
+        error: Some(message),
+    }
+}
+
+fn load_wav_file(path: &str) -> Result<(String, usize, usize), String> {
+    let path = std::path::Path::new(path);
+    if !path.is_file() {
+        return Err(format!("audio file does not exist: {}", path.display()));
+    }
+    let samples = wav::load_wav_to_16k_mono_f32(path).map_err(|error| error.to_string())?;
+    write_pcm_fixture(&samples)
+}
+
+fn stop_live_recording(apply_trailing_trim: bool) -> Result<(String, usize, usize), String> {
     let mut recorder = live_recorder().lock().expect("recorder lock");
     let samples = recorder.stop()?;
     let trimmed = trim::maybe_trim_trailing_low_energy(&samples, apply_trailing_trim);
-    let shm_name = voicey_pcm::write_f32_samples(&trimmed).map_err(|error| error.to_string())?;
-    Ok((shm_name, trimmed.len()))
+    write_pcm_fixture(&trimmed)
 }
 
 fn prewarm_device() -> std::io::Result<()> {
@@ -251,7 +257,7 @@ fn prewarm_device() -> std::io::Result<()> {
 }
 
 /// Records mono f32 PCM at 16 kHz (synthetic silence when input unavailable in CI).
-fn record_silence_fixture(duration_seconds: f64) -> std::io::Result<(String, usize)> {
+fn record_silence_fixture(duration_seconds: f64) -> std::io::Result<(String, usize, usize)> {
     let sample_count = (duration_seconds * TARGET_SAMPLE_RATE).round() as usize;
     let mut samples = vec![0.0_f32; sample_count];
 
@@ -267,8 +273,9 @@ fn record_silence_fixture(duration_seconds: f64) -> std::io::Result<(String, usi
         }
     }
 
+    let non_zero = non_zero_sample_count(&samples);
     let shm_name = voicey_pcm::write_f32_samples(&samples)?;
-    Ok((shm_name, samples.len()))
+    Ok((shm_name, samples.len(), non_zero))
 }
 
 fn capture_live_samples(duration_seconds: f64) -> std::io::Result<Vec<f32>> {
@@ -311,24 +318,4 @@ fn capture_live_samples(duration_seconds: f64) -> std::io::Result<Vec<f32>> {
 
     let raw = buffer.lock().expect("lock").clone();
     resample_to_16k(raw, sample_rate)
-}
-
-fn resample_to_16k(input: Vec<f32>, input_rate: f64) -> std::io::Result<Vec<f32>> {
-    if input.is_empty() {
-        return Ok(input);
-    }
-    if (input_rate - TARGET_SAMPLE_RATE).abs() < 1.0 {
-        return Ok(input);
-    }
-    let output_len = ((input.len() as f64) * TARGET_SAMPLE_RATE / input_rate).ceil() as usize;
-    let mut output = Vec::with_capacity(output_len);
-    for index in 0..output_len {
-        let src_index = (index as f64 * input_rate / TARGET_SAMPLE_RATE) as usize;
-        let sample = input
-            .get(src_index.min(input.len() - 1))
-            .copied()
-            .unwrap_or(0.0);
-        output.push(sample);
-    }
-    Ok(output)
 }

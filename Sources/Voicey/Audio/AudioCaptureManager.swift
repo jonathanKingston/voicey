@@ -55,7 +55,7 @@ final class AudioCaptureManager {
     handsFreeConfiguration.waitTimeoutDuration
   }
 
-  func startCapture(mode: RecordingMode = .manual) {
+  func startCapture(mode: RecordingMode = .manual) throws {
     prepareForCapture(mode: mode)
 
     if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
@@ -68,7 +68,7 @@ final class AudioCaptureManager {
       } catch {
         AppLogger.audio.error("voicey-capture start failed: \(error.localizedDescription)")
         resetCaptureState()
-        return
+        throw error
       }
       levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
         guard let self else { return }
@@ -141,16 +141,18 @@ final class AudioCaptureManager {
   }
 
   /// Ends the current hands-free utterance without stopping capture (continuous session).
-  func finalizeHandsFreeUtterance(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
+  func finalizeHandsFreeUtterance(applyTrailingTrimHeuristic: Bool = true) throws -> CapturedAudio? {
     guard recordingMode == .handsFree else { return nil }
-    return finalizeHandsFreeUtteranceAfterEnsuringBounds(applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+    return try finalizeHandsFreeUtteranceAfterEnsuringBounds(
+      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
   }
 
   /// Finalizes the open utterance when exiting hands-free (hotkey / cancel), including mid-phrase capture.
-  func finalizeHandsFreeUtteranceForSessionEnd(applyTrailingTrimHeuristic: Bool = true) -> [Float]? {
+  func finalizeHandsFreeUtteranceForSessionEnd(applyTrailingTrimHeuristic: Bool = true) throws -> CapturedAudio? {
     guard recordingMode == .handsFree else { return nil }
     closeOpenHandsFreeUtteranceIfNeeded()
-    return finalizeHandsFreeUtteranceAfterEnsuringBounds(applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+    return try finalizeHandsFreeUtteranceAfterEnsuringBounds(
+      applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
   }
 
   func recoverHandsFreeDetectorForNextUtterance() {
@@ -165,7 +167,7 @@ final class AudioCaptureManager {
 
   private func finalizeHandsFreeUtteranceAfterEnsuringBounds(
     applyTrailingTrimHeuristic: Bool
-  ) -> [Float]? {
+  ) throws -> CapturedAudio? {
     guard let detector = handsFreeDetector else { return nil }
     guard let startIndex = detector.speechStartSampleIndex,
       let endIndex = detector.speechEndSampleIndex
@@ -177,7 +179,7 @@ final class AudioCaptureManager {
 
     if usesRustCaptureWorker {
       do {
-        let samples = try runSynchronously {
+        let handle = try runSynchronously {
           try await VoiceyCaptureWorkerSession.shared.drainHandsFreeUtterance(
             startSampleIndex: startIndex,
             endSampleIndex: endIndex,
@@ -192,11 +194,15 @@ final class AudioCaptureManager {
           detector.prepareForNextUtterance(sampleBaseline: remainingSamples)
           self.handsFreeDetector = detector
         }
-        return samples
+        if handle.sampleCount == 0 {
+          handle.remove()
+          return .inMemory([])
+        }
+        return .sharedBuffer(handle)
       } catch {
         AppLogger.audio.error("voicey-capture utterance drain failed: \(error.localizedDescription)")
         recoverHandsFreeDetectorForNextUtterance()
-        return nil
+        throw error
       }
     }
 
@@ -216,7 +222,7 @@ final class AudioCaptureManager {
       self.handsFreeDetector = detector
       utterance = segment
     }
-    return utterance
+    return utterance.map { .inMemory($0) }
   }
 
   private func closeOpenHandsFreeUtteranceIfNeeded() {
@@ -241,7 +247,7 @@ final class AudioCaptureManager {
     return bufferQueue.sync { audioBuffer.count }
   }
 
-  func stopCapture(applyTrailingTrimHeuristic: Bool = true) -> CapturedAudio? {
+  func stopCapture(applyTrailingTrimHeuristic: Bool = true) throws -> CapturedAudio? {
     defer { resetCaptureState() }
 
     if usesRustCaptureWorker {
@@ -279,7 +285,7 @@ final class AudioCaptureManager {
         return .sharedBuffer(handle)
       } catch {
         AppLogger.audio.error("voicey-capture stop failed: \(error.localizedDescription)")
-        return nil
+        throw error
       }
     }
 

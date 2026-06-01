@@ -51,6 +51,39 @@ final class VoiceyTextWorkerSession: @unchecked Sendable {
     return processedText
   }
 
+  func buildSteeringContext(
+    manualGlossaryEnabled: Bool,
+    manualGlossary: String,
+    screenContextEnabled: Bool,
+    snapshot: ScreenContextSnapshot?,
+    maxTerms: Int = ScreenTermSelector.defaultMaxTerms
+  ) async throws -> (decoderContext: String?, terms: [String]) {
+    var request: [String: Any] = [
+      "type": "build_steering_context",
+      "id": UUID().uuidString,
+      "manual_glossary_enabled": manualGlossaryEnabled,
+      "manual_glossary": manualGlossary,
+      "screen_context_enabled": screenContextEnabled,
+      "max_terms": maxTerms
+    ]
+    if let snapshot {
+      request["snapshot"] = [
+        "query_text": snapshot.queryText,
+        "corpus_chunks": snapshot.corpusChunks
+      ]
+    }
+
+    let response = try await client().send(request: request)
+    try VoiceyJSONLResponse.ensureSuccess(response, context: "build_steering_context")
+
+    guard (response["ok"] as? Bool) == true else {
+      throw VoiceyTextWorkerError.invalidResponse
+    }
+    let terms = response["terms"] as? [String] ?? []
+    let decoderContext = response["decoder_context"] as? String
+    return (decoderContext, terms)
+  }
+
   func stop() {
     process?.stop()
     process = nil
