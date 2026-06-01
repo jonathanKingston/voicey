@@ -66,6 +66,6 @@ Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is comp
 
 Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
-**What the #145 docs merge changed:** agents and contributors now have a single macOS QA doc (replacing scattered checklist notes). That **unblocks manual QA sign-off** on #138/#150; it does **not** replace those PRs or allow Cloud Agent to validate mic/TCC/overlay behavior.
+**What the #145 / #153 / #154 docs merges changed:** agents and contributors now have a single macOS QA doc ([`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md)); exploration docs link there instead of duplicating bullets (#154). That **unblocks manual QA sign-off** on #138/#150; it does **not** replace those PRs or allow Cloud Agent to validate mic/TCC/overlay behavior.
 
 **Next implementation tranche (after #138/#150 merge + #145 sign-off):** [#152](https://github.com/jonathanKingston/voicey/issues/152) (Phase 2+ fallback deletion; parent [#70](https://github.com/jonathanKingston/voicey/issues/70)).
