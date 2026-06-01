@@ -1087,6 +1087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     Task.detached(priority: .utility) {
+      defer { ScreenContextStore.shared.markCaptureComplete() }
       let windowImage = ScreenContextOCR.grabFrontWindowImageSync(targetPID: targetPID)
       let captured = ScreenContextCollector.captureWithExposure(targetPID: targetPID)
       var snapshot = captured.snapshot
@@ -1104,7 +1105,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
 
       ScreenContextStore.shared.set(snapshot, exposure: captured.exposure)
-      ScreenContextStore.shared.markCaptureComplete()
     }
   }
 
