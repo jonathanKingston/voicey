@@ -141,6 +141,25 @@
 "transcription.screenContextOCRPermission" = "Screen Recording permission is required for OCR.";
 "transcription.openScreenCaptureSettings" = "Open Screen Recording Settings";
 
+/* Dictation history (local archive) */
+"dictationHistory.sectionTitle" = "Dictation history";
+"dictationHistory.enableToggle" = "Keep dictation history locally";
+"dictationHistory.enableDescription" = "Stores each recording and transcription on this Mac so you can review failures later. Audio and optional screen-context snapshots may contain sensitive information.";
+"dictationHistory.empty" = "No recordings yet. Dictate with this enabled to build history.";
+"dictationHistory.deleteAll" = "Delete all history";
+"dictationHistory.revealInFinder" = "Reveal in Finder";
+"dictationHistory.deleteFailed" = "Could not delete history";
+"dictationHistory.play" = "Play";
+"dictationHistory.stop" = "Stop";
+"dictationHistory.errorLabel" = "Error";
+"dictationHistory.processedText" = "Processed";
+"dictationHistory.rawText" = "Raw";
+"dictationHistory.partialText" = "Partial (streaming)";
+"dictationHistory.outcomeCompleted" = "OK";
+"dictationHistory.outcomeEmpty" = "Empty";
+"dictationHistory.outcomeError" = "Error";
+"dictationHistory.durationSeconds" = "%@ s";
+
 /* Voice Commands */
 "voiceCommands.enable" = "Enable Voice Commands";
 "voiceCommands.description" = "When enabled, specific phrases will trigger actions instead of being transcribed as text.";

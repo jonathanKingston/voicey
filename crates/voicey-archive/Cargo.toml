@@ -1,24 +1,22 @@
 [package]
-name = "voicey-capture"
+name = "voicey-archive"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
-name = "voicey-capture"
+name = "voicey-archive"
 path = "src/main.rs"
 
 [dependencies]
-voicey-protocol = { path = "../voicey-protocol" }
 voicey-pcm = { path = "../voicey-pcm" }
-voicey-archive = { path = "../voicey-archive" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-cpal = "0.15"
 hound = "3.5"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
-hound = "3.5"
 tempfile = "3"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
