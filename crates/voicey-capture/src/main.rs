@@ -165,11 +165,11 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
         } => {
             let recorder = live_recorder().lock().expect("recorder lock");
             match recorder.read_samples_since(start_sample_index) {
-                Ok(samples) => CaptureResponse::CaptureSamplesRead {
+                Ok((samples, sample_count)) => CaptureResponse::CaptureSamplesRead {
                     id,
                     ok: true,
                     samples: Some(samples),
-                    sample_count: Some(recorder.sample_count()),
+                    sample_count: Some(sample_count),
                     error: None,
                 },
                 Err(message) => CaptureResponse::CaptureSamplesRead {

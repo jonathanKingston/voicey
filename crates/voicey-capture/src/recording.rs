@@ -76,14 +76,23 @@ impl LiveRecorder {
     }
 
     /// Copies samples `[start_sample_index..len]` without mutating the live buffer.
-    pub fn read_samples_since(&self, start_sample_index: usize) -> Result<Vec<f32>, String> {
+    ///
+    /// Returns the suffix together with the buffer length observed under the *same* lock
+    /// acquisition. Callers advance their read cursor to that length, so it must reflect
+    /// exactly the samples returned — re-reading `sample_count()` separately would let the
+    /// capture thread append between the two locks and silently skip `[old_len..new_len)`.
+    pub fn read_samples_since(
+        &self,
+        start_sample_index: usize,
+    ) -> Result<(Vec<f32>, usize), String> {
         let handle = self
             .handle
             .as_ref()
             .ok_or_else(|| "capture not recording".to_string())?;
         let guard = handle.samples.lock().expect("lock");
-        let start = start_sample_index.min(guard.len());
-        Ok(guard[start..].to_vec())
+        let len = guard.len();
+        let start = start_sample_index.min(len);
+        Ok((guard[start..].to_vec(), len))
     }
 
     pub fn drain_utterance(
@@ -248,9 +257,23 @@ mod tests {
     fn read_samples_since_returns_suffix_without_draining() {
         let mut recorder = LiveRecorder::new();
         recorder.start_with_buffered_samples_for_test(vec![1.0, 2.0, 3.0, 4.0]);
-        let read = recorder.read_samples_since(1).expect("read");
-        assert_eq!(read, vec![2.0, 3.0, 4.0]);
+        let (samples, len) = recorder.read_samples_since(1).expect("read");
+        assert_eq!(samples, vec![2.0, 3.0, 4.0]);
+        assert_eq!(len, 4);
         assert_eq!(recorder.sample_count(), 4);
+        let _ = recorder.stop();
+    }
+
+    #[test]
+    fn read_samples_since_reports_consumed_index_consistent_with_slice() {
+        // The reported length must equal `start + samples.len()` so the host cursor never
+        // advances past samples that were not returned (the silent-drop failure mode).
+        let mut recorder = LiveRecorder::new();
+        recorder.start_with_buffered_samples_for_test(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        for start in 0..=6 {
+            let (samples, len) = recorder.read_samples_since(start).expect("read");
+            assert_eq!(len, start.min(5) + samples.len());
+        }
         let _ = recorder.stop();
     }
 
