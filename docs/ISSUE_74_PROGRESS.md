@@ -62,7 +62,7 @@ Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is comp
 
 | PR | Scope | Gate |
 |----|-------|------|
-| [#138](https://github.com/jonathanKingston/voicey/pull/138) | `read_captured_samples` → incremental coordinator | [#145](https://github.com/jonathanKingston/voicey/issues/145) macOS QA |
+| [#138](https://github.com/jonathanKingston/voicey/pull/138) | `read_captured_samples` → incremental coordinator | Merged; macOS QA [#145](https://github.com/jonathanKingston/voicey/issues/145) |
 | [#150](https://github.com/jonathanKingston/voicey/pull/150) | Screen-context capture gate before steering (#109) | macOS QA (can combine with #145) |
 
 Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
