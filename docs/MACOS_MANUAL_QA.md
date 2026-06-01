@@ -55,3 +55,15 @@ From [`screen-context-incremental-reuse.md`](explorations/screen-context-increme
 ## Sign-off
 
 When all sections needed for the current merge are checked, comment on [#145](https://github.com/jonathanKingston/voicey/issues/145) with build/commit, scenarios run, and pass/fail. Close [#147](https://github.com/jonathanKingston/voicey/issues/147) after the cancel row above passes.
+
+Paste this template on [#145](https://github.com/jonathanKingston/voicey/issues/145) (edit sections and checkboxes as needed):
+
+```markdown
+## macOS manual QA sign-off
+
+- **Commit / build:** `$(git rev-parse HEAD)` after `make build-rust && make dev-restart`
+- **PRs exercised:** #138 (capture streaming) / #150 (screen-context gate) / `main` only — delete unused rows
+- **Scenarios:** hotkey incremental partials; hands-free multi-utterance; Escape cancel (#147); screen-context wait logs (#150); model-change during record (if on `main`)
+- **Result:** pass | fail
+- **Notes:** (failures, env, residual trim behavior)
+```
