@@ -67,7 +67,9 @@ bundled Rust workers: [`CHANGELOG.md`](../CHANGELOG.md) /
   Metal, CoreML, MLX, and optional Sparkle for direct builds.
 - CI: macOS build, Linux `VoiceyCore` tests, Rust workspace tests (toolchain pinned in
   [`rust-toolchain.toml`](../rust-toolchain.toml)), strict SwiftLint in
-  [`.github/workflows/`](../.github/workflows/).
+  [`.github/workflows/`](../.github/workflows/). Benchmark harnesses default to the
+  Rust multiprocess stack ([#105](https://github.com/jonathanKingston/voicey/pull/105));
+  see the **Linux CI vs macOS** allowlist in [`RUST_RUNTIME.md`](RUST_RUNTIME.md).
 
 ## Performance and quality guardrails
 

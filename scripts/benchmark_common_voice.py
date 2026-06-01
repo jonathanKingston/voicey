@@ -949,6 +949,13 @@ def run_voicey_batch(
   return predictions
 
 
+def voicey_transcribe_cli_flags(model: str) -> str:
+  """Multiprocess + voicey-text post-process apply to Qwen benchmark CLIs only."""
+  if model.startswith("qwen3-asr"):
+    return "--runtime multiprocess --post-process "
+  return ""
+
+
 def voicey_runners(models: Sequence[str], binary: Path) -> list[Runner]:
   if not models:
     return []
@@ -958,6 +965,7 @@ def voicey_runners(models: Sequence[str], binary: Path) -> list[Runner]:
       name=model,
       command_template=(
         f"{binary_command} benchmark-transcribe --model {shlex.quote(model)} "
+        f"{voicey_transcribe_cli_flags(model)}"
         f"--audio {MODEL_COMMAND_PLACEHOLDER}"
       ),
     )

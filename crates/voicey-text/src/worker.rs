@@ -1,6 +1,8 @@
 //! JSONL worker loop for the `voicey-text` binary.
 
 use crate::postprocess::{self, PostProcessInput, TranscriptionSegment};
+use crate::snapshot::ScreenContextSnapshot;
+use crate::steering::{self, BuildSteeringContextInput};
 use crate::voice_command::VoiceCommand;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
@@ -17,6 +19,17 @@ pub enum TextRequest {
         voice_commands: Vec<VoiceCommand>,
         #[serde(default)]
         segments: Vec<WireSegment>,
+    },
+    BuildSteeringContext {
+        id: String,
+        manual_glossary_enabled: bool,
+        #[serde(default)]
+        manual_glossary: String,
+        screen_context_enabled: bool,
+        #[serde(default)]
+        snapshot: Option<ScreenContextSnapshot>,
+        #[serde(default)]
+        max_terms: Option<usize>,
     },
     Shutdown { id: String },
 }
@@ -36,6 +49,13 @@ pub enum TextResponse {
         id: String,
         ok: bool,
         text: Option<String>,
+        error: Option<String>,
+    },
+    SteeringContextResult {
+        id: String,
+        ok: bool,
+        decoder_context: Option<String>,
+        terms: Vec<String>,
         error: Option<String>,
     },
     Error { id: String, message: String },
@@ -113,6 +133,33 @@ fn handle_line(line: &str) -> (TextResponse, bool) {
                 false,
             )
         }
+        TextRequest::BuildSteeringContext {
+            id,
+            manual_glossary_enabled,
+            manual_glossary,
+            screen_context_enabled,
+            snapshot,
+            max_terms,
+        } => {
+            let max_terms = max_terms.unwrap_or(crate::screen_term_selector::DEFAULT_MAX_TERMS);
+            let output = steering::build_steering_context(&BuildSteeringContextInput {
+                manual_glossary_enabled,
+                manual_glossary: &manual_glossary,
+                screen_context_enabled,
+                snapshot: snapshot.as_ref(),
+                max_terms,
+            });
+            (
+                TextResponse::SteeringContextResult {
+                    id,
+                    ok: true,
+                    decoder_context: output.decoder_context,
+                    terms: output.terms,
+                    error: None,
+                },
+                false,
+            )
+        }
         TextRequest::Shutdown { id } => (
             TextResponse::PostprocessResult {
                 id,
@@ -152,6 +199,34 @@ mod tests {
             TextResponse::PostprocessResult { ok, text, .. } => {
                 assert!(ok);
                 assert_eq!(text.as_deref(), Some("hello world"));
+            }
+            other => panic!("unexpected response: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_steering_context_manual_glossary() {
+        let request = r#"{"type":"build_steering_context","id":"3","manual_glossary_enabled":true,"manual_glossary":"Cursor","screen_context_enabled":false}"#;
+        let input = Cursor::new(format!("{request}\n"));
+        let mut output = Vec::new();
+        run_jsonl_loop(input, &mut output).expect("jsonl loop");
+        let response: TextResponse =
+            serde_json::from_str(std::str::from_utf8(&output).unwrap().trim()).unwrap();
+        match response {
+            TextResponse::SteeringContextResult {
+                ok,
+                decoder_context,
+                terms,
+                ..
+            } => {
+                assert!(ok);
+                assert_eq!(terms, vec!["Cursor".to_string()]);
+                assert!(
+                    decoder_context
+                        .as_deref()
+                        .unwrap_or("")
+                        .contains("Cursor")
+                );
             }
             other => panic!("unexpected response: {other:?}"),
         }

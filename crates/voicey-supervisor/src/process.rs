@@ -1,10 +1,37 @@
 use serde::Deserialize;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
+use std::time::Duration;
 use voicey_protocol::{
     hugging_face_repo_id, qwen_weight_list_patterns, InferWorkerRequest, InferWorkerResponse,
     FETCH_STAGING_CONTAINER_PREFIX, FETCH_STAGING_DIRECTORY_NAME,
 };
+
+const DEFAULT_WORKER_TIMEOUT: Duration = Duration::from_secs(120);
+const LOAD_MODEL_TIMEOUT: Duration = Duration::from_secs(600);
+const FETCH_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(7200);
+
+enum WorkerReadError {
+    Timeout,
+    Io(String),
+}
+
+fn worker_request_timeout(default: Duration) -> Duration {
+    match std::env::var("VOICEY_WORKER_REQUEST_TIMEOUT_MS") {
+        Ok(raw) => raw
+            .trim()
+            .parse::<u64>()
+            .map(Duration::from_millis)
+            .unwrap_or(default),
+        Err(_) => default,
+    }
+}
+
+fn transcribe_timeout(sample_count: usize, sample_rate: u32) -> Duration {
+    let audio_seconds = sample_count as f64 / f64::from(sample_rate.max(1));
+    let seconds = (audio_seconds * 4.0 + 60.0).clamp(120.0, 3600.0);
+    worker_request_timeout(Duration::from_secs_f64(seconds))
+}
 
 pub struct WorkerProcesses {
     infer: Option<ManagedWorker>,
@@ -56,13 +83,14 @@ impl WorkerProcesses {
     }
 
     pub fn infer_load_model(&mut self, model_id: &str) -> Result<(), String> {
-        let worker = self.ensure_infer()?;
+        self.ensure_infer()?;
         let response = write_infer(
-            worker,
+            &mut self.infer,
             InferWorkerRequest::LoadModel {
                 id: new_id(),
                 model_id: model_id.to_string(),
             },
+            worker_request_timeout(LOAD_MODEL_TIMEOUT),
         )?;
         match response {
             InferWorkerResponse::InferReady { .. } | InferWorkerResponse::Ready { .. } => Ok(()),
@@ -72,8 +100,12 @@ impl WorkerProcesses {
     }
 
     pub fn infer_unload(&mut self) -> Result<(), String> {
-        let worker = self.ensure_infer()?;
-        let _ = write_infer(worker, InferWorkerRequest::UnloadModel { id: new_id() })?;
+        self.ensure_infer()?;
+        let _ = write_infer(
+            &mut self.infer,
+            InferWorkerRequest::UnloadModel { id: new_id() },
+            worker_request_timeout(DEFAULT_WORKER_TIMEOUT),
+        )?;
         Ok(())
     }
 
@@ -86,9 +118,10 @@ impl WorkerProcesses {
         sample_offset: usize,
         decoder_context: Option<&str>,
     ) -> Result<TranscribeResult, String> {
-        let worker = self.ensure_infer()?;
+        self.ensure_infer()?;
+        let timeout = transcribe_timeout(sample_count, sample_rate);
         let response = write_infer(
-            worker,
+            &mut self.infer,
             InferWorkerRequest::Transcribe {
                 id: new_id(),
                 model_id: model_id.to_string(),
@@ -98,14 +131,19 @@ impl WorkerProcesses {
                 sample_offset,
                 decoder_context: decoder_context.map(str::to_string),
             },
+            timeout,
         )?;
         transcribe_result_from_infer_response(response)
     }
 
     pub fn capture_prewarm(&mut self) -> Result<(), String> {
-        let worker = self.ensure_capture()?;
+        self.ensure_capture()?;
         let line = serde_json::json!({"type":"prewarm","id":new_id()}).to_string();
-        let response = write_capture_line(worker, &line)?;
+        let response = write_capture_line(
+            &mut self.capture,
+            &line,
+            worker_request_timeout(DEFAULT_WORKER_TIMEOUT),
+        )?;
         if response.kind == "capture_ready" {
             Ok(())
         } else {
@@ -119,14 +157,18 @@ impl WorkerProcesses {
         &mut self,
         duration_seconds: f64,
     ) -> Result<(String, usize, u32), String> {
-        let worker = self.ensure_capture()?;
+        self.ensure_capture()?;
         let line = serde_json::json!({
             "type":"record_fixture",
             "id": new_id(),
             "duration_seconds": duration_seconds
         })
         .to_string();
-        let response: CaptureFixtureResponse = write_capture_json(worker, &line)?;
+        let response: CaptureFixtureResponse = write_capture_json(
+            &mut self.capture,
+            &line,
+            worker_request_timeout(DEFAULT_WORKER_TIMEOUT),
+        )?;
         capture_fixture_from_response(response)
     }
 
@@ -189,7 +231,7 @@ impl WorkerProcesses {
         hf_model_id: &str,
         patterns: &[String],
     ) -> Result<Vec<String>, String> {
-        let worker = self.ensure_fetch()?;
+        self.ensure_fetch()?;
         let payload = serde_json::json!({
             "type": "list_model_files",
             "id": new_id(),
@@ -197,8 +239,11 @@ impl WorkerProcesses {
             "revision": "main",
             "patterns": patterns,
         });
-        let response: FetchListFilesResponse =
-            write_fetch_json(worker, &payload.to_string())?;
+        let response: FetchListFilesResponse = write_fetch_json(
+            &mut self.fetch,
+            &payload.to_string(),
+            worker_request_timeout(DEFAULT_WORKER_TIMEOUT),
+        )?;
         match response.kind.as_str() {
             "listed_model_files" => response
                 .files
@@ -209,34 +254,28 @@ impl WorkerProcesses {
         }
     }
 
-    fn ensure_infer(&mut self) -> Result<&mut ManagedWorker, String> {
+    fn ensure_infer(&mut self) -> Result<(), String> {
         if self.infer.is_none() {
             let path = env_path("VOICEY_INFER_WORKER")?;
             self.infer = Some(spawn_worker(&path, &["infer-worker"])?);
         }
-        self.infer
-            .as_mut()
-            .ok_or_else(|| "infer worker missing".to_string())
+        Ok(())
     }
 
-    fn ensure_capture(&mut self) -> Result<&mut ManagedWorker, String> {
+    fn ensure_capture(&mut self) -> Result<(), String> {
         if self.capture.is_none() {
             let path = env_path("VOICEY_CAPTURE_WORKER")?;
             self.capture = Some(spawn_worker(&path, &[])?);
         }
-        self.capture
-            .as_mut()
-            .ok_or_else(|| "capture worker missing".to_string())
+        Ok(())
     }
 
-    fn ensure_fetch(&mut self) -> Result<&mut ManagedWorker, String> {
+    fn ensure_fetch(&mut self) -> Result<(), String> {
         if self.fetch.is_none() {
             let path = env_path("VOICEY_FETCH_WORKER")?;
             self.fetch = Some(spawn_worker(&path, &[])?);
         }
-        self.fetch
-            .as_mut()
-            .ok_or_else(|| "fetch worker missing".to_string())
+        Ok(())
     }
 }
 
@@ -265,7 +304,7 @@ impl WorkerProcesses {
         model_root: &str,
         expected_sha256: Option<&str>,
     ) -> Result<(), String> {
-        let worker = self.ensure_fetch()?;
+        self.ensure_fetch()?;
         let mut payload = serde_json::json!({
             "type": "download_model_file",
             "id": new_id(),
@@ -276,7 +315,11 @@ impl WorkerProcesses {
         if let Some(hash) = expected_sha256 {
             payload["expected_sha256"] = serde_json::Value::String(hash.to_string());
         }
-        let response: FetchLineResponse = write_fetch_json(worker, &payload.to_string())?;
+        let response: FetchLineResponse = write_fetch_json(
+            &mut self.fetch,
+            &payload.to_string(),
+            worker_request_timeout(FETCH_DOWNLOAD_TIMEOUT),
+        )?;
         if response.kind == "downloaded_model_file" {
             Ok(())
         } else {
@@ -318,57 +361,118 @@ fn spawn_worker(path: &str, args: &[&str]) -> Result<ManagedWorker, String> {
 }
 
 fn write_infer(
-    worker: &mut ManagedWorker,
+    slot: &mut Option<ManagedWorker>,
     request: InferWorkerRequest,
+    timeout: Duration,
 ) -> Result<InferWorkerResponse, String> {
+    let worker = slot
+        .as_mut()
+        .ok_or_else(|| "infer worker missing".to_string())?;
     let json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
     writeln!(worker.stdin, "{json}").map_err(|e| e.to_string())?;
     worker.stdin.flush().map_err(|e| e.to_string())?;
-    read_infer_response(worker)
-}
-
-fn read_infer_response(worker: &mut ManagedWorker) -> Result<InferWorkerResponse, String> {
-    let mut line = String::new();
-    worker
-        .stdout
-        .read_line(&mut line)
-        .map_err(|e| e.to_string())?;
+    let line = read_worker_line(worker, timeout).map_err(|error| map_read_error(slot, error))?;
     serde_json::from_str(line.trim()).map_err(|e| e.to_string())
 }
 
 fn write_capture_line(
-    worker: &mut ManagedWorker,
+    slot: &mut Option<ManagedWorker>,
     line: &str,
+    timeout: Duration,
 ) -> Result<CaptureLineResponse, String> {
-    write_capture_json(worker, line)
+    write_capture_json(slot, line, timeout)
 }
 
 fn write_capture_json<T: for<'de> Deserialize<'de>>(
-    worker: &mut ManagedWorker,
+    slot: &mut Option<ManagedWorker>,
     line: &str,
+    timeout: Duration,
 ) -> Result<T, String> {
+    let worker = slot
+        .as_mut()
+        .ok_or_else(|| "capture worker missing".to_string())?;
     writeln!(worker.stdin, "{line}").map_err(|e| e.to_string())?;
     worker.stdin.flush().map_err(|e| e.to_string())?;
-    let mut response_line = String::new();
-    worker
-        .stdout
-        .read_line(&mut response_line)
-        .map_err(|e| e.to_string())?;
+    let response_line =
+        read_worker_line(worker, timeout).map_err(|error| map_read_error(slot, error))?;
     serde_json::from_str(response_line.trim()).map_err(|e| e.to_string())
 }
 
 fn write_fetch_json<T: for<'de> Deserialize<'de>>(
-    worker: &mut ManagedWorker,
+    slot: &mut Option<ManagedWorker>,
     line: &str,
+    timeout: Duration,
 ) -> Result<T, String> {
+    let worker = slot
+        .as_mut()
+        .ok_or_else(|| "fetch worker missing".to_string())?;
     writeln!(worker.stdin, "{line}").map_err(|e| e.to_string())?;
     worker.stdin.flush().map_err(|e| e.to_string())?;
-    let mut response_line = String::new();
+    let response_line =
+        read_worker_line(worker, timeout).map_err(|error| map_read_error(slot, error))?;
+    serde_json::from_str(response_line.trim()).map_err(|e| e.to_string())
+}
+
+fn map_read_error(slot: &mut Option<ManagedWorker>, error: WorkerReadError) -> String {
+    *slot = None;
+    match error {
+        WorkerReadError::Timeout => "worker request timed out".to_string(),
+        WorkerReadError::Io(message) => message,
+    }
+}
+
+#[cfg(unix)]
+fn read_worker_line(worker: &mut ManagedWorker, timeout: Duration) -> Result<String, WorkerReadError> {
+    use std::os::unix::io::AsRawFd;
+    use std::time::Instant;
+
+    let fd = worker.stdout.get_ref().as_raw_fd();
+    let deadline = Instant::now() + timeout;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            let _ = worker._child.kill();
+            return Err(WorkerReadError::Timeout);
+        }
+
+        let mut poll_fd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let poll_ms = i32::try_from(remaining.as_millis().min(i32::MAX as u128))
+            .unwrap_or(i32::MAX);
+        let poll_result = unsafe { libc::poll(&mut poll_fd, 1, poll_ms) };
+        if poll_result == 0 {
+            let _ = worker._child.kill();
+            return Err(WorkerReadError::Timeout);
+        }
+        if poll_result < 0 {
+            return Err(WorkerReadError::Io(std::io::Error::last_os_error().to_string()));
+        }
+        if poll_fd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
+            let mut line = String::new();
+            return match worker.stdout.read_line(&mut line) {
+                Ok(0) => Err(WorkerReadError::Io("worker stdout closed".into())),
+                Ok(_) => Ok(line),
+                Err(error) => Err(WorkerReadError::Io(error.to_string())),
+            };
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn read_worker_line(worker: &mut ManagedWorker, _timeout: Duration) -> Result<String, WorkerReadError> {
+    let mut line = String::new();
     worker
         .stdout
-        .read_line(&mut response_line)
-        .map_err(|e| e.to_string())?;
-    serde_json::from_str(response_line.trim()).map_err(|e| e.to_string())
+        .read_line(&mut line)
+        .map_err(|error| WorkerReadError::Io(error.to_string()))?;
+    if line.is_empty() {
+        return Err(WorkerReadError::Io("worker stdout closed".into()));
+    }
+    Ok(line)
 }
 
 fn env_path(key: &str) -> Result<String, String> {

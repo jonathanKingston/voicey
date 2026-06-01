@@ -188,6 +188,23 @@ final class AppState: ObservableObject {
     handsFreeSessionActive && !handsFreeBackgroundTranscriptionJobs.isEmpty
   }
 
+  private(set) var handsFreeIncrementalFlushBarrierCount = 0
+
+  /// True while `flushAndFinish` is in flight (background job and/or barrier).
+  /// Intentionally independent of `handsFreeSessionActive` so session teardown does not call `cancel()` mid-flush.
+  var isHandsFreeUtteranceFlushInProgress: Bool {
+    !handsFreeBackgroundTranscriptionJobs.isEmpty
+      || handsFreeIncrementalFlushBarrierCount > 0
+  }
+
+  func beginHandsFreeIncrementalFlushBarrier() {
+    handsFreeIncrementalFlushBarrierCount += 1
+  }
+
+  func endHandsFreeIncrementalFlushBarrier() {
+    handsFreeIncrementalFlushBarrierCount = max(0, handsFreeIncrementalFlushBarrierCount - 1)
+  }
+
   @discardableResult
   func addHandsFreeBackgroundTranscriptionJob(
     envelope: [Float],
