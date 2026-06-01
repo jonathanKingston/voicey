@@ -2,7 +2,7 @@
 
 Consolidated gate for hot-path validation that Linux CI cannot exercise (mic, TCC, overlay UX, bundled Rust workers).
 
-**Tracking issue:** [#145](https://github.com/jonathanKingston/voicey/issues/145)
+**Tracking:** [#145](https://github.com/jonathanKingston/voicey/issues/145) is **closed** (Jun 2026); this file remains the consolidated sign-off checklist for open PRs ([#150](https://github.com/jonathanKingston/voicey/pull/150), [#169](https://github.com/jonathanKingston/voicey/pull/169)) and `main` regressions.
 
 ## Setup
 
