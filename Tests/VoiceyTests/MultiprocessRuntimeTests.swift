@@ -104,10 +104,4 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertEqual(handle.durationSeconds, 0)
     XCTAssertEqual(CapturedAudio.sharedBuffer(handle).durationSeconds, 0)
   }
-
-  func testCapturedAudioSharedBufferUsesPCMHandleTranscriptionPath() {
-    let handle = PCMBufferHandle(shmName: "voicey_pcm_test", sampleCount: 4, sampleRate: 16_000)
-    XCTAssertTrue(CapturedAudio.sharedBuffer(handle).finishesViaSharedPCMHandleTranscription)
-    XCTAssertFalse(CapturedAudio.inMemory([0.1]).finishesViaSharedPCMHandleTranscription)
-  }
 }

@@ -1442,10 +1442,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     capturedAudio: CapturedAudio,
     applyTrailingTrimHeuristic: Bool
   ) async throws -> TranscriptionResult {
-    switch capturedAudio {
-    case .sharedBuffer:
+    switch UtteranceTranscriptionFinish.route(for: capturedAudio) {
+    case .sharedPCMHandle:
       return try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
-    case .inMemory:
+    case .incrementalCoordinatorFlush:
       return try await coordinator.flushAndFinish(
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
     }
