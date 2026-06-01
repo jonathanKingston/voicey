@@ -24,7 +24,7 @@ Merge gate for [#138](https://github.com/jonathanKingston/voicey/pull/138) (`voi
 
 ## Issue #147 — incremental cancel
 
-Code and Linux unit tests landed in `f56ea29` (PR #148). Exploration record: [`incremental-transcription-cancellation.md`](explorations/incremental-transcription-cancellation.md).
+Code and Linux unit tests landed in `f56ea29` (PR #148); [#147](https://github.com/jonathanKingston/voicey/issues/147) is **closed**. Exploration record: [`incremental-transcription-cancellation.md`](explorations/incremental-transcription-cancellation.md). The macOS rows below remain for sign-off (often combined with #150 / #169 QA).
 
 - [ ] Start a **long** incremental partial (pause-chunk transcription in progress).
 - [ ] Press **Escape** (or stop/cancel per product flow).
@@ -62,7 +62,7 @@ Implemented on `main` (`75c8142`); sanitization runs in bundled `voicey-text` be
 
 ## Sign-off
 
-When all sections needed for the current merge are checked, comment on [#145](https://github.com/jonathanKingston/voicey/issues/145) with build/commit, scenarios run, and pass/fail. Close [#147](https://github.com/jonathanKingston/voicey/issues/147) after the cancel row above passes.
+When all sections needed for the current merge are checked, comment on [#145](https://github.com/jonathanKingston/voicey/issues/145) with build/commit, scenarios run, and pass/fail (include the #147 cancel rows when exercised).
 
 Paste this template on [#145](https://github.com/jonathanKingston/voicey/issues/145) (edit sections and checkboxes as needed):
 
