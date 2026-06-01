@@ -38,6 +38,30 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
     return (level, sampleCount)
   }
 
+  /// Copies live capture samples `[startSampleIndex..]` without draining the worker buffer.
+  func readCapturedSamples(since startSampleIndex: Int) async throws -> (
+    samples: [Float], totalSampleCount: Int
+  ) {
+    let response = try await client().send(
+      request: [
+        "type": "read_captured_samples",
+        "id": UUID().uuidString,
+        "start_sample_index": startSampleIndex
+      ],
+      timeout: 30
+    )
+    guard response["type"] as? String == "capture_samples_read" else {
+      throw VoiceyCaptureWorkerError.invalidResponse
+    }
+    guard response["ok"] as? Bool == true else {
+      throw VoiceyCaptureWorkerError.failed(
+        response["error"] as? String ?? "read_captured_samples failed")
+    }
+    let samples = Self.parseSampleArray(response["samples"])
+    let totalSampleCount = response["sample_count"] as? Int ?? startSampleIndex + samples.count
+    return (samples, totalSampleCount)
+  }
+
   func drainHandsFreeUtterance(
     startSampleIndex: Int,
     endSampleIndex: Int,
@@ -140,6 +164,16 @@ final class VoiceyCaptureWorkerSession: @unchecked Sendable {
   func stop() {
     process?.stop()
     process = nil
+  }
+
+  private static func parseSampleArray(_ value: Any?) -> [Float] {
+    guard let array = value as? [Any] else { return [] }
+    return array.compactMap { element in
+      if let sample = element as? Double { return Float(sample) }
+      if let sample = element as? Float { return sample }
+      if let sample = element as? Int { return Float(sample) }
+      return nil
+    }
   }
 }
 

@@ -36,6 +36,7 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 - [x] Linux CI vs macOS ownership table in [`RUST_RUNTIME.md`](RUST_RUNTIME.md)
 - [x] Move steering/glossary golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (#134, #135, #136)
 - [x] Move post-process golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (#137)
+- [x] `voicey-capture` `read_captured_samples` for incremental transcription streaming (Linux IPC tests)
 - [ ] Remaining Swift runtime helpers → Rust / `VoiceyCore` (see [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ fallback deletion)
 
 ### M6 — Longer term (deferred)

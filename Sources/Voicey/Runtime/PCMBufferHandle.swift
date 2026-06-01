@@ -82,6 +82,7 @@ enum CapturedAudio: Sendable {
     }
   }
 
+  /// `.sharedBuffer` from `voicey-capture` when the incremental coordinator has no streamed audio.
   var finishesViaSharedPCMHandleTranscription: Bool {
     UtteranceTranscriptionFinish.route(for: self) == .sharedPCMHandle
   }

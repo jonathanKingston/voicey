@@ -13,7 +13,7 @@ This table is the **M5 allowlist** for [#74](https://github.com/jonathanKingston
 | `voicey-protocol` fixtures + serde contract | Yes (`make protocol-fixtures`, Swift fixture decode) | — |
 | Supervisor + stub workers (infer/capture/fetch) | Yes (integration tests, worker I/O) | — |
 | `voicey-fetch` HTTP listing/download (local test server) | Yes (`cargo test -p voicey-fetch`, Tier 1) | — |
-| `voicey-capture` JSONL IPC + PCM fixture path (no microphone; includes `drain_hands_free_utterance`) | Yes | — |
+| `voicey-capture` JSONL IPC + PCM fixture path (no microphone; includes `drain_hands_free_utterance`, `read_captured_samples`) | Yes | — |
 | `voicey-text` / `VoiceyCore` unit + golden postprocess | Yes (`cargo test -p voicey-text`, `linux-core-tests`) | — |
 | Benchmark harness **scripts** (Common Voice prep, parity matrix smoke) | Yes (`test-common-voice-benchmark`, Tier 1 script checks) | — |
 | Benchmark **Qwen transcribe RTF / WER** (needs MLX + models) | No | Yes (`make benchmark-compare-runtime`, parity targets) |
@@ -44,7 +44,7 @@ Tracking issues:
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
 
-Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). Utterances captured via `voicey-capture` transcribe from that handle. Until [#138](https://github.com/jonathanKingston/voicey/pull/138) merges, the incremental coordinator only receives streamed samples on the AVFoundation capture path; #138 adds `read_captured_samples` on the Rust capture path (macOS QA: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md), [#145](https://github.com/jonathanKingston/voicey/issues/145)). Phase 2 (#70) is in progress: post-process, capture, and steering/glossary (via `build_steering_context` on `voicey-text`) no longer fall back to Swift when bundled workers are enabled; worker errors surface to the user. Deletion of remaining opt-out fallbacks (AVAudioEngine / Hub / infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
+Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). `voicey-capture` `read_captured_samples` streams PCM into the incremental coordinator on the Rust capture path (parity with AVFoundation `didCaptureSamples`; macOS QA: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md), [#145](https://github.com/jonathanKingston/voicey/issues/145)). Utterance finish routing (#129, #159) uses shared PCM when the coordinator has no streamed audio. Phase 2 (#70) is in progress: post-process, capture, and steering/glossary (via `build_steering_context` on `voicey-text`) no longer fall back to Swift when bundled workers are enabled; worker errors surface to the user. Deletion of remaining opt-out fallbacks (AVAudioEngine / Hub / infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
 
 ## CI tiers (Rust on Ubuntu)
 
