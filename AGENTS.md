@@ -147,7 +147,7 @@ Canonical status: [`docs/ISSUE_74_PROGRESS.md`](docs/ISSUE_74_PROGRESS.md).
 
 | Priority | Work | Cloud Agent? |
 |----------|------|----------------|
-| 1 | macOS QA for open PRs [#138](https://github.com/jonathanKingston/voicey/pull/138), [#150](https://github.com/jonathanKingston/voicey/pull/150) — checklist in [`docs/MACOS_MANUAL_QA.md`](docs/MACOS_MANUAL_QA.md), tracking [#145](https://github.com/jonathanKingston/voicey/issues/145) | No (macOS only) |
+| 1 | macOS QA for [#145](https://github.com/jonathanKingston/voicey/issues/145) — checklist in [`docs/MACOS_MANUAL_QA.md`](docs/MACOS_MANUAL_QA.md); includes #159 waveform rows on `main` plus #138/#150 merge gates | No (macOS only) |
 | 2 | Do **not** open duplicate PRs for `read_captured_samples`, incremental Rust capture streaming, or screen-context capture gate | — |
 | 3 | After #138/#150 merge: [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ — delete Swift hot-path fallbacks (`AVAudioEngine`, Hub fetch, Swift post-process) once bundled workers are the only path | Partial (Linux tests/docs; fallback removal needs macOS spot-check) |
 

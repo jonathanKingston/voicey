@@ -12,6 +12,13 @@ make build-rust && make dev-restart
 
 Use default bundled workers (`voicey-capture`, `voicey-fetch`, `voicey-text`, infer). Confirm `voicey-capture` is present in the app bundle.
 
+## `main` — Rust capture transcribing waveform (#159)
+
+Can be checked on `main` before or with the #138 pass (default `voicey-capture` hotkey dictation).
+
+- [ ] **Hotkey dictation:** after stop, transcribing overlay progress bars reflect speech shape (not flat placeholders).
+- [ ] **Hands-free:** background transcribing strip shows utterance-shaped progress for each utterance.
+
 ## PR #138 — `read_captured_samples` incremental streaming
 
 Merge gate for [#138](https://github.com/jonathanKingston/voicey/pull/138) (`voicey-capture` → `IncrementalTranscriptionCoordinator`).
