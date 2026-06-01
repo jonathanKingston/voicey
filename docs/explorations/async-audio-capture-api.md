@@ -2,7 +2,7 @@
 
 ## Status
 
-Exploratory proposal.
+Exploration merged ([#112](https://github.com/jonathanKingston/voicey/pull/112)). Implementation tracked in [#178](https://github.com/jonathanKingston/voicey/issues/178).
 
 ## Summary
 

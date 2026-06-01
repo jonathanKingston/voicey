@@ -71,9 +71,12 @@ Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
 **Automation assessment (Jun 2026, post-#172):** [#172](https://github.com/jonathanKingston/voicey/pull/172) aligns [#147](https://github.com/jonathanKingston/voicey/issues/147) cancel rows in [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md) with the closed issue; it does **not** unblock new implementation PRs. Priority queue unchanged: merge [#150](https://github.com/jonathanKingston/voicey/pull/150) and [#169](https://github.com/jonathanKingston/voicey/pull/169) on macOS; then [#152](https://github.com/jonathanKingston/voicey/issues/152) capture fallback deletion.
 
+**Automation assessment (Jun 2026, post-#112):** [#112](https://github.com/jonathanKingston/voicey/pull/112) (async audio capture exploration) is documentation-only. It does **not** unblock [#152](https://github.com/jonathanKingston/voicey/issues/152) capture fallback deletion or change merge gates for [#150](https://github.com/jonathanKingston/voicey/pull/150) / [#169](https://github.com/jonathanKingston/voicey/pull/169). Implementation tracked in [#178](https://github.com/jonathanKingston/voicey/issues/178); defer until after #169 if both touch hands-free capture sequencing. **Highest priority unchanged:** macOS review/merge #150 and #169. Cloud Agent cycle: rebased #150 and #169 onto `main` (includes #112); Linux 8/8 `ScreenContextCaptureGateTests`, 4/4 `UtteranceTranscriptionFinishPolicyTests`.
+
 **Suggested GitHub issue comments** (Cloud Agent token lacks `issues: write` — paste manually if helpful):
 
 - **#152:** Text/post-process layer done in #167. Capture (`AVAudioEngine`) deletion remains blocked until #150 merges + macOS QA. Do not open duplicate PRs for #150 / #169.
-- **#163:** Fix is in draft PR #169 (`UtteranceTranscriptionFinishPolicy`); merge gate is macOS hands-free multi-utterance repro per [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
+- **#163:** Fix is in PR #169 (`UtteranceTranscriptionFinishPolicy`); merge gate is macOS hands-free multi-utterance repro per [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
+- **#178:** Async capture API (#112 follow-up); see [`async-audio-capture-api.md`](explorations/async-audio-capture-api.md). Not on the critical path until #150/#169 land.
 
 **Next implementation tranche (after #150 merge):** [#152](https://github.com/jonathanKingston/voicey/issues/152) capture layer (`AudioCaptureManager` AVFoundation path deletion), then fetch Hub fallback. Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).
