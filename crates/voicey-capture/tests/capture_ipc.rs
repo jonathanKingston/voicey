@@ -104,7 +104,7 @@ fn record_fixture_writes_readable_pcm() {
 
     let samples = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
     assert_eq!(samples.len(), sample_count);
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn load_wav_file_decodes_pcm_fixture() {
 
     let read_back = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
     assert_eq!(read_back.len(), samples.len());
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
     std::fs::remove_file(&wav_path).ok();
 }
 
@@ -285,7 +285,7 @@ fn drain_hands_free_after_start_returns_readable_pcm() {
 
     let read_back = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
     assert_eq!(read_back.len(), sample_count);
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 
     let _ = session.request_json(
         r#"{"type":"stop_recording","id":"stop-2","apply_trailing_trim":false}"#,

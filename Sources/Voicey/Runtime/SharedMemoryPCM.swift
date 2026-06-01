@@ -58,7 +58,7 @@ enum SharedMemoryPCM {
     guard
       let entries = try? FileManager.default.contentsOfDirectory(
         at: tempDirectory,
-        includingPropertiesForKeys: [.fileOwnerAccountIDKey],
+        includingPropertiesForKeys: nil,
         options: [.skipsHiddenFiles]
       )
     else {
@@ -114,12 +114,16 @@ enum SharedMemoryPCM {
   }
 
   private static func isOwnedByCurrentUser(url: URL, currentOwnerID: uid_t) -> Bool {
+    // `URLResourceKey` exposes no file-owner key on Darwin; read the POSIX owner uid
+    // via `FileManager` attributes instead. When ownership can't be read, default to
+    // treating the file as ours so a readable stale file is still cleaned up.
     guard
-      let ownerID = try? url.resourceValues(forKeys: [.fileOwnerAccountIDKey]).fileOwnerAccountID
+      let ownerID = try? FileManager.default.attributesOfItem(atPath: url.path)[.ownerAccountID]
+        as? NSNumber
     else {
       return true
     }
-    return ownerID == Int(currentOwnerID)
+    return ownerID.uint32Value == currentOwnerID
   }
 }
 
