@@ -126,11 +126,13 @@
 "model.unknownError" = "Unknown error";
 
 /* Spelling & context (transcription steering) */
-"transcription.intro" = "Improve recognition of names, jargon, and words visible in the app you're dictating into. Voicey is always included; add more terms below if you like. Processing stays on your Mac.";
+"transcription.intro" = "Improve recognition of names, jargon, and words visible in the app you're dictating into. Voicey is always included in vocabulary steering; add more terms below if you like. Use Spoken language to hint Qwen3 ASR. Processing stays on your Mac.";
 "transcription.customVocabulary" = "Custom vocabulary";
 "transcription.glossaryEnable" = "Prefer my vocabulary list";
 "transcription.glossaryDescription" = "Terms you list here are sent to the speech model before transcription to improve spelling (along with Voicey). Separate entries with commas or new lines.";
 "transcription.glossaryPlaceholder" = "Voicey, WhisperKit, Kubernetes, Acme Corp";
+"transcription.spokenLanguage" = "Spoken language";
+"transcription.spokenLanguageDescription" = "Qwen3 ASR language hint passed to the model (Auto-detect leaves language unset). Choose a language when you always dictate in one language or auto-detect is wrong.";
 "transcription.onScreenText" = "On-screen text";
 "transcription.screenContextEnable" = "Use text from the target app";
 "transcription.screenContextDescription" = "When you start recording, Voicey reads the focused field and nearby UI text in the front app and uses it to steer spelling. Requires Accessibility permission (same as auto-insert).";

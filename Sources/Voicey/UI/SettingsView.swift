@@ -609,6 +609,7 @@ struct TranscriptionSteeringSettingsView: View {
     var transcriptionScreenContextEnabled = true
   @AppStorage("transcriptionScreenContextOCREnabled", store: defaults) private
     var transcriptionScreenContextOCREnabled = false
+  @State private var transcriptionLanguageID = SettingsManager.shared.transcriptionLanguageID
   @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
   @State private var screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
 
@@ -633,6 +634,19 @@ struct TranscriptionSteeringSettingsView: View {
             placeholder: L10n.Transcription.glossaryPlaceholder
           )
         }
+      }
+
+      Section(L10n.Transcription.spokenLanguage) {
+        Picker(L10n.Transcription.spokenLanguage, selection: $transcriptionLanguageID) {
+          ForEach(TranscriptionQwenLanguage.supportedOptions) { option in
+            Text(option.displayName).tag(option.id)
+          }
+        }
+        .pickerStyle(.menu)
+
+        Text(L10n.Transcription.spokenLanguageDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
 
       Section(L10n.Transcription.onScreenText) {
@@ -672,13 +686,18 @@ struct TranscriptionSteeringSettingsView: View {
     .padding()
     .onAppear {
       transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+      transcriptionLanguageID = SettingsManager.shared.transcriptionLanguageID
       screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
     }
     .onChange(of: transcriptionGlossary) {
       SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
     }
+    .onChange(of: transcriptionLanguageID) {
+      SettingsManager.shared.transcriptionLanguageID = transcriptionLanguageID
+    }
     .onDisappear {
       SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
+      SettingsManager.shared.transcriptionLanguageID = transcriptionLanguageID
     }
   }
 }

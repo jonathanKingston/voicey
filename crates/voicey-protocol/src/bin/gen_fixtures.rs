@@ -55,6 +55,7 @@ fn main() {
             sample_count: 1024,
             sample_offset: 0,
             decoder_context: Some("Glossary: Voicey".into()),
+            language: Some("English".into()),
         },
     );
     write_fixture(
@@ -67,6 +68,7 @@ fn main() {
             sample_count: 512,
             sample_offset: 0,
             decoder_context: None,
+            language: None,
         },
     );
     write_fixture(
@@ -79,6 +81,7 @@ fn main() {
             sample_count: 256,
             sample_offset: 128,
             decoder_context: None,
+            language: None,
         },
     );
     write_fixture(
@@ -246,6 +249,7 @@ fn main() {
             sample_count: 1024,
             sample_offset: 0,
             decoder_context: Some("Glossary: Voicey".into()),
+            language: Some("English".into()),
         },
     );
     write_fixture(
@@ -258,6 +262,7 @@ fn main() {
             sample_count: 512,
             sample_offset: 0,
             decoder_context: None,
+            language: None,
         },
     );
     write_fixture(
@@ -270,6 +275,7 @@ fn main() {
             sample_count: 256,
             sample_offset: 128,
             decoder_context: None,
+            language: None,
         },
     );
     write_fixture(

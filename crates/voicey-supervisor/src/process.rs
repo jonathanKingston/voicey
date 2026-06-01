@@ -53,6 +53,17 @@ pub struct TranscribeResult {
     pub audio_seconds: f64,
 }
 
+/// Arguments for [`WorkerProcesses::infer_transcribe`].
+pub struct InferTranscribeParams<'a> {
+    pub model_id: &'a str,
+    pub sample_rate: u32,
+    pub shm_name: &'a str,
+    pub sample_count: usize,
+    pub sample_offset: usize,
+    pub decoder_context: Option<&'a str>,
+    pub language: Option<&'a str>,
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct CaptureFixtureResponse {
@@ -111,25 +122,21 @@ impl WorkerProcesses {
 
     pub fn infer_transcribe(
         &mut self,
-        model_id: &str,
-        sample_rate: u32,
-        shm_name: &str,
-        sample_count: usize,
-        sample_offset: usize,
-        decoder_context: Option<&str>,
+        params: &InferTranscribeParams<'_>,
     ) -> Result<TranscribeResult, String> {
         self.ensure_infer()?;
-        let timeout = transcribe_timeout(sample_count, sample_rate);
+        let timeout = transcribe_timeout(params.sample_count, params.sample_rate);
         let response = write_infer(
             &mut self.infer,
             InferWorkerRequest::Transcribe {
                 id: new_id(),
-                model_id: model_id.to_string(),
-                sample_rate,
-                shm_name: shm_name.to_string(),
-                sample_count,
-                sample_offset,
-                decoder_context: decoder_context.map(str::to_string),
+                model_id: params.model_id.to_string(),
+                sample_rate: params.sample_rate,
+                shm_name: params.shm_name.to_string(),
+                sample_count: params.sample_count,
+                sample_offset: params.sample_offset,
+                decoder_context: params.decoder_context.map(str::to_string),
+                language: params.language.map(str::to_string),
             },
             timeout,
         )?;

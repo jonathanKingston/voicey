@@ -80,7 +80,8 @@ actor VoiceyRuntimeSupervisor {
     capturedAudio: CapturedAudio,
     model: SpeechModel,
     warmupAlreadyDone: Bool,
-    decoderContext: String? = nil
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     if !warmupAlreadyDone || inferReadyModel != model {
       try await prewarmInfer(model: model)
@@ -98,26 +99,30 @@ actor VoiceyRuntimeSupervisor {
           return try await rustSupervisor.transcribe(
             pcmHandle: handle,
             model: model,
-            decoderContext: decoderContext
+            decoderContext: decoderContext,
+            language: language
           )
         }
         return try await inferClient.transcribe(
           pcmHandle: handle,
           model: model,
-          decoderContext: decoderContext
+          decoderContext: decoderContext,
+          language: language
         )
       case .inMemory(let samples):
         if usesRustSupervisor {
           return try await rustSupervisor.transcribe(
             samples: samples,
             model: model,
-            decoderContext: decoderContext
+            decoderContext: decoderContext,
+            language: language
           )
         }
         return try await inferClient.transcribe(
           samples: samples,
           model: model,
-          decoderContext: decoderContext
+          decoderContext: decoderContext,
+          language: language
         )
       }
     } catch {
@@ -137,26 +142,30 @@ actor VoiceyRuntimeSupervisor {
           return try await rustSupervisor.transcribe(
             pcmHandle: handle,
             model: model,
-            decoderContext: decoderContext
+            decoderContext: decoderContext,
+            language: language
           )
         }
         return try await inferClient.transcribe(
           pcmHandle: handle,
           model: model,
-          decoderContext: decoderContext
+          decoderContext: decoderContext,
+          language: language
         )
       case .inMemory(let samples):
         if usesRustSupervisor {
           return try await rustSupervisor.transcribe(
             samples: samples,
             model: model,
-            decoderContext: decoderContext
+            decoderContext: decoderContext,
+            language: language
           )
         }
         return try await inferClient.transcribe(
           samples: samples,
           model: model,
-          decoderContext: decoderContext
+          decoderContext: decoderContext,
+          language: language
         )
       }
     }
@@ -166,7 +175,8 @@ actor VoiceyRuntimeSupervisor {
     samples: [Float],
     model: SpeechModel,
     warmupAlreadyDone: Bool,
-    decoderContext: String? = nil
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     if !warmupAlreadyDone || inferReadyModel != model {
       try await prewarmInfer(model: model)
@@ -179,13 +189,15 @@ actor VoiceyRuntimeSupervisor {
         return try await rustSupervisor.transcribe(
           samples: samples,
           model: model,
-          decoderContext: decoderContext
+          decoderContext: decoderContext,
+          language: language
         )
       }
       return try await inferClient.transcribe(
         samples: samples,
         model: model,
-        decoderContext: decoderContext
+        decoderContext: decoderContext,
+        language: language
       )
     } catch {
       AppLogger.runtime.warning(
@@ -202,13 +214,15 @@ actor VoiceyRuntimeSupervisor {
         return try await rustSupervisor.transcribe(
           samples: samples,
           model: model,
-          decoderContext: decoderContext
+          decoderContext: decoderContext,
+          language: language
         )
       }
       return try await inferClient.transcribe(
         samples: samples,
         model: model,
-        decoderContext: decoderContext
+        decoderContext: decoderContext,
+        language: language
       )
     }
   }

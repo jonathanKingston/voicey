@@ -449,7 +449,10 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
   /// Directory for Qwen model storage
   func qwenModelDirectory(for model: SpeechModel) -> URL? {
     guard let hfId = model.huggingFaceModelId, model.isQwenModel else { return nil }
-    return try? HuggingFaceDownloader.getCacheDirectory(for: hfId, basePath: qwenModelsDirectory)
+    return qwenModelsDirectory.appendingPathComponent(
+      HuggingFaceDownloader.sanitizedCacheKey(for: hfId),
+      isDirectory: true
+    )
   }
 
   private func isQwenModelComplete(at modelDir: URL) -> Bool {

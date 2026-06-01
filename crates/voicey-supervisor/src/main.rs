@@ -80,33 +80,38 @@ fn handle_request(line: &str, workers: &mut process::WorkerProcesses) -> HostRes
             sample_count,
             sample_offset,
             decoder_context,
-        } => match workers.infer_transcribe(
-            &model_id,
-            sample_rate,
-            &shm_name,
-            sample_count,
-            sample_offset,
-            decoder_context.as_deref(),
-        ) {
-            Ok(result) => HostResponse::TranscribeResult {
-                id,
-                ok: true,
-                raw_text: Some(result.raw_text),
-                language: Some(result.language),
-                processing_seconds: Some(result.processing_seconds),
-                audio_seconds: Some(result.audio_seconds),
-                error: None,
-            },
-            Err(message) => HostResponse::TranscribeResult {
-                id,
-                ok: false,
-                raw_text: None,
-                language: None,
-                processing_seconds: None,
-                audio_seconds: None,
-                error: Some(message),
-            },
-        },
+            language,
+        } => {
+            use process::InferTranscribeParams;
+            match workers.infer_transcribe(&InferTranscribeParams {
+                model_id: &model_id,
+                sample_rate,
+                shm_name: &shm_name,
+                sample_count,
+                sample_offset,
+                decoder_context: decoder_context.as_deref(),
+                language: language.as_deref(),
+            }) {
+                Ok(result) => HostResponse::TranscribeResult {
+                    id,
+                    ok: true,
+                    raw_text: Some(result.raw_text),
+                    language: Some(result.language),
+                    processing_seconds: Some(result.processing_seconds),
+                    audio_seconds: Some(result.audio_seconds),
+                    error: None,
+                },
+                Err(message) => HostResponse::TranscribeResult {
+                    id,
+                    ok: false,
+                    raw_text: None,
+                    language: None,
+                    processing_seconds: None,
+                    audio_seconds: None,
+                    error: Some(message),
+                },
+            }
+        }
         HostRequest::DownloadModel {
             id,
             model_id,

@@ -52,6 +52,30 @@ pub fn format_terms(terms: &[String]) -> String {
     body.chars().take(MAX_CONTEXT_CHARACTER_COUNT).collect()
 }
 
+const SPELLING_FRAGMENT_SEPARATOR: &str = " Spelling:";
+
+fn steering_fragments_to_strip(decoder_context: &str) -> Vec<String> {
+    let normalized = decoder_context.trim();
+    if normalized.is_empty() {
+        return Vec::new();
+    }
+
+    if let Some(index) = normalized.find(SPELLING_FRAGMENT_SEPARATOR) {
+        let mut fragments = Vec::new();
+        let glossary_part = normalized[..index].trim();
+        if !glossary_part.is_empty() {
+            fragments.push(glossary_part.to_string());
+        }
+        let spelling_body = normalized[index + SPELLING_FRAGMENT_SEPARATOR.len()..].trim();
+        if !spelling_body.is_empty() {
+            fragments.push(format!("Spelling: {spelling_body}"));
+        }
+        return fragments;
+    }
+
+    vec![normalized.to_string()]
+}
+
 /// Removes decoder steering text when the model echoes it instead of transcribing speech.
 pub fn stripping_echoed_decoder_context(text: &str, decoder_context: Option<&str>) -> String {
     let Some(decoder_context) = decoder_context else {
@@ -67,13 +91,29 @@ pub fn stripping_echoed_decoder_context(text: &str, decoder_context: Option<&str
         return remainder;
     }
 
-    if remainder == normalized_context {
-        return String::new();
-    }
-    if remainder.starts_with(normalized_context) {
-        remainder = remainder[normalized_context.len()..].trim().to_string();
-        if remainder.starts_with(',') || remainder.starts_with(':') {
-            remainder = remainder[1..].trim().to_string();
+    let mut prefixes = vec![normalized_context.to_string()];
+    prefixes.extend(steering_fragments_to_strip(normalized_context));
+    prefixes.sort_by_key(|prefix| std::cmp::Reverse(prefix.len()));
+    prefixes.dedup();
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for prefix in &prefixes {
+            if prefix.is_empty() {
+                continue;
+            }
+            if remainder == *prefix {
+                return String::new();
+            }
+            if remainder.starts_with(prefix) {
+                remainder = remainder[prefix.len()..].trim().to_string();
+                if remainder.starts_with(',') || remainder.starts_with(':') {
+                    remainder = remainder[1..].trim().to_string();
+                }
+                changed = true;
+                break;
+            }
         }
     }
     remainder
@@ -162,6 +202,19 @@ mod tests {
         assert_eq!(
             stripping_echoed_decoder_context("Hello world", Some(context)),
             "Hello world"
+        );
+    }
+
+    #[test]
+    fn strip_echoed_spelling_fragment_when_combined_context_was_sent() {
+        let context = "Glossary: Voicey, Metformin Spelling: British English.";
+        assert_eq!(
+            stripping_echoed_decoder_context("Spelling: British English.", Some(context)),
+            ""
+        );
+        assert_eq!(
+            stripping_echoed_decoder_context("Spelling: British English. Hello there", Some(context)),
+            "Hello there"
         );
     }
 }

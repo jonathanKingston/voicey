@@ -1608,50 +1608,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func transcribeWithSelectedEngine(capturedAudio: CapturedAudio) async throws -> TranscriptionResult {
     let utteranceModel = transcriptionModelForSession()
-    let decoderContext = try await TranscriptionSteeringContext.make()
+    let hints = try await TranscriptionSteeringContext.qwenHints()
     if VoiceyRuntimeConfiguration.usesInferWorker(for: utteranceModel) {
       return try await VoiceyRuntimeSupervisor.shared.transcribe(
         capturedAudio: capturedAudio,
         model: utteranceModel,
         warmupAlreadyDone: multiprocessInferReady,
-        decoderContext: decoderContext
+        decoderContext: hints.decoderContext,
+        language: hints.language
       )
     }
     let audioBuffer = try capturedAudio.inMemorySamples()
     return try await transcribeWithSelectedEngine(
       audioBuffer: audioBuffer,
       model: utteranceModel,
-      decoderContext: decoderContext
+      hints: hints
     )
   }
 
   private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
     let utteranceModel = transcriptionModelForSession()
-    let decoderContext = try await TranscriptionSteeringContext.make()
+    let hints = try await TranscriptionSteeringContext.qwenHints()
     return try await transcribeWithSelectedEngine(
       audioBuffer: audioBuffer,
       model: utteranceModel,
-      decoderContext: decoderContext
+      hints: hints
     )
   }
 
   private func transcribeWithSelectedEngine(
     audioBuffer: [Float],
     model: SpeechModel,
-    decoderContext: String?
+    hints: QwenTranscriptionHints
   ) async throws -> TranscriptionResult {
     if VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
       return try await VoiceyRuntimeSupervisor.shared.transcribe(
         samples: audioBuffer,
         model: model,
         warmupAlreadyDone: multiprocessInferReady,
-        decoderContext: decoderContext
+        decoderContext: hints.decoderContext,
+        language: hints.language
       )
     }
     guard
       let qwenResult = try await qwenEngine?.transcribe(
         audioBuffer: audioBuffer,
-        decoderContext: decoderContext
+        decoderContext: hints.decoderContext,
+        language: hints.language
       )
     else {
       throw TranscriptionError.transcriptionFailed("No result from Qwen engine")

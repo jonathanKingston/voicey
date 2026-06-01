@@ -151,6 +151,7 @@ fn load_model_and_transcribe_via_infer_stub() {
         sample_count: 512,
         sample_offset: 0,
         decoder_context: Some("Glossary".into()),
+        language: None,
     });
     voicey_pcm::remove(&shm_name);
 
@@ -291,6 +292,7 @@ fn capture_fixture_then_transcribe_uses_capture_shm() {
         sample_count,
         sample_offset: 0,
         decoder_context: None,
+        language: None,
     });
     voicey_pcm::remove(&shm_name);
 
@@ -379,6 +381,7 @@ fn transcribe_with_sample_offset_uses_pcm_slice() {
         sample_count: 32,
         sample_offset: 16,
         decoder_context: None,
+        language: None,
     });
     voicey_pcm::remove(&shm_name);
 
@@ -417,6 +420,7 @@ fn infer_stub_fail_transcribe_returns_transcribe_error() {
         sample_count: 64,
         sample_offset: 0,
         decoder_context: None,
+        language: None,
     });
     voicey_pcm::remove(&shm_name);
 
@@ -448,6 +452,7 @@ fn infer_stub_malformed_json_line_surfaces_transcribe_error() {
         sample_count: 32,
         sample_offset: 0,
         decoder_context: None,
+        language: None,
     });
     voicey_pcm::remove(&shm_name);
 

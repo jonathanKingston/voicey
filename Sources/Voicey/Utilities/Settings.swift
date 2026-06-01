@@ -47,6 +47,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.transcriptionGlossaryEnabled: true,
       Keys.transcriptionScreenContextEnabled: true,
       Keys.transcriptionScreenContextOCREnabled: false,
+      Keys.transcriptionLanguageID: TranscriptionQwenLanguage.autoOption.id,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
     ])
@@ -70,6 +71,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let transcriptionGlossary = "transcriptionGlossary"
     static let transcriptionScreenContextEnabled = "transcriptionScreenContextEnabled"
     static let transcriptionScreenContextOCREnabled = "transcriptionScreenContextOCREnabled"
+    static let transcriptionLanguageID = "transcriptionLanguageID"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
   }
@@ -189,6 +191,21 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var transcriptionScreenContextOCREnabled: Bool {
     get { defaults.bool(forKey: Keys.transcriptionScreenContextOCREnabled) }
     set { defaults.set(newValue, forKey: Keys.transcriptionScreenContextOCREnabled) }
+  }
+
+  /// Qwen3-ASR spoken-language hint (`language` parameter). `auto` lets the model detect language.
+  var transcriptionLanguageID: String {
+    get {
+      let raw = defaults.string(forKey: Keys.transcriptionLanguageID)
+        ?? TranscriptionQwenLanguage.autoOption.id
+      return TranscriptionQwenLanguage.normalizedStoredID(raw)
+    }
+    set {
+      defaults.set(
+        TranscriptionQwenLanguage.normalizedStoredID(newValue),
+        forKey: Keys.transcriptionLanguageID
+      )
+    }
   }
 
   // MARK: - Voice Commands

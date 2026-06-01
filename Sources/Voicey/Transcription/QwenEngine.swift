@@ -131,8 +131,14 @@ final class QwenEngine: @unchecked Sendable {
 
   func transcribe(
     audioBuffer: [Float],
-    decoderContext: String? = nil
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
+    let qwenLanguage =
+      language
+      ?? TranscriptionQwenLanguage.qwenLanguageParameter(
+        storedID: SettingsManager.shared.transcriptionLanguageID
+      )
     if qwenModel == nil {
       let selectedModel = SettingsManager.shared.selectedModel
       guard selectedModel.isQwenModel else {
@@ -157,13 +163,19 @@ final class QwenEngine: @unchecked Sendable {
         "QwenEngine: Using transcription context (\(decoderContext.count) characters)"
       )
     }
+    if let qwenLanguage {
+      AppLogger.transcription.info(
+        "QwenEngine: Using language hint (\(qwenLanguage, privacy: .public))"
+      )
+    }
 
     let transcribedText: String
     if audioDuration <= maxSinglePassAudioSeconds {
       transcribedText = transcribeSinglePass(
         qwenModel: qwenModel,
         audioBuffer: audioBuffer,
-        decoderContext: decoderContext
+        decoderContext: decoderContext,
+        language: qwenLanguage
       )
     } else {
       let chunkSampleCount = Int(chunkAudioSeconds * 16000)
@@ -180,7 +192,8 @@ final class QwenEngine: @unchecked Sendable {
         let chunkText = transcribeSinglePass(
           qwenModel: qwenModel,
           audioBuffer: chunk,
-          decoderContext: decoderContext
+          decoderContext: decoderContext,
+          language: qwenLanguage
         )
         if !chunkText.isEmpty {
           parts.append(chunkText)
@@ -220,7 +233,7 @@ final class QwenEngine: @unchecked Sendable {
     return TranscriptionResult(
       text: transcribedText,
       segments: [],
-      language: "auto",
+      language: qwenLanguage ?? "auto",
       processingTime: processingTime,
       performanceMetrics: metrics
     )
@@ -229,7 +242,8 @@ final class QwenEngine: @unchecked Sendable {
   private func transcribeSinglePass(
     qwenModel: Qwen3ASRModel,
     audioBuffer: [Float],
-    decoderContext: String?
+    decoderContext: String?,
+    language: String?
   ) -> String {
     let audioDuration = Double(audioBuffer.count) / 16000.0
     let tokenBudget = Int(ceil(audioDuration * qwenTokensPerSecondEstimate)) + qwenTokenBuffer
@@ -241,7 +255,7 @@ final class QwenEngine: @unchecked Sendable {
     let rawText = qwenModel.transcribe(
       audio: audioBuffer,
       sampleRate: 16000,
-      language: nil,
+      language: language,
       maxTokens: maxTokens,
       context: decoderContext
     )
