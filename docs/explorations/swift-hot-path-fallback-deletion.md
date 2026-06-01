@@ -2,7 +2,7 @@
 
 ## Status
 
-Exploratory proposal. Tracking issue: [#152](https://github.com/jonathanKingston/voicey/issues/152) (parent [#70](https://github.com/jonathanKingston/voicey/issues/70)).
+Exploration on `main` ([#158](https://github.com/jonathanKingston/voicey/pull/158)). Tracking issue: [#152](https://github.com/jonathanKingston/voicey/issues/152) (parent [#70](https://github.com/jonathanKingston/voicey/issues/70)).
 
 **Blocked on:** merge of [#138](https://github.com/jonathanKingston/voicey/pull/138) and [#150](https://github.com/jonathanKingston/voicey/pull/150), plus macOS QA sign-off ([#145](https://github.com/jonathanKingston/voicey/issues/145)).
 
