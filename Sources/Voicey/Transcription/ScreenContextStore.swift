@@ -72,8 +72,9 @@ final class ScreenContextStore: @unchecked Sendable {
 
   /// Returns the accessibility snapshot captured at record start without clearing it.
   ///
-  /// The snapshot is cleared at recording boundaries via `clear()` (see `AppDelegate`
-  /// screen-context capture). Incremental transcription reads the same snapshot for every
+  /// The snapshot is cleared at recording boundaries via `beginCaptureSession()` and on
+  /// cancel / hands-free teardown via `clear()` (see `AppDelegate`). Incremental transcription
+  /// reads the same snapshot for every
   /// pause-separated chunk in one session.
   func currentSnapshot() -> ScreenContextSnapshot? {
     lock.lock()

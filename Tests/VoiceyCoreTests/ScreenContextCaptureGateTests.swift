@@ -57,4 +57,31 @@ final class ScreenContextCaptureGateTests: XCTestCase {
     let outcome = await gate.waitForReady(timeoutNanoseconds: 50_000_000)
     XCTAssertEqual(outcome, .inactive)
   }
+
+  func testWaitReturnsPromptlyWhenTaskCancelled() async {
+    let gate = ScreenContextCaptureGate()
+    gate.beginSession()
+
+    let started = DispatchTime.now().uptimeNanoseconds
+    let waitTask = Task {
+      await gate.waitForReady(timeoutNanoseconds: 2_000_000_000)
+    }
+
+    try? await Task.sleep(nanoseconds: 20_000_000)
+    waitTask.cancel()
+
+    let outcome = await waitTask.value
+    let elapsed = DispatchTime.now().uptimeNanoseconds - started
+
+    XCTAssertEqual(outcome, .timeout)
+    XCTAssertLessThan(elapsed, 200_000_000)
+  }
+
+  func testResetReturnsInactiveWithoutWaitingFullBudget() async {
+    let gate = ScreenContextCaptureGate()
+    gate.beginSession()
+    gate.reset()
+    let outcome = await gate.waitForReady(timeoutNanoseconds: 500_000_000)
+    XCTAssertEqual(outcome, .inactive)
+  }
 }

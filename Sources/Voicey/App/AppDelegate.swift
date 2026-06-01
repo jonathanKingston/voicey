@@ -1200,6 +1200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func endHandsFreeSession() {
     AppLogger.general.info("Ending hands-free session")
+    ScreenContextStore.shared.clear()
     cancelHandsFreeWaitTimeout()
 
     appState.handsFreeSessionActive = false
@@ -1403,6 +1404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     AppLogger.general.info("Cancelling transcription...")
+    ScreenContextStore.shared.clear()
     cancelHandsFreeWaitTimeout()
     appState.handsFreeSessionActive = false
 

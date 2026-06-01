@@ -63,6 +63,13 @@ public final class ScreenContextCaptureGate: @unchecked Sendable {
     -> ScreenContextCaptureWaitOutcome {
     let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
     while DispatchTime.now().uptimeNanoseconds < deadline {
+      if Task.isCancelled {
+        return lock.withLock {
+          guard sessionActive else { return .inactive }
+          return isReady ? .ready : .timeout
+        }
+      }
+
       let snapshot = lock.withLock { () -> (Bool, Bool) in
         (sessionActive, isReady)
       }
@@ -75,13 +82,5 @@ public final class ScreenContextCaptureGate: @unchecked Sendable {
       guard sessionActive else { return .inactive }
       return isReady ? .ready : .timeout
     }
-  }
-}
-
-private extension NSLock {
-  func withLock<T>(_ body: () -> T) -> T {
-    lock()
-    defer { unlock() }
-    return body()
   }
 }
