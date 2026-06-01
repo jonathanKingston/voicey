@@ -4,5 +4,5 @@
   "manual_glossary": "Cursor, Composer",
   "screen_context_enabled": false,
   "expected_terms": ["Cursor", "Composer"],
-  "expected_decoder_context": "Glossary: Voicey, Cursor, Composer"
+  "expected_decoder_context": "Vocabulary: Voicey, Cursor, Composer"
 }

@@ -12,8 +12,11 @@ Users saw **glossary and screen-context terms in pasted text** when little or no
 
 Sanitization runs in **`voicey-text` `postprocess`** (mandatory worker — no Swift fallback):
 
-1. **Layer 1 — Echo strip:** `glossary::stripping_echoed_decoder_context` removes verbatim prefix/exact echoes of `decoder_context`.
-2. **Layer 2 — Overlap guard:** `glossary::sanitize_steering_echo` clears “screen-term soup” when ≥ 80% of content tokens (minimum 3) match steering vocabulary.
+1. **Prefix / exact substring** of `decoder_context`
+2. **Comma-list filter** — long comma-separated segments that are steering-only (typical screen dump without the vocabulary prefix)
+3. **Embedded `Vocabulary:` / legacy `Glossary:` run** removal between speech
+4. **Soup** — ≥80% steering tokens clears the utterance
+5. **Polish** — seam punctuation cleanup
 
 Host passes per-utterance `decoder_context` + `steering_terms` from `TranscriptionSteeringContext` into `PostProcessor.processAsync`. Golden fixtures: `Benchmarks/Golden/postprocess/steering_echo_*.json` (`cargo test -p voicey-text --test golden_postprocess`).
 
@@ -21,7 +24,7 @@ The in-process `QwenEngine` echo strip was removed in #167: `transcribeSinglePas
 
 ## Not implemented (optional follow-ups)
 
-- **Low-RMS / short-clip guard** — open a new issue if macOS QA still sees false positives after #167.
+- **Low-RMS / short-clip guard** — open a new issue if macOS QA still sees false positives after embedded-run stripping.
 - **Rust-only defense-in-depth in infer clients** — not needed while `voicey-text` is mandatory on all paste paths.
 
 ## Acceptance criteria (#162)

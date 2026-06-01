@@ -10,14 +10,14 @@ final class TranscriptionGlossaryTests: XCTestCase {
   func testDecodingContextEmptyGlossaryReturnsNil() {
     XCTAssertEqual(
       TranscriptionGlossary.decodingContext(enabled: true, rawGlossary: "  \n  "),
-      "Glossary: Voicey"
+      "Vocabulary: Voicey"
     )
   }
 
   func testDecodingContextAlwaysIncludesBuiltInVoicey() {
     XCTAssertEqual(
       TranscriptionGlossary.decodingContext(terms: ["Metformin"]),
-      "Glossary: Voicey, Metformin"
+      "Vocabulary: Voicey, Metformin"
     )
   }
 
@@ -25,20 +25,20 @@ final class TranscriptionGlossaryTests: XCTestCase {
     let context = TranscriptionGlossary.decodingContext(
       terms: ["Voicey", "metformin", "Voicey"]
     )
-    XCTAssertEqual(context, "Glossary: Voicey, metformin")
+    XCTAssertEqual(context, "Vocabulary: Voicey, metformin")
   }
 
   func testFormatCommaSeparatedTerms() {
     XCTAssertEqual(
       TranscriptionGlossary.format("Metformin, HbA1c, nephropathy"),
-      "Glossary: Metformin, HbA1c, nephropathy"
+      "Vocabulary: Metformin, HbA1c, nephropathy"
     )
   }
 
   func testFormatNewlineSeparatedTerms() {
     XCTAssertEqual(
       TranscriptionGlossary.format("QuirkQuid\nP3-Quattro\nO3-Omni"),
-      "Glossary: QuirkQuid, P3-Quattro, O3-Omni"
+      "Vocabulary: QuirkQuid, P3-Quattro, O3-Omni"
     )
   }
 
@@ -46,6 +46,6 @@ final class TranscriptionGlossaryTests: XCTestCase {
     let longTerm = String(repeating: "a", count: TranscriptionGlossary.maxContextCharacterCount)
     let formatted = TranscriptionGlossary.format(longTerm)
     XCTAssertEqual(formatted.count, TranscriptionGlossary.maxContextCharacterCount)
-    XCTAssertTrue(formatted.hasPrefix("Glossary: "))
+    XCTAssertTrue(formatted.hasPrefix("Vocabulary: "))
   }
 }
