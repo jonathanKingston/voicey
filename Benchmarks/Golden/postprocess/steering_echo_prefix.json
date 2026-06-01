@@ -1,10 +1,10 @@
 {
   "description": "Issue #162: model echoes the glossary prefix then real speech; prefix stripped, speech kept",
-  "text": "Glossary: Voicey, Cursor the patient took metformin",
+  "text": "Vocabulary: Voicey, Cursor the patient took metformin",
   "segments": [],
   "voice_commands_enabled": false,
   "voice_commands": [],
-  "decoder_context": "Glossary: Voicey, Cursor",
+  "decoder_context": "Vocabulary: Voicey, Cursor",
   "steering_terms": ["Cursor"],
   "expected": "the patient took metformin"
 }
