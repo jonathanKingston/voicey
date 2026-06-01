@@ -1,0 +1,10 @@
+{
+  "description": "Issue #162: embedded vocabulary block between speech segments (screen-context regurgitation)",
+  "text": "News. Triple move beast game. Vocabulary: Voicey, Steering, Processed, Composer I mean, we've got guards.",
+  "segments": [],
+  "voice_commands_enabled": false,
+  "voice_commands": [],
+  "decoder_context": "Vocabulary: Voicey, Steering, Processed, Composer",
+  "steering_terms": ["Steering", "Processed", "Composer"],
+  "expected": "News. Triple move beast game. I mean, we've got guards."
+}

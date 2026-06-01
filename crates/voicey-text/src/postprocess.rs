@@ -372,7 +372,7 @@ mod tests {
     #[test]
     fn clears_regurgitated_steering_soup() {
         let mut request = input("metformin, Cursor, HbA1c, Voicey");
-        request.decoder_context = Some("Glossary: Voicey, Cursor, metformin, HbA1c".to_string());
+        request.decoder_context = Some("Vocabulary: Voicey, Cursor, metformin, HbA1c".to_string());
         request.steering_terms = vec![
             "Cursor".to_string(),
             "metformin".to_string(),
@@ -383,8 +383,8 @@ mod tests {
 
     #[test]
     fn strips_prefix_echo_then_processes_speech() {
-        let mut request = input("Glossary: Voicey, Cursor the patient took metformin");
-        request.decoder_context = Some("Glossary: Voicey, Cursor".to_string());
+        let mut request = input("Vocabulary: Voicey, Cursor the patient took metformin");
+        request.decoder_context = Some("Vocabulary: Voicey, Cursor".to_string());
         request.steering_terms = vec!["Cursor".to_string()];
         assert_eq!(postprocess(&request), "the patient took metformin");
     }

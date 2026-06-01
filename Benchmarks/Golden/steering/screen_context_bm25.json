@@ -11,5 +11,5 @@
     ]
   },
   "expected_terms": ["dosage", "increased", "metformin", "Patient"],
-  "expected_decoder_context": "Glossary: Voicey, dosage, increased, metformin, Patient"
+  "expected_decoder_context": "Vocabulary: Voicey, dosage, increased, metformin, Patient"
 }
