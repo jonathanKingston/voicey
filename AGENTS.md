@@ -152,3 +152,5 @@ Canonical status: [`docs/ISSUE_74_PROGRESS.md`](docs/ISSUE_74_PROGRESS.md).
 | 3 | After #150 merge: [#152](https://github.com/jonathanKingston/voicey/issues/152) / [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ — delete remaining Swift hot-path fallbacks (`AVAudioEngine`, Hub fetch); text/post-process layer done in #167 | Partial (Linux tests/docs; capture/fetch removal needs macOS spot-check) |
 
 Incremental cancel ([#147](https://github.com/jonathanKingston/voicey/issues/147)) is implemented on `main`; only the Escape/cancel row in the macOS checklist remains.
+
+Backlog grooming is described in [`docs/explorations/backlog-reconciler-system-design.md`](docs/explorations/backlog-reconciler-system-design.md) (#168); that doc does not change implementation priority — see [`docs/ISSUE_74_PROGRESS.md`](docs/ISSUE_74_PROGRESS.md).
