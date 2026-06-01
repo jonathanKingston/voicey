@@ -52,23 +52,31 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 
 ## Related PRs
 
-#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #134–#137 (M5 golden parity), #138 (in progress — Rust capture PCM streaming for incremental transcription)
+#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #134–#137 (M5 golden parity), #138 (merged — Rust capture PCM streaming for incremental transcription)
 
 ## Active implementation priority (May 2026)
 
 Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is complete on `main`. Incremental cancel (#147) is implemented on `main` (`f56ea29`, PR #148); exploration reconciled in PR #111 — remaining work is macOS QA only (see [#147](https://github.com/jonathanKingston/voicey/issues/147)).
 
-**Open code PRs (do not duplicate):**
+**Open code PR (do not duplicate):**
 
 | PR | Scope | Gate |
 |----|-------|------|
-| [#138](https://github.com/jonathanKingston/voicey/pull/138) | `read_captured_samples` → incremental coordinator | [#145](https://github.com/jonathanKingston/voicey/issues/145) macOS QA |
 | [#150](https://github.com/jonathanKingston/voicey/pull/150) | Screen-context capture gate before steering (#109) | macOS QA (can combine with #145) |
+
+[#138](https://github.com/jonathanKingston/voicey/pull/138) (`read_captured_samples` → incremental coordinator) merged on `main` (`3dc30e7`). Do not open a duplicate capture-streaming PR.
 
 Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
-**What the #145 / #153 / #154 / #156 docs merges changed:** agents and contributors now have a single macOS QA doc ([`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md)); exploration docs link there instead of duplicating bullets (#154). #156 adds a paste-ready [#145](https://github.com/jonathanKingston/voicey/issues/145) sign-off template and clarifies in [`RUST_RUNTIME.md`](RUST_RUNTIME.md) that Rust-path incremental streaming lands with #138. That **unblocks manual QA sign-off** on #138/#150; it does **not** replace those PRs or allow Cloud Agent to validate mic/TCC/overlay behavior.
+**Automation assessment (Jun 2026, post-#138 merge):**
 
-**Automation assessment (Jun 2026, post-#109):** exploration [#109](https://github.com/jonathanKingston/voicey/pull/109) merged on `main`; it confirms the direction for draft [#150](https://github.com/jonathanKingston/voicey/pull/150) (do not open a duplicate screen-context gate PR). No new Cloud Agent **implementation** PR until macOS QA on [#145](https://github.com/jonathanKingston/voicey/issues/145). Do not duplicate [#138](https://github.com/jonathanKingston/voicey/pull/138) or [#150](https://github.com/jonathanKingston/voicey/pull/150).
+| Item | Status |
+|------|--------|
+| #138 incremental Rust capture streaming | On `main` — **unblocks** [#145](https://github.com/jonathanKingston/voicey/issues/145) capture-streaming rows on bundled `voicey-capture` |
+| #150 screen-context gate | Still open — do not duplicate |
+| #152 capture fallback deletion | **Prep unblocked** on `main`; **merge still gated** on [#145](https://github.com/jonathanKingston/voicey/issues/145) sign-off (and ideally #150 merge for one QA pass) |
+| Cloud Agent capture deletion PR | Wait until #145 sign-off; Linux can land Swift deletion + tests after that |
 
-**Next implementation tranche (after #138/#150 merge + #145 sign-off):** [#152](https://github.com/jonathanKingston/voicey/issues/152) (Phase 2+ fallback deletion; parent [#70](https://github.com/jonathanKingston/voicey/issues/70)); capture layer first (`AudioCaptureManager` AVFoundation path) after #138 merge. Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).
+**Highest priority next work:** [#145](https://github.com/jonathanKingston/voicey/issues/145) macOS manual QA (human-only): run capture-streaming checklist on `main`, then #150 if merging that PR.
+
+**Next implementation tranche (after #150 merge + #145 sign-off):** [#152](https://github.com/jonathanKingston/voicey/issues/152) (Phase 2+ fallback deletion; parent [#70](https://github.com/jonathanKingston/voicey/issues/70)); capture layer first (`AudioCaptureManager` AVFoundation path). Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).

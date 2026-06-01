@@ -4,7 +4,7 @@
 
 Exploratory proposal. Tracking issue: [#152](https://github.com/jonathanKingston/voicey/issues/152) (parent [#70](https://github.com/jonathanKingston/voicey/issues/70)).
 
-**Blocked on:** merge of [#138](https://github.com/jonathanKingston/voicey/pull/138) and [#150](https://github.com/jonathanKingston/voicey/pull/150), plus macOS QA sign-off ([#145](https://github.com/jonathanKingston/voicey/issues/145)).
+**Blocked on:** merge of [#150](https://github.com/jonathanKingston/voicey/pull/150) and macOS QA sign-off ([#145](https://github.com/jonathanKingston/voicey/issues/145)). [#138](https://github.com/jonathanKingston/voicey/pull/138) merged on `main` (`3dc30e7`) — capture fallback deletion must not land until #145 confirms Rust-path incremental streaming.
 
 ## Summary
 
@@ -20,7 +20,7 @@ Phase 2+ deletes those fallbacks so the bundled happy path has no silent Swift d
 - When false, it creates `AVAudioEngine`, installs an input tap, resamples to 16 kHz, and buffers
   samples in Swift (`audioBuffer`).
 - Rust path uses `VoiceyCaptureWorkerSession`; errors fail fast (no silent empty capture).
-- Incremental PCM streaming on the Rust path is landing in [#138](https://github.com/jonathanKingston/voicey/pull/138); capture fallback deletion must follow that merge.
+- Incremental PCM streaming on the Rust path is on `main` (#138); capture fallback deletion follows #145 sign-off.
 
 Relevant files:
 
@@ -60,7 +60,7 @@ Documented in [`RUST_RUNTIME.md`](../RUST_RUNTIME.md).
 
 ## Risks
 
-- Removing capture fallback before #138 merge breaks incremental transcription on the Rust capture path.
+- Removing capture fallback before #145 sign-off risks breaking incremental transcription if Rust streaming regresses in the field.
 - Hub downloader removal must preserve cache layout and revision tracking used by `ModelManager`.
 - Deleting Swift post-process without bundled `voicey-text` breaks dev builds that skip `make build-rust`.
 - Benchmark CLIs already require Rust workers (PR #69 direction); app hot path should match.
@@ -83,7 +83,7 @@ Decide explicitly whether `VOICEY_DISABLE_RUST_WORKERS=1` remains for local dev 
 - Bundled `make bundle-debug` happy path emits no Swift fallback logs for capture, fetch, or post-process.
 - Linux CI unchanged or stricter (`VoiceyCore` / Rust tests).
 - macOS spot-check: hotkey dictation, hands-free multi-utterance, model download (see [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md)).
-- Capture PR lands only after #138 merge and #145 sign-off for incremental streaming.
+- Capture PR lands only after #145 sign-off for incremental streaming (#138 already on `main`).
 
 ## Validation plan
 

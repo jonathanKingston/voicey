@@ -147,8 +147,8 @@ Canonical status: [`docs/ISSUE_74_PROGRESS.md`](docs/ISSUE_74_PROGRESS.md).
 
 | Priority | Work | Cloud Agent? |
 |----------|------|----------------|
-| 1 | macOS QA for open PRs [#138](https://github.com/jonathanKingston/voicey/pull/138), [#150](https://github.com/jonathanKingston/voicey/pull/150) — checklist in [`docs/MACOS_MANUAL_QA.md`](docs/MACOS_MANUAL_QA.md), tracking [#145](https://github.com/jonathanKingston/voicey/issues/145) | No (macOS only) |
-| 2 | Do **not** open duplicate PRs for `read_captured_samples`, incremental Rust capture streaming, or screen-context capture gate | — |
-| 3 | After #138/#150 merge: [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ — delete Swift hot-path fallbacks (`AVAudioEngine`, Hub fetch, Swift post-process) once bundled workers are the only path | Partial (Linux tests/docs; fallback removal needs macOS spot-check) |
+| 1 | macOS QA on `main` for #138 capture streaming + draft [#150](https://github.com/jonathanKingston/voicey/pull/150) screen-context gate — checklist in [`docs/MACOS_MANUAL_QA.md`](docs/MACOS_MANUAL_QA.md), tracking [#145](https://github.com/jonathanKingston/voicey/issues/145) | No (macOS only) |
+| 2 | Do **not** open duplicate PRs for `read_captured_samples` / incremental Rust capture streaming (#138 merged) or screen-context capture gate (#150 open) | — |
+| 3 | After #150 merge + [#145](https://github.com/jonathanKingston/voicey/issues/145) sign-off: [#152](https://github.com/jonathanKingston/voicey/issues/152) / [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ — delete Swift hot-path fallbacks (`AVAudioEngine`, Hub fetch, Swift post-process) | Partial (Linux Swift edits + lint; capture deletion needs macOS spot-check) |
 
 Incremental cancel ([#147](https://github.com/jonathanKingston/voicey/issues/147)) is implemented on `main`; only the Escape/cancel row in the macOS checklist remains.

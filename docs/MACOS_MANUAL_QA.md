@@ -12,9 +12,9 @@ make build-rust && make dev-restart
 
 Use default bundled workers (`voicey-capture`, `voicey-fetch`, `voicey-text`, infer). Confirm `voicey-capture` is present in the app bundle.
 
-## PR #138 — `read_captured_samples` incremental streaming
+## #138 — `read_captured_samples` incremental streaming (on `main`)
 
-Merge gate for [#138](https://github.com/jonathanKingston/voicey/pull/138) (`voicey-capture` → `IncrementalTranscriptionCoordinator`).
+Landed in [#138](https://github.com/jonathanKingston/voicey/pull/138) (`3dc30e7`). Validate on `main` with bundled `voicey-capture` → `IncrementalTranscriptionCoordinator`.
 
 - [ ] **Hotkey dictation:** partial text updates during pause-chunk incremental transcription (bundled `voicey-capture`, not AVFoundation fallback).
 - [ ] **Hands-free session:** multi-utterance run with pause-based chunks; partials and final paste match AVFoundation capture behavior.
@@ -62,7 +62,7 @@ Paste this template on [#145](https://github.com/jonathanKingston/voicey/issues/
 ## macOS manual QA sign-off
 
 - **Commit / build:** `$(git rev-parse HEAD)` after `make build-rust && make dev-restart`
-- **PRs exercised:** #138 (capture streaming) / #150 (screen-context gate) / `main` only — delete unused rows
+- **PRs exercised:** `main` (#138 capture streaming merged) / #150 (screen-context gate) — delete unused rows
 - **Scenarios:** hotkey incremental partials; hands-free multi-utterance; Escape cancel (#147); screen-context wait logs (#150); model-change during record (if on `main`)
 - **Result:** pass | fail
 - **Notes:** (failures, env, residual trim behavior)
