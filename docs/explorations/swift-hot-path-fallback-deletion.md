@@ -41,11 +41,11 @@ Relevant files:
 - `Sources/Voicey/Runtime/VoiceyRustQwenDownloader.swift`
 - `Sources/Voicey/Runtime/VoiceyRuntimeConfiguration.swift` (`useRustFetch`, `VOICEY_USE_RUST_FETCH`)
 
-### Post-process — Swift `PostProcessor` fallback
+### Post-process — Swift `PostProcessor` fallback (DONE)
 
-- `PostProcessor.process` / `processAsync` branch on `VoiceyRuntimeConfiguration.useRustTextPostProcess`.
-- Rust path delegates to `VoiceyTextWorkerSession`; errors throw (no Swift fallback on worker failure).
-- Swift `processInSwift` remains for opt-out / missing worker.
+- **Removed.** `PostProcessor` and `TranscriptionSteeringContext` always use `VoiceyTextWorkerSession`; the `voicey-text` worker is mandatory and errors throw.
+- Deleted: `processInSwift`, `makeInSwift`, `Sources/VoiceyCore/PostProcessBuilder.swift`, `Sources/VoiceyCore/TranscriptionOutputSanitizer.swift`, `TranscriptionGlossary.strippingEchoedDecoderContext`, the `VOICEY_USE_RUST_TEXT` opt-out, and the Swift golden/sanitizer tests.
+- `SteeringContextBuilder` (and the Swift `GoldenSteeringFixtureTests` / `SteeringContextSessionReuseTests`) are removed; steering builds only on `voicey-text` via `build_steering_context` (Rust `golden_steering` keeps parity).
 
 Relevant files:
 
@@ -73,7 +73,7 @@ Land in separate PRs (order from #152):
    `voicey-capture`. Keep `#if DEBUG` escape hatch only if needed for local dev without Rust build.
 2. **Fetch** — delete Hub download branch for Qwen; require `voicey-fetch`. Retain shared path/cache
    validation helpers or move them to a thin Swift utility with no network I/O.
-3. **Text** — delete `processInSwift` from production path; require `voicey-text`.
+3. **Text** — ~~delete `processInSwift` from production path; require `voicey-text`~~ **(done)**.
 4. **Docs** — update `RUST_RUNTIME.md` “Can Swift duplicates be removed yet?” to **Yes** per layer.
 
 Decide explicitly whether `VOICEY_DISABLE_RUST_WORKERS=1` remains for local dev only or is removed.

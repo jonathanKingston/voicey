@@ -21,36 +21,6 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertFalse(VoiceyRuntimeConfiguration.usesInferWorker(for: .qwen3Small))
   }
 
-  func testPostProcessorSegmentLessOutputStable() throws {
-    // Pin Swift post-process path: bundled macOS builds ship voicey-text by default.
-    let priorRustText = ProcessInfo.processInfo.environment["VOICEY_USE_RUST_TEXT"]
-    defer {
-      if let priorRustText {
-        setenv("VOICEY_USE_RUST_TEXT", priorRustText, 1)
-      } else {
-        unsetenv("VOICEY_USE_RUST_TEXT")
-      }
-    }
-    setenv("VOICEY_USE_RUST_TEXT", "0", 1)
-
-    let result = TranscriptionResult(
-      text: "hello world",
-      segments: [],
-      language: "auto",
-      processingTime: 0.1,
-      performanceMetrics: PerformanceMetrics(
-        realTimeFactor: 0.5,
-        audioDuration: 0.2,
-        processingTime: 0.1,
-        thermalState: .nominal
-      )
-    )
-
-    SettingsManager.shared.voiceCommandsEnabled = false
-    let processed = try PostProcessor().process(result)
-    XCTAssertEqual(processed, "hello world")
-  }
-
   func testSharedMemoryPCMReadSlice() throws {
     let samples: [Float] = [0, 0.25, -0.5, 1.0, 0.75]
     let name = try SharedMemoryPCM.write(samples: samples)

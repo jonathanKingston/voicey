@@ -100,6 +100,74 @@ fn postprocess_applies_voice_command_new_line() {
 }
 
 #[test]
+fn postprocess_clears_regurgitated_steering_soup() {
+    let mut session = TextSession::spawn();
+    let response = session.request_json(
+        r#"{"type":"postprocess","id":"pp-3","text":"metformin, Cursor, HbA1c, Voicey","voice_commands_enabled":false,"decoder_context":"Glossary: Voicey, Cursor, metformin, HbA1c","steering_terms":["Cursor","metformin","HbA1c"]}"#,
+    );
+    assert_eq!(response["ok"], true);
+    assert_eq!(response["text"], "");
+}
+
+/// End-to-end simulation of the issue #162 failure mode: build the exact steering
+/// context the model is conditioned on, then force the "model output" to be that
+/// regurgitated steering (verbatim and reordered) and assert the worker strips it.
+/// A control utterance that merely mentions a biased term once is preserved.
+#[test]
+fn postprocess_strips_forced_steering_model_output() {
+    // Real steering the model would be conditioned on (manual glossary path).
+    let steering = voicey_text::build_steering_context(&voicey_text::BuildSteeringContextInput {
+        manual_glossary_enabled: true,
+        manual_glossary: "Cursor, Composer, metformin",
+        screen_context_enabled: false,
+        snapshot: None,
+        max_terms: voicey_text::DEFAULT_MAX_TERMS,
+    });
+    let decoder_context = steering.decoder_context.expect("decoder context");
+    let terms = steering.terms;
+
+    // Forced regurgitation variants: verbatim echo and reordered "screen-term soup".
+    let forced_outputs = [
+        decoder_context.clone(),
+        "metformin Composer Voicey Cursor".to_string(),
+    ];
+
+    let mut session = TextSession::spawn();
+    for forced in &forced_outputs {
+        let request = serde_json::json!({
+            "type": "postprocess",
+            "id": "forced-steering",
+            "text": forced,
+            "voice_commands_enabled": false,
+            "decoder_context": decoder_context,
+            "steering_terms": terms,
+        });
+        let response = session.request_json(&request.to_string());
+        assert_eq!(response["ok"], true);
+        assert_eq!(
+            response["text"], "",
+            "forced steering output should be stripped: {forced:?}"
+        );
+    }
+
+    // Control: genuine speech mentioning a biased term must survive.
+    let control = serde_json::json!({
+        "type": "postprocess",
+        "id": "control",
+        "text": "I opened Cursor and started writing the report",
+        "voice_commands_enabled": false,
+        "decoder_context": decoder_context,
+        "steering_terms": terms,
+    });
+    let response = session.request_json(&control.to_string());
+    assert_eq!(response["ok"], true);
+    assert_eq!(
+        response["text"], "I opened Cursor and started writing the report",
+        "normal dictation with incidental term overlap must not be cleared"
+    );
+}
+
+#[test]
 fn build_steering_context_manual_glossary() {
     let mut session = TextSession::spawn();
     let response = session.request_json(
