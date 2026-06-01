@@ -1709,6 +1709,7 @@ dependencies = [
 name = "voicey-pcm"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "uuid",
 ]
 
