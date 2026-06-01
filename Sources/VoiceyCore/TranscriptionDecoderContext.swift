@@ -39,9 +39,7 @@ public enum TranscriptionDecoderContext {
       return fragments
     }
 
-    if normalized.hasPrefix("Spelling:") || normalized.hasPrefix("Glossary:") {
-      return [normalized]
-    }
+    // Single-channel context (glossary only, post-split): strip it as one fragment.
     return [normalized]
   }
 }
