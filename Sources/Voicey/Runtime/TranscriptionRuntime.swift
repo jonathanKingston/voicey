@@ -19,7 +19,41 @@ enum TranscriptionRuntimeError: LocalizedError {
 
 enum TranscriptionRuntime {
   static func transcribe(
+    audioURL: URL,
+    model: SpeechModel,
+    runtime: TranscriptionRuntimeKind,
+    warmupCount: Int
+  ) async throws -> TranscriptionResult {
+    let capturedAudio = try await BenchmarkAudioLoader.loadCapturedAudio(
+      from: audioURL,
+      model: model,
+      runtime: runtime
+    )
+    defer { capturedAudio.removeSharedBufferIfNeeded() }
+    return try await transcribe(
+      capturedAudio: capturedAudio,
+      model: model,
+      runtime: runtime,
+      warmupCount: warmupCount
+    )
+  }
+
+  static func transcribe(
     samples: [Float],
+    model: SpeechModel,
+    runtime: TranscriptionRuntimeKind,
+    warmupCount: Int
+  ) async throws -> TranscriptionResult {
+    try await transcribe(
+      capturedAudio: .inMemory(samples),
+      model: model,
+      runtime: runtime,
+      warmupCount: warmupCount
+    )
+  }
+
+  private static func transcribe(
+    capturedAudio: CapturedAudio,
     model: SpeechModel,
     runtime: TranscriptionRuntimeKind,
     warmupCount: Int
@@ -28,6 +62,7 @@ enum TranscriptionRuntime {
 
     switch runtime {
     case .inProcess:
+      let samples = try capturedAudio.inMemorySamples()
       return try await BenchmarkSpeechBackend.transcribe(
         samples: samples,
         model: model,
@@ -35,7 +70,7 @@ enum TranscriptionRuntime {
       )
     case .multiprocess:
       return try await transcribeMultiprocess(
-        samples: samples,
+        capturedAudio: capturedAudio,
         model: model,
         warmupCount: warmupCount
       )
@@ -43,7 +78,7 @@ enum TranscriptionRuntime {
   }
 
   private static func transcribeMultiprocess(
-    samples: [Float],
+    capturedAudio: CapturedAudio,
     model: SpeechModel,
     warmupCount: Int
   ) async throws -> TranscriptionResult {
@@ -54,8 +89,16 @@ enum TranscriptionRuntime {
     let supervisor = VoiceyRuntimeSupervisor.shared
     try await supervisor.prewarmInfer(model: model)
     for _ in 0..<warmupCount {
-      _ = try await supervisor.transcribe(samples: samples, model: model, warmupAlreadyDone: true)
+      _ = try await supervisor.transcribe(
+        capturedAudio: capturedAudio,
+        model: model,
+        warmupAlreadyDone: true
+      )
     }
-    return try await supervisor.transcribe(samples: samples, model: model, warmupAlreadyDone: true)
+    return try await supervisor.transcribe(
+      capturedAudio: capturedAudio,
+      model: model,
+      warmupAlreadyDone: true
+    )
   }
 }

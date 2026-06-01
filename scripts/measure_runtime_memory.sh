@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# macOS memory snapshot: in-process peak (time -l) vs warm infer-worker after load.
+# macOS memory snapshot: warm infer-worker after load + multiprocess benchmark parent peak.
 # Note: MLX weights often live in unified GPU memory; ps RSS under-reports vs time -l peak.
 set -euo pipefail
 
@@ -14,6 +14,13 @@ if [[ ! -x "$VOICEY" ]]; then
   exit 1
 fi
 
+for worker in voicey-supervisor voicey-fetch voicey-text; do
+  if [[ ! -x "$ROOT/.build/debug/$worker" && ! -x "$ROOT/target/debug/$worker" ]]; then
+    echo "error: missing $worker (run make build-rust)" >&2
+    exit 1
+  fi
+done
+
 mkdir -p "$OUT_DIR"
 
 rss_kb() {
@@ -24,17 +31,6 @@ parse_time_peak_bytes() {
   local file="$1"
   awk '/maximum resident set size/ { print $1; exit }' "$file"
 }
-
-echo "=== In-process peak (load + warmup + timed transcribe) ===" >&2
-TIME_LOG="$(mktemp)"
-/usr/bin/time -l "$VOICEY" benchmark-transcribe \
-  --model "$MODEL" \
-  --audio "$AUDIO" \
-  --runtime in-process \
-  --warmup 1 \
-  --json >/dev/null 2>"$TIME_LOG"
-IN_PEAK_BYTES="$(parse_time_peak_bytes "$TIME_LOG")"
-rm -f "$TIME_LOG"
 
 echo "=== Multiprocess infer-worker after load_model (idle, kept alive) ===" >&2
 FIFO="$(mktemp -u /tmp/voicey-infer-XXXX)"
@@ -87,6 +83,7 @@ MP_TIME_LOG="$(mktemp)"
   --model "$MODEL" \
   --audio "$AUDIO" \
   --runtime multiprocess \
+  --post-process \
   --warmup 1 \
   --json >/dev/null 2>"$MP_TIME_LOG" || true
 MP_PEAK_BYTES="$(parse_time_peak_bytes "$MP_TIME_LOG" || echo 0)"
@@ -98,7 +95,6 @@ wait "$WORKER_PID" 2>/dev/null || true
 python3 - <<PY
 import json
 
-in_peak = int("${IN_PEAK_BYTES:-0}")
 mp_peak = int("${MP_PEAK_BYTES:-0}")
 worker_rss = int("${MAX_RSS_KB:-0}")
 
@@ -108,7 +104,6 @@ def mb(b):
 payload = {
     "model": "$MODEL",
     "audio": "$AUDIO",
-    "inProcessPeakRSS_MB": mb(in_peak),
     "multiprocessBenchmarkParentPeakRSS_MB": mb(mp_peak),
     "multiprocessBenchmarkParentPeakNote": (
         "time -l on benchmark-transcribe measures the CLI parent; MLX weights live in the infer-worker child."
@@ -117,7 +112,7 @@ payload = {
     "mlxMemoryNote": (
         "Qwen/MLX allocates much of the model in unified GPU memory. "
         "ps RSS on infer-worker alone is often far below real working set; "
-        "prefer inProcessPeakRSS_MB and SpeechModel.memoryUsage in ModelManager for capacity planning."
+        "use SpeechModel.memoryUsage in ModelManager for capacity planning."
     ),
     "planningEstimateFromModelManager": {
         "qwen3-asr-0.6b-6bit": "~1300 MB",

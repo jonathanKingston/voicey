@@ -39,6 +39,8 @@ pub enum InferStubMode {
     FailLoad,
     /// `transcribe` always returns `ok: false` without MLX.
     FailTranscribe,
+    /// Read requests but never respond (simulates a hung worker).
+    HangOnRequest,
 }
 
 impl InferStubMode {
@@ -54,6 +56,7 @@ impl InferStubMode {
             Some("malformed_response") => Self::MalformedResponse,
             Some("fail_load") => Self::FailLoad,
             Some("fail_transcribe") => Self::FailTranscribe,
+            Some("hang_on_request") => Self::HangOnRequest,
             _ => Self::Normal,
         }
     }

@@ -8,6 +8,7 @@ pub mod screen_term_filter;
 pub mod screen_term_healing;
 pub mod screen_term_selector;
 pub mod snapshot;
+pub mod steering;
 pub mod text_cleanup;
 pub mod voice_command;
 pub mod worker;
@@ -29,6 +30,7 @@ pub use screen_term_selector::{
     dedupe_preserving_order, select, select_default, DEFAULT_MAX_TERMS,
 };
 pub use snapshot::ScreenContextSnapshot;
+pub use steering::{build_steering_context, BuildSteeringContextInput, BuildSteeringContextOutput};
 pub use text_cleanup::{
     apply_expansions, capitalize_first, capitalize_i, cleanup_spacing_and_punctuation,
     default_text_expansions, is_conjunction,

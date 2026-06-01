@@ -100,6 +100,7 @@ fn record_fixture_writes_readable_pcm() {
     assert_eq!(response["sample_rate"], 16_000);
     assert!(shm_name.starts_with(voicey_pcm::NAME_PREFIX));
     assert_eq!(sample_count, 800, "0.05s at 16 kHz");
+    assert_eq!(response["non_zero_sample_count"], 0);
 
     let samples = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
     assert_eq!(samples.len(), sample_count);
@@ -118,6 +119,72 @@ fn record_fixture_rejects_out_of_range_duration() {
 }
 
 #[test]
+fn load_wav_file_decodes_pcm_fixture() {
+    let samples = vec![0.0_f32, 0.5, -0.25, 0.125];
+    let wav_path = write_test_wav(&samples, 16_000, 1);
+
+    let mut session = CaptureSession::spawn();
+    let request = format!(
+        r#"{{"type":"load_wav_file","id":"wav-1","path":"{}"}}"#,
+        wav_path.display()
+    );
+    let response = session.request_json(&request);
+    assert_eq!(response["type"], "capture_fixture_result");
+    assert_eq!(response["id"], "wav-1");
+    assert_eq!(response["ok"], true);
+    assert_eq!(response["sample_rate"], 16_000);
+
+    let shm_name = response["shm_name"]
+        .as_str()
+        .expect("shm_name")
+        .to_string();
+    let sample_count = response["sample_count"]
+        .as_u64()
+        .expect("sample_count") as usize;
+    assert_eq!(sample_count, samples.len());
+    assert_eq!(response["non_zero_sample_count"], 3);
+
+    let read_back = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
+    assert_eq!(read_back.len(), samples.len());
+    voicey_pcm::remove(&shm_name);
+    std::fs::remove_file(&wav_path).ok();
+}
+
+#[test]
+fn load_wav_file_rejects_missing_path() {
+    let mut session = CaptureSession::spawn();
+    let response = session.request_json(
+        r#"{"type":"load_wav_file","id":"wav-missing","path":"/tmp/voicey-capture-missing.wav"}"#,
+    );
+    assert_eq!(response["type"], "capture_fixture_result");
+    assert_eq!(response["ok"], false);
+    assert!(response["error"].as_str().is_some());
+}
+
+fn write_test_wav(samples: &[f32], sample_rate: u32, channels: u16) -> PathBuf {
+    use hound::{SampleFormat, WavSpec, WavWriter};
+
+    let path = std::env::temp_dir().join(format!(
+        "voicey_capture_ipc_wav_{}_{}.wav",
+        std::process::id(),
+        samples.len()
+    ));
+    let spec = WavSpec {
+        channels,
+        sample_rate,
+        bits_per_sample: 16,
+        sample_format: SampleFormat::Int,
+    };
+    let mut writer = WavWriter::create(&path, spec).expect("create wav");
+    for sample in samples {
+        let scaled = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+        writer.write_sample(scaled).expect("write sample");
+    }
+    writer.finalize().expect("finalize wav");
+    path
+}
+
+#[test]
 fn invalid_request_json_returns_error() {
     let mut session = CaptureSession::spawn();
     let response = session.request_json(r#"{"type":"not_a_capture_message","id":"x"}"#);
@@ -127,6 +194,54 @@ fn invalid_request_json_returns_error() {
             .as_str()
             .expect("message")
             .contains("invalid request")
+    );
+}
+
+#[test]
+fn drain_hands_free_without_start_returns_not_recording() {
+    let mut session = CaptureSession::spawn();
+    let response = session.request_json(
+        r#"{"type":"drain_hands_free_utterance","id":"drain-1","start_sample_index":0,"end_sample_index":4,"apply_trailing_trim":false}"#,
+    );
+    assert_eq!(response["type"], "capture_fixture_result");
+    assert_eq!(response["ok"], false);
+    let message = response["error"].as_str().expect("error message");
+    assert!(
+        message.contains("not recording"),
+        "expected not-recording error, got {message:?}"
+    );
+}
+
+#[test]
+fn drain_hands_free_after_start_returns_readable_pcm() {
+    let mut session = CaptureSession::spawn();
+    let start = session.request_json(
+        r#"{"type":"start_recording","id":"start-1","mode":"hands_free"}"#,
+    );
+    assert_eq!(start["type"], "capture_ready");
+
+    let response = session.request_json(
+        r#"{"type":"drain_hands_free_utterance","id":"drain-2","start_sample_index":0,"end_sample_index":800,"apply_trailing_trim":false}"#,
+    );
+    assert_eq!(response["type"], "capture_fixture_result");
+    assert_eq!(response["ok"], true);
+
+    let shm_name = response["shm_name"]
+        .as_str()
+        .expect("shm_name")
+        .to_string();
+    let sample_count = response["sample_count"]
+        .as_u64()
+        .expect("sample_count") as usize;
+    assert_eq!(response["sample_rate"], 16_000);
+    assert!(shm_name.starts_with(voicey_pcm::NAME_PREFIX));
+
+    let read_back = voicey_pcm::read_f32_samples(&shm_name, sample_count).expect("read pcm");
+    assert_eq!(read_back.len(), sample_count);
+    voicey_pcm::remove(&shm_name);
+
+    let _ = session.request_json(
+        r#"{"type":"stop_recording","id":"stop-2","apply_trailing_trim":false}"#,
     );
 }
 

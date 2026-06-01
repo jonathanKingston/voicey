@@ -185,3 +185,60 @@ fn append_resampled_chunk(target: &mut Vec<f32>, chunk: &[f32], input_rate: f64)
         target.push(sample);
     }
 }
+
+#[cfg(test)]
+impl LiveRecorder {
+    /// Seeds an in-memory buffer without opening CoreAudio/ALSA (unit tests only).
+    fn start_with_buffered_samples_for_test(&mut self, samples: Vec<f32>) {
+        let buffer = Arc::new(Mutex::new(samples));
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let join = thread::spawn(move || {
+            let _ = stop_rx.recv();
+            Ok(())
+        });
+        self.handle = Some(LiveRecordingHandle {
+            samples: buffer,
+            stop_tx,
+            join,
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LiveRecorder;
+
+    #[test]
+    fn drain_utterance_extracts_slice_and_removes_prefix_from_buffer() {
+        let mut recorder = LiveRecorder::new();
+        recorder.start_with_buffered_samples_for_test((0..10).map(|index| index as f32).collect());
+        let drained = recorder
+            .drain_utterance(2, 6, false)
+            .expect("drain utterance");
+        assert_eq!(drained, vec![2.0, 3.0, 4.0, 5.0]);
+        assert_eq!(recorder.sample_count(), 4);
+        let remainder = recorder.stop().expect("stop");
+        assert_eq!(remainder, vec![6.0, 7.0, 8.0, 9.0]);
+    }
+
+    #[test]
+    fn drain_utterance_clamps_out_of_range_indices() {
+        let mut recorder = LiveRecorder::new();
+        recorder.start_with_buffered_samples_for_test(vec![1.0, 2.0, 3.0]);
+        let drained = recorder
+            .drain_utterance(10, 20, false)
+            .expect("drain utterance");
+        assert!(drained.is_empty());
+        // start clamps to len; drain(..end) still removes the buffered prefix.
+        assert_eq!(recorder.sample_count(), 0);
+    }
+
+    #[test]
+    fn drain_utterance_requires_active_recording() {
+        let recorder = LiveRecorder::new();
+        let error = recorder
+            .drain_utterance(0, 1, false)
+            .expect_err("expected not recording");
+        assert!(error.contains("not recording"));
+    }
+}

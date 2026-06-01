@@ -1,8 +1,0 @@
-{
-  "description": "Transcription that is only noise returns empty deliverable text",
-  "text": "*music*",
-  "segments": [],
-  "voice_commands_enabled": false,
-  "voice_commands": [],
-  "expected": ""
-}

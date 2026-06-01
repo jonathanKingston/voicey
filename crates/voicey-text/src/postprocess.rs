@@ -26,10 +26,13 @@ pub fn postprocess(input: &PostProcessInput) -> String {
     let text_expansions = text_cleanup::default_text_expansions();
     let mut text = input.text.clone();
 
-    text = noise_filter::filter_noise(&text);
-
-    if text.trim().is_empty() {
-        return String::new();
+    // Whisper caption cleanup (brackets, asterisks, silence tokens) — benchmark / segmented backends only.
+    // Qwen and other segment-less backends skip this path.
+    if !input.segments.is_empty() {
+        text = noise_filter::filter_noise(&text);
+        if text.trim().is_empty() {
+            return String::new();
+        }
     }
 
     text = apply_intelligent_punctuation(&text, &input.segments);
@@ -242,9 +245,20 @@ mod tests {
     }
 
     #[test]
-    fn empty_after_noise_filter() {
-        assert_eq!(postprocess(&input("*music*")), "");
-        assert_eq!(postprocess(&input("...")), "");
+    fn segment_less_skips_whisper_noise_filter() {
+        assert_eq!(postprocess(&input("*music*")), "*music*");
+        assert_eq!(postprocess(&input("[music] hello")), "[music] hello");
+    }
+
+    #[test]
+    fn whisper_noise_filter_when_segments_present() {
+        let mut request = input("[music] hello");
+        request.segments = vec![TranscriptionSegment {
+            text: "hello".to_string(),
+            start_time: 0.0,
+            end_time: 0.5,
+        }];
+        assert_eq!(postprocess(&request), "Hello.");
     }
 
     #[test]
