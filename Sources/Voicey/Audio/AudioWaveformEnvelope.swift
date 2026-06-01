@@ -27,9 +27,7 @@ enum AudioWaveformEnvelope {
   }
 
   /// Builds bar heights from a `voicey-capture` PCM file without loading the full utterance into memory.
-  static func normalizedBars(fromSharedBuffer handle: PCMBufferHandle, barCount: Int = displayBarCount) throws
-    -> [Float]
-  {
+  static func normalizedBars(fromSharedBuffer handle: PCMBufferHandle, barCount: Int = displayBarCount) throws -> [Float] {
     guard handle.sampleCount > 0, barCount > 0 else {
       return Array(repeating: 0.08, count: max(barCount, displayBarCount))
     }
