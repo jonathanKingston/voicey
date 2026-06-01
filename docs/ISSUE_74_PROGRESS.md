@@ -66,6 +66,8 @@ Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is comp
 
 Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
-**What the #145 / #153 / #154 docs merges changed:** agents and contributors now have a single macOS QA doc ([`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md)); exploration docs link there instead of duplicating bullets (#154). That **unblocks manual QA sign-off** on #138/#150; it does **not** replace those PRs or allow Cloud Agent to validate mic/TCC/overlay behavior.
+**What the #145 / #153 / #154 / #156 docs merges changed:** agents and contributors now have a single macOS QA doc ([`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md)); exploration docs link there instead of duplicating bullets (#154). #156 adds a paste-ready [#145](https://github.com/jonathanKingston/voicey/issues/145) sign-off template and clarifies in [`RUST_RUNTIME.md`](RUST_RUNTIME.md) that Rust-path incremental streaming lands with #138. That **unblocks manual QA sign-off** on #138/#150; it does **not** replace those PRs or allow Cloud Agent to validate mic/TCC/overlay behavior.
 
-**Next implementation tranche (after #138/#150 merge + #145 sign-off):** [#152](https://github.com/jonathanKingston/voicey/issues/152) (Phase 2+ fallback deletion; parent [#70](https://github.com/jonathanKingston/voicey/issues/70)).
+**Automation assessment (Jun 2026, post-#156):** no new Cloud Agent implementation PR until macOS QA on [#145](https://github.com/jonathanKingston/voicey/issues/145). Do not duplicate [#138](https://github.com/jonathanKingston/voicey/pull/138) or [#150](https://github.com/jonathanKingston/voicey/pull/150).
+
+**Next implementation tranche (after #138/#150 merge + #145 sign-off):** [#152](https://github.com/jonathanKingston/voicey/issues/152) (Phase 2+ fallback deletion; parent [#70](https://github.com/jonathanKingston/voicey/issues/70)); capture layer first (`AudioCaptureManager` AVFoundation path) after #138 merge.
