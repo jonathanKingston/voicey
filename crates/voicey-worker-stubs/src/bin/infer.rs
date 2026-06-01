@@ -16,6 +16,9 @@ fn main() {
         if mode == InferStubMode::ExitOnFirstRequest {
             std::process::exit(1);
         }
+        if mode == InferStubMode::HangOnRequest {
+            std::thread::park();
+        }
         if malformed_pending {
             malformed_pending = false;
             return "not valid json\n".to_string();

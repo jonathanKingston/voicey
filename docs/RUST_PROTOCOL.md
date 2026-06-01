@@ -43,7 +43,9 @@ cargo test -p voicey-capture --test capture_ipc
 make test-text
 ```
 
-Stub behavior overrides: `VOICEY_INFER_STUB_MODE` (`fail_load`, `fail_transcribe`, `malformed_response`, `exit_on_first_request`, `exit_on_start`).
+Stub behavior overrides: `VOICEY_INFER_STUB_MODE` (`fail_load`, `fail_transcribe`, `malformed_response`, `exit_on_first_request`, `exit_on_start`, `hang_on_request`).
+
+Supervisor worker I/O timeouts align with Swift JSONL clients (default 120s; load 600s; fetch download 7200s; transcribe scales with audio length). Tests override all timeouts via `VOICEY_WORKER_REQUEST_TIMEOUT_MS` on the supervisor process.
 
 ## Changing the protocol
 
@@ -81,4 +83,4 @@ fixtures/
 ## Related docs
 
 - [RUST_RUNTIME.md](RUST_RUNTIME.md) — macOS worker binaries and env overrides
-- GitHub [#74](https://github.com/jonathanKingston/voicey/issues/74) — Rust CI testability roadmap (M1–M6)
+- GitHub [#74](https://github.com/jonathanKingston/voicey/issues/74) — Rust CI testability roadmap (M1–M6); in-repo checklist [`ISSUE_74_PROGRESS.md`](ISSUE_74_PROGRESS.md)

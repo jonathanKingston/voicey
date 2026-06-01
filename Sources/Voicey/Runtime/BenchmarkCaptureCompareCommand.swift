@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 
 enum BenchmarkCaptureCompareCommand {
@@ -16,48 +15,33 @@ enum BenchmarkCaptureCompareCommand {
         return 0
       }
 
+      try BenchmarkRustRequirements.requireCapture()
+
       guard let capturePath = VoiceyRuntimeConfiguration.captureWorkerPath else {
         fputs("error: voicey-capture binary not found\n", stderr)
         return 1
       }
 
-      let manager = AudioCaptureManager()
-      manager.startCapture()
-      try await Task.sleep(nanoseconds: UInt64(options.durationSeconds * 1_000_000_000))
-      guard let capturedAudio = manager.stopCapture(applyTrailingTrimHeuristic: false) else {
-        fputs("error: Swift capture returned no samples\n", stderr)
-        return 1
-      }
-      let swiftSamples = try capturedAudio.inMemorySamples()
-      defer { capturedAudio.removeSharedBufferIfNeeded() }
-
       let rustClient = VoiceyCaptureWorkerClient(path: capturePath)
       let rustFixture = try rustClient.recordFixture(durationSeconds: options.durationSeconds)
-      let rustSamples = try SharedMemoryPCM.read(
-        name: rustFixture.shmName,
-        sampleCount: rustFixture.sampleCount
-      )
-      defer { SharedMemoryPCM.remove(name: rustFixture.shmName) }
+      defer { PCMBufferHandle(shmName: rustFixture.shmName, sampleCount: rustFixture.sampleCount, sampleRate: rustFixture.sampleRate).remove() }
 
-      let compared = min(swiftSamples.count, rustSamples.count)
-      var maxDelta: Float = 0
-      for index in 0..<compared {
-        maxDelta = max(maxDelta, abs(swiftSamples[index] - rustSamples[index]))
-      }
-
+      let expectedSamples = Int(options.durationSeconds * 16_000.0)
       let payload: [String: Any] = [
-        "swiftSampleCount": swiftSamples.count,
-        "rustSampleCount": rustSamples.count,
-        "comparedSamples": compared,
-        "maxAbsDelta": maxDelta,
-        "durationSeconds": options.durationSeconds
+        "rustSampleCount": rustFixture.sampleCount,
+        "expectedSampleCount": expectedSamples,
+        "sampleRate": rustFixture.sampleRate,
+        "durationSeconds": options.durationSeconds,
+        "nonZeroSamples": rustFixture.nonZeroSampleCount
       ]
       let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
       guard let json = String(data: data, encoding: .utf8) else {
         throw BenchmarkCaptureCompareError.invalidJSON
       }
       print(json)
-      return maxDelta <= options.tolerance ? 0 : 2
+
+      let withinTolerance = abs(rustFixture.sampleCount - expectedSamples) <= Int(Float(expectedSamples) * 0.15)
+      return withinTolerance ? 0 : 2
     } catch {
       fputs("error: \(error.localizedDescription)\n", stderr)
       return 1
@@ -68,18 +52,16 @@ enum BenchmarkCaptureCompareCommand {
 private struct Options {
   static let helpText = """
     Usage:
-      Voicey benchmark-capture-compare [--duration SECONDS] [--tolerance DELTA]
+      Voicey benchmark-capture-compare [--duration SECONDS]
 
-    Compares Swift AudioCaptureManager samples with voicey-capture fixture output.
+    Smoke-tests voicey-capture fixture recording (Rust-only; no Swift AVAudioEngine path).
     """
 
   let durationSeconds: Double
-  let tolerance: Float
   let showHelp: Bool
 
   init(arguments: [String]) throws {
     var durationSeconds = 0.25
-    var tolerance: Float = 0.05
     var showHelp = false
     var index = 0
     while index < arguments.count {
@@ -90,12 +72,6 @@ private struct Options {
           throw BenchmarkCaptureCompareError.missingValue("--duration")
         }
         durationSeconds = value
-      case "--tolerance":
-        index += 1
-        guard index < arguments.count, let value = Float(arguments[index]) else {
-          throw BenchmarkCaptureCompareError.missingValue("--tolerance")
-        }
-        tolerance = value
       case "--help", "-h":
         showHelp = true
       default:
@@ -104,7 +80,6 @@ private struct Options {
       index += 1
     }
     self.durationSeconds = durationSeconds
-    self.tolerance = tolerance
     self.showHelp = showHelp
   }
 }

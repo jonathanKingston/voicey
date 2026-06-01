@@ -14,3 +14,9 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+
+# Bundled workers ship via `make build-rust-release` / `bundle-direct`.
+# `strip` drops debug symbols from release artifacts (codesign/notarization unchanged).
+# LTO deferred — measure `make build-rust-release` wall time before enabling (#73).
+[profile.release]
+strip = true

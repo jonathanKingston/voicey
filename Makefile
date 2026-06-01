@@ -81,7 +81,7 @@ BENCHMARK_RUNTIME_PARITY_MODEL ?= qwen3-asr-0.6b-6bit
 BENCHMARK_RUNTIME_PARITY_WARMUP ?= 1
 BENCHMARK_RUNTIME_PARITY_OUT = benchmark-results/runtime-parity-common-voice-$(subst /,-,$(BENCHMARK_RUNTIME_PARITY_MODEL)).json
 
-benchmark-runtime-parity-common-voice: build
+benchmark-runtime-parity-common-voice: build build-rust
 	@mkdir -p benchmark-results
 	@test -f "$(BENCHMARK_COMMON_VOICE_DIR)/test.tsv" || (echo "Missing $(BENCHMARK_COMMON_VOICE_DIR)/test.tsv — run: make benchmark-prepare-common-voice" >&2 && exit 1)
 	python3 scripts/benchmark_runtime_parity_matrix.py \
@@ -92,7 +92,7 @@ benchmark-runtime-parity-common-voice: build
 		--warmup "$(BENCHMARK_RUNTIME_PARITY_WARMUP)" \
 		--out "$(BENCHMARK_RUNTIME_PARITY_OUT)"
 
-benchmark-measure-runtime-memory: build
+benchmark-measure-runtime-memory: build build-rust
 	chmod +x scripts/measure_runtime_memory.sh
 	scripts/measure_runtime_memory.sh "$(BENCHMARK_RUNTIME_PARITY_MODEL)" "$(BENCHMARK_COMPARE_AUDIO)"
 
@@ -534,11 +534,11 @@ benchmark-prepare-common-voice:
 		$(ARGS)
 
 # Download the Voicey models used by the benchmark.
-benchmark-download-models: build
+benchmark-download-models: build build-rust
 	.build/debug/Voicey benchmark-download-models $(BENCHMARK_VOICEY_MODELS)
 
 # Prepare data/models, then run the default real-wrapper Common Voice benchmark.
-benchmark-run-common-voice: build benchmark-prepare-common-voice benchmark-download-models
+benchmark-run-common-voice: build build-rust benchmark-prepare-common-voice benchmark-download-models
 	python3 scripts/benchmark_common_voice.py \
 		--tsv "$(BENCHMARK_COMMON_VOICE_DIR)/$(BENCHMARK_COMMON_VOICE_SPLIT).tsv" \
 		--clips-dir "$(BENCHMARK_COMMON_VOICE_DIR)/clips" \
@@ -725,7 +725,7 @@ help:
 	@echo "  show-identities   - Show detected signing certificates"
 	@echo ""
 	@echo "Direct Distribution:"
-	@echo "  bundle-direct     - Create bundle with clipboard-only mode"
+	@echo "  bundle-direct     - Create direct-distribution release bundle (Sparkle-enabled)"
 	@echo "  sign-direct       - Sign for notarization (requires DEVELOPER_ID)"
 	@echo "  notarize          - Notarize the app (requires APPLE_ID, TEAM_ID, APP_PASSWORD)"
 	@echo "  dmg               - Create notarized DMG for distribution"
