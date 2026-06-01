@@ -2,7 +2,7 @@
 
 Consolidated gate for hot-path validation that Linux CI cannot exercise (mic, TCC, overlay UX, bundled Rust workers).
 
-**Tracking issue:** [#145](https://github.com/jonathanKingston/voicey/issues/145)
+**Tracking issue:** [#145](https://github.com/jonathanKingston/voicey/issues/145) (closed Jun 2026 — checklist retained for regressions and open PRs)
 
 ## Setup
 
@@ -12,9 +12,9 @@ make build-rust && make dev-restart
 
 Use default bundled workers (`voicey-capture`, `voicey-fetch`, `voicey-text`, infer). Confirm `voicey-capture` is present in the app bundle.
 
-## PR #138 — `read_captured_samples` incremental streaming
+## Rust capture incremental streaming (`main`, #138 + #166)
 
-Merge gate for [#138](https://github.com/jonathanKingston/voicey/pull/138) (`voicey-capture` → `IncrementalTranscriptionCoordinator`).
+On `main` since #138; [#166](https://github.com/jonathanKingston/voicey/pull/166) fixes `read_samples_since` / `sample_count` consistency (no silent PCM skip between polls).
 
 - [ ] **Hotkey dictation:** partial text updates during pause-chunk incremental transcription (bundled `voicey-capture`, not AVFoundation fallback).
 - [ ] **Hands-free session:** multi-utterance run with pause-based chunks; partials and final paste match AVFoundation capture behavior.
@@ -62,7 +62,7 @@ Paste this template on [#145](https://github.com/jonathanKingston/voicey/issues/
 ## macOS manual QA sign-off
 
 - **Commit / build:** `$(git rev-parse HEAD)` after `make build-rust && make dev-restart`
-- **PRs exercised:** #138 (capture streaming) / #150 (screen-context gate) / `main` only — delete unused rows
+- **PRs exercised:** #150 (screen-context gate) / #167 (paste sanitizer) / #169 (hands-free finish) / `main` only — delete unused rows
 - **Scenarios:** hotkey incremental partials; hands-free multi-utterance; Escape cancel (#147); screen-context wait logs (#150); model-change during record (if on `main`)
 - **Result:** pass | fail
 - **Notes:** (failures, env, residual trim behavior)
