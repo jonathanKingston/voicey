@@ -67,4 +67,33 @@ final class TranscriptionGlossaryTests: XCTestCase {
       "Hello world"
     )
   }
+
+  func testStripEchoedSpellingFragmentWhenCombinedContextWasSent() {
+    let context = "Glossary: Voicey, Metformin Spelling: British English."
+    XCTAssertEqual(
+      TranscriptionGlossary.strippingEchoedDecoderContext(
+        "Spelling: British English.",
+        decoderContext: context
+      ),
+      ""
+    )
+    XCTAssertEqual(
+      TranscriptionGlossary.strippingEchoedDecoderContext(
+        "Spelling: British English. Hello there",
+        decoderContext: context
+      ),
+      "Hello there"
+    )
+  }
+
+  func testStripEchoedGlossaryFragmentWhenCombinedContextWasSent() {
+    let context = "Glossary: Voicey, Metformin Spelling: British English."
+    XCTAssertEqual(
+      TranscriptionGlossary.strippingEchoedDecoderContext(
+        "Glossary: Voicey, Metformin Organise the meeting",
+        decoderContext: context
+      ),
+      "Organise the meeting"
+    )
+  }
 }

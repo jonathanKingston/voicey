@@ -10,13 +10,7 @@ public enum TranscriptionGlossary {
 
   /// Returns decoder context for the combined term list, or nil when empty.
   public static func decodingContext(terms: [String]) -> String? {
-    let merged = builtInTerms + terms
-    let unique = ScreenTermSelector.dedupePreservingOrder(
-      merged,
-      maxCount: ScreenTermSelector.defaultMaxTerms
-    )
-    guard !unique.isEmpty else { return nil }
-    return formatTerms(unique)
+    TranscriptionDecoderContext.make(glossaryTerms: terms)
   }
 
   /// Returns decoder context when only a manual glossary is enabled.
@@ -51,14 +45,34 @@ public enum TranscriptionGlossary {
     var remainder = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !remainder.isEmpty else { return remainder }
 
-    if remainder == normalizedContext {
-      return ""
-    }
-    if remainder.hasPrefix(normalizedContext) {
-      remainder = String(remainder.dropFirst(normalizedContext.count))
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      if remainder.hasPrefix(",") || remainder.hasPrefix(":") {
-        remainder = remainder.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+    var prefixes = [normalizedContext]
+    prefixes.append(contentsOf: TranscriptionDecoderContext.steeringFragmentsToStrip(from: normalizedContext))
+    var seen: Set<String> = []
+    let uniquePrefixes =
+      prefixes
+      .filter { prefix in
+        guard !prefix.isEmpty, !seen.contains(prefix) else { return false }
+        seen.insert(prefix)
+        return true
+      }
+      .sorted { $0.count > $1.count }
+
+    var changed = true
+    while changed {
+      changed = false
+      for prefix in uniquePrefixes {
+        if remainder == prefix {
+          return ""
+        }
+        if remainder.hasPrefix(prefix) {
+          remainder = String(remainder.dropFirst(prefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+          if remainder.hasPrefix(",") || remainder.hasPrefix(":") {
+            remainder = remainder.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+          }
+          changed = true
+          break
+        }
       }
     }
     return remainder

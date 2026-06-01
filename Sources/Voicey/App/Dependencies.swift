@@ -20,6 +20,7 @@ protocol SettingsProviding: AnyObject {
   var transcriptionGlossary: String { get set }
   var transcriptionScreenContextEnabled: Bool { get set }
   var transcriptionScreenContextOCREnabled: Bool { get set }
+  var transcriptionLanguageID: String { get set }
   var enableDetailedLogging: Bool { get set }
 
   func configureLaunchAtLogin(enabled: Bool)

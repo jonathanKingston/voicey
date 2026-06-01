@@ -2,8 +2,25 @@ import Foundation
 import VoiceyCore
 import os
 
+/// Qwen transcription hints from settings (decoder steering + spoken language).
+struct QwenTranscriptionHints: Sendable {
+  let decoderContext: String?
+  let language: String?
+}
+
 /// Builds Qwen decoder steering context on the Voicey host (Accessibility + settings).
 enum TranscriptionSteeringContext {
+  static func qwenHints(
+    settings: SettingsProviding = SettingsManager.shared
+  ) async throws -> QwenTranscriptionHints {
+    QwenTranscriptionHints(
+      decoderContext: try await make(settings: settings),
+      language: TranscriptionQwenLanguage.qwenLanguageParameter(
+        storedID: settings.transcriptionLanguageID
+      )
+    )
+  }
+
   static func make(settings: SettingsProviding = SettingsManager.shared) async throws -> String? {
     guard settings.transcriptionGlossaryEnabled || settings.transcriptionScreenContextEnabled else {
       return nil
