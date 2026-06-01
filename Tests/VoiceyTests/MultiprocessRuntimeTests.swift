@@ -1,5 +1,6 @@
-@testable import Voicey
 import XCTest
+
+@testable import Voicey
 
 final class MultiprocessRuntimeTests: XCTestCase {
   func testQwenUsesInferWorkerByDefault() {
@@ -37,8 +38,18 @@ final class MultiprocessRuntimeTests: XCTestCase {
     XCTAssertEqual(read, samples)
   }
 
+  func testSharedMemoryPCMWriteSetsOwnerOnlyPermissions() throws {
+    let name = try SharedMemoryPCM.write(samples: [1.0])
+    defer { SharedMemoryPCM.remove(name: name) }
+    let url = SharedMemoryPCM.fileURL(for: name)
+    let permissions =
+      try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+    XCTAssertEqual(permissions?.uint16Value, 0o600)
+  }
+
   func testCapturedAudioSharedBufferDuration() {
-    let handle = PCMBufferHandle(shmName: "voicey_pcm_test", sampleCount: 16_000, sampleRate: 16_000)
+    let handle = PCMBufferHandle(
+      shmName: "voicey_pcm_test", sampleCount: 16_000, sampleRate: 16_000)
     let captured = CapturedAudio.sharedBuffer(handle)
     XCTAssertEqual(captured.sampleCount, 16_000)
     XCTAssertEqual(captured.durationSeconds, 1.0, accuracy: 0.001)

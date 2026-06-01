@@ -2,7 +2,7 @@
 
 ## Status
 
-Exploratory proposal.
+Implemented on `main` (owner-only permissions, observable cleanup, stale-file sweep). See `voicey-pcm` and `SharedMemoryPCM.swift`.
 
 ## Summary
 

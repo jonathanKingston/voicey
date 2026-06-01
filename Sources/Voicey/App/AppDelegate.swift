@@ -135,6 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Setup ESC key monitor
     setupEscapeKeyMonitor()
 
+    SharedMemoryPCM.cleanupStaleFiles()
+
     setupWorkspaceWakeObserver()
 
     // Check if setup is complete - show onboarding if anything is missing
@@ -210,6 +212,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       shutdownSemaphore.signal()
     }
     _ = shutdownSemaphore.wait(timeout: .now() + 6)
+
+    SharedMemoryPCM.cleanupStaleFiles()
 
     // Remove monitors
     if let monitor = localEscKeyMonitor {
