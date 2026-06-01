@@ -17,7 +17,7 @@ Sanitization runs in **`voicey-text` `postprocess`** (mandatory worker — no Sw
 
 Host passes per-utterance `decoder_context` + `steering_terms` from `TranscriptionSteeringContext` into `PostProcessor.processAsync`. Golden fixtures: `Benchmarks/Golden/postprocess/steering_echo_*.json` (`cargo test -p voicey-text --test golden_postprocess`).
 
-The legacy in-process `QwenEngine` echo strip is retained for live incremental partial overlays; the worker sanitizer is authoritative before paste and is idempotent over already-stripped text.
+The in-process `QwenEngine` echo strip was removed in #167: `transcribeSinglePass` now returns the raw model output verbatim (see `QwenEngine.swift` — "Steering echo stripping happens later in the text post-process pipeline"). The `voicey-text` worker sanitizer is the sole authoritative path before paste and is idempotent over already-stripped text. Live incremental partial overlays may therefore still surface steering echoes briefly; only the final post-processed paste is guaranteed clean.
 
 ## Not implemented (optional follow-ups)
 
