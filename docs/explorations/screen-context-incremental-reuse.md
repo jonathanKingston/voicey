@@ -44,4 +44,4 @@ Relevant files:
 - [x] Linux: `SteeringContextSessionReuseTests` (VoiceyCore).
 - [x] macOS: `ScreenContextStoreTests` (VoiceyTests).
 - [ ] macOS manual: dictate a term from the active window before and after a pause; steering applies
-  consistently (follow-up with #138 QA in #145).
+  consistently (macOS sign-off: [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md), [#145](https://github.com/jonathanKingston/voicey/issues/145)).
