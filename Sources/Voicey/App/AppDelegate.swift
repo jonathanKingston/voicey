@@ -1891,17 +1891,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
     }
     await UtteranceArchiveCoordinator.archiveUtterance(
-      capturedAudio: capturedAudio,
-      outcome: outcome,
-      rawText: rawText,
-      processedText: processedText,
-      errorMessage: errorMessage,
-      partialTranscription: partialTranscription,
-      model: transcriptionModelForSession(),
-      settings: dependencies.settings,
-      steering: lastUtteranceSteering,
-      screenSnapshot: ScreenContextStore.shared.currentSnapshot(),
-      targetAppBundleID: bundleID
+      UtteranceArchiveRequest(
+        capturedAudio: capturedAudio,
+        outcome: outcome,
+        rawText: rawText,
+        processedText: processedText,
+        errorMessage: errorMessage,
+        partialTranscription: partialTranscription,
+        model: transcriptionModelForSession(),
+        steering: lastUtteranceSteering,
+        screenSnapshot: ScreenContextStore.shared.currentSnapshot(),
+        targetAppBundleID: bundleID
+      ),
+      settings: dependencies.settings
     )
   }
 

@@ -3,6 +3,20 @@ import Foundation
 import VoiceyCore
 import os
 
+/// Inputs for a single session-archive write.
+struct UtteranceArchiveRequest {
+  let capturedAudio: CapturedAudio
+  let outcome: UtteranceArchiveOutcome
+  let rawText: String
+  let processedText: String
+  let errorMessage: String?
+  let partialTranscription: String?
+  let model: SpeechModel
+  let steering: QwenTranscriptionHints?
+  let screenSnapshot: ScreenContextSnapshot?
+  let targetAppBundleID: String?
+}
+
 /// Persists utterances via `voicey-archive` when dictation history is enabled.
 enum UtteranceArchiveCoordinator {
   private static let sessionArchiveEnvironmentKey = "VOICEY_SESSION_ARCHIVE"
@@ -15,17 +29,8 @@ enum UtteranceArchiveCoordinator {
   }
 
   static func archiveUtterance(
-    capturedAudio: CapturedAudio,
-    outcome: UtteranceArchiveOutcome,
-    rawText: String,
-    processedText: String,
-    errorMessage: String?,
-    partialTranscription: String?,
-    model: SpeechModel,
-    settings: SettingsProviding = SettingsManager.shared,
-    steering: QwenTranscriptionHints?,
-    screenSnapshot: ScreenContextSnapshot?,
-    targetAppBundleID: String?
+    _ request: UtteranceArchiveRequest,
+    settings: SettingsProviding = SettingsManager.shared
   ) async {
     guard isEnabled(settings: settings) else { return }
     guard SessionArchiveBackend.isAvailable else {
@@ -36,7 +41,7 @@ enum UtteranceArchiveCoordinator {
 
     let audioWire: [String: Any]
     do {
-      audioWire = try wireAudioSource(from: capturedAudio)
+      audioWire = try wireAudioSource(from: request.capturedAudio)
     } catch {
       AppLogger.transcription.error(
         "Session archive: \(error.localizedDescription, privacy: .public)")
@@ -44,7 +49,7 @@ enum UtteranceArchiveCoordinator {
     }
 
     let snapshot: UtteranceArchiveScreenSnapshot?
-    if settings.transcriptionScreenContextEnabled, let screenSnapshot,
+    if settings.transcriptionScreenContextEnabled, let screenSnapshot = request.screenSnapshot,
       !screenSnapshot.queryText.isEmpty || !screenSnapshot.corpusChunks.isEmpty {
       snapshot = UtteranceArchiveScreenSnapshot(snapshot: screenSnapshot)
     } else {
@@ -52,22 +57,26 @@ enum UtteranceArchiveCoordinator {
     }
 
     var metadata: [String: Any] = [
-      "outcome": wireOutcome(outcome),
-      "model_id": model.rawValue,
+      "outcome": wireOutcome(request.outcome),
+      "model_id": request.model.rawValue,
       "language_id": settings.transcriptionLanguageID,
-      "raw_text": rawText,
-      "processed_text": processedText,
-      "steering_terms": steering?.steeringTerms ?? [],
+      "raw_text": request.rawText,
+      "processed_text": request.processedText,
+      "steering_terms": request.steering?.steeringTerms ?? [],
       "glossary_enabled": settings.transcriptionGlossaryEnabled,
       "screen_context_enabled": settings.transcriptionScreenContextEnabled,
       "runtime": (VoiceyRuntimeConfiguration.mode == .multiprocess ? "multiprocess" : "in-process")
     ]
-    if let errorMessage { metadata["error_message"] = errorMessage }
-    if let partialTranscription { metadata["partial_transcription"] = partialTranscription }
-    if let hash = steering?.decoderContext.flatMap({ sha256Hex(of: $0) }) {
+    if let errorMessage = request.errorMessage { metadata["error_message"] = errorMessage }
+    if let partialTranscription = request.partialTranscription {
+      metadata["partial_transcription"] = partialTranscription
+    }
+    if let hash = request.steering?.decoderContext.flatMap({ sha256Hex(of: $0) }) {
       metadata["decoder_context_sha256"] = hash
     }
-    if let targetAppBundleID { metadata["app_bundle_id"] = targetAppBundleID }
+    if let targetAppBundleID = request.targetAppBundleID {
+      metadata["app_bundle_id"] = targetAppBundleID
+    }
     if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
       metadata["voicey_version"] = version
     }
