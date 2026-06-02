@@ -3,7 +3,7 @@ import Foundation
 /// Builds decoder context strings for on-device ASR vocabulary biasing.
 public enum TranscriptionGlossary {
   /// Upper bound on glossary context length passed to the model.
-  public static let maxContextCharacterCount = 2000
+  public static let maxContextCharacterCount = 512
 
   /// Always included in steering glossaries when biasing is enabled.
   public static let builtInTerms: [String] = ["Voicey"]

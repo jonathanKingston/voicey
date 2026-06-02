@@ -85,3 +85,8 @@ icon_1024.png
 # Local tooling logs
 fast_mcp_server.log
 voicey-debug-session.log
+
+# Ephemeral PCM / local dictation exports (committed goldens: Benchmarks/Golden/*.wav only)
+*.pcm
+Benchmarks/Corpus/
+**/SessionArchive/
