@@ -210,7 +210,7 @@ Hands-free utterances share the same archive unit but differ in orchestration ([
 2. **Overlay UX on error**: keep overlay visible until user dismisses (enabling save) vs. notification action “Save last failure”?
 3. **Single vs. multi-utterance buffer**: is “last utterance only” sufficient for v1?
 4. **Legal/copy**: exact wording for opt-in retention in settings (medical/legal dictation sensitivity).
-5. **Issue tracking**: single GitHub issue for MVP vs. epic with sub-issues per phase?
+5. **Issue tracking**: single GitHub issue for MVP vs. epic with sub-issues per phase? → follow-up tracked in [#182](https://github.com/jonathanKingston/voicey/issues/182); Phase 0–2 partial work in [#181](https://github.com/jonathanKingston/voicey/pull/181).
 
 ## Acceptance criteria (when implemented)
 

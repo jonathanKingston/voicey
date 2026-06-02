@@ -77,3 +77,10 @@ Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 - **#163:** Fix is in draft PR #169 (`UtteranceTranscriptionFinishPolicy`); merge gate is macOS hands-free multi-utterance repro per [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
 **Next implementation tranche (after #150 merge):** [#152](https://github.com/jonathanKingston/voicey/issues/152) capture layer (`AudioCaptureManager` AVFoundation path deletion), then fetch Hub fallback. Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).
+
+**Automation assessment (Jun 2026, post-#180):** [#180](https://github.com/jonathanKingston/voicey/pull/180) adds the session-archive design doc only — it does **not** unblock [#150](https://github.com/jonathanKingston/voicey/pull/150) / [#169](https://github.com/jonathanKingston/voicey/pull/169) / [#152](https://github.com/jonathanKingston/voicey/issues/152). It **does** unblock planning and review of dictation history work: implementation is in open [#181](https://github.com/jonathanKingston/voicey/pull/181) (rebased onto `main`); overlay save + export CLI tracked in [#182](https://github.com/jonathanKingston/voicey/issues/182). **Highest priority unchanged:** macOS review/merge **#150** and **#169**; do not duplicate those PRs or #181.
+
+| PR / issue | Scope | Gate |
+|------------|-------|------|
+| [#181](https://github.com/jonathanKingston/voicey/pull/181) | Vocabulary decoder prefix, steering-echo hardening, opt-in dictation history (`voicey-archive`) | macOS: history panel + steering checklist |
+| [#182](https://github.com/jonathanKingston/voicey/issues/182) | Overlay save, export CLI, benchmark glue (design phases 1 + 3–4) | After #181 lands or splits |
