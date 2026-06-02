@@ -145,7 +145,7 @@ WAV writing can reuse Rust (`voicey-capture` already has `wav` module and `Recor
 | CI | Only **checked-in, non-PII** clips become goldens; local archive never auto-commits. |
 | Steering/post-process | For text-only regressions, export **JSON golden** inputs from archive metadata (`raw_text`, `decoder_context`, `steering_terms`) without audio — same pattern as `Benchmarks/Golden/postprocess/`. |
 
-Relationship to [Common Voice benchmark](../Benchmarks/CommonVoice.md): Common Voice is **third-party read speech with reference transcripts**; session archive is **first-party dictation with implicit “reference” = user judgement or later manual annotation**. They complement each other.
+Relationship to [Common Voice benchmark](../../Benchmarks/CommonVoice.md): Common Voice is **third-party read speech with reference transcripts**; session archive is **first-party dictation with implicit “reference” = user judgement or later manual annotation**. They complement each other.
 
 ### Privacy, security, retention
 
