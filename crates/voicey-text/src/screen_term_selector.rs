@@ -6,7 +6,11 @@ use crate::screen_term_filter;
 use crate::screen_term_healing;
 use crate::snapshot::ScreenContextSnapshot;
 
-pub const DEFAULT_MAX_TERMS: usize = 60;
+/// Maximum BM25 / query screen-derived terms (beyond manual glossary + built-ins).
+pub const DEFAULT_MAX_SCREEN_TERMS: usize = 16;
+
+/// Hard cap on terms passed into decoder context (manual glossary + screen).
+pub const DEFAULT_MAX_TERMS: usize = 48;
 
 pub fn select(
     snapshot: Option<&ScreenContextSnapshot>,
@@ -62,6 +66,8 @@ pub fn select(
     let mut selected = must_keep.clone();
     let must_keep_keys: std::collections::HashSet<String> =
         must_keep.iter().map(|term| normalized_key(term)).collect();
+    let screen_budget = DEFAULT_MAX_SCREEN_TERMS.min(max_terms.saturating_sub(selected.len()));
+    let mut screen_added = 0usize;
 
     for entry in ranked_terms {
         let term = screen_term_healing::canonical_term(&entry.term, &anchors);
@@ -76,12 +82,13 @@ pub fn select(
             continue;
         }
         selected.push(term);
-        if selected.len() >= max_terms {
+        screen_added += 1;
+        if screen_added >= screen_budget || selected.len() >= max_terms {
             break;
         }
     }
 
-    if selected.len() < max_terms && !query.is_empty() {
+    if screen_added < screen_budget && selected.len() < max_terms && !query.is_empty() {
         let query_tokens = screen_term_healing::enriched_tokens(&query, &anchors);
         for token in query_tokens {
             if screen_term_filter::is_steering_noise_token(&token) {
@@ -99,8 +106,9 @@ pub fn select(
                 .any(|existing| normalized_key(existing) == key)
             {
                 selected.push(token);
+                screen_added += 1;
             }
-            if selected.len() >= max_terms {
+            if screen_added >= screen_budget || selected.len() >= max_terms {
                 break;
             }
         }
@@ -196,5 +204,24 @@ mod tests {
             10,
         );
         assert_eq!(terms, vec!["Voicey", "Qwen"]);
+    }
+
+    #[test]
+    fn select_caps_screen_derived_terms() {
+        let chunks: Vec<String> = (0..40)
+            .map(|i| format!("term{i}zzzzzz chunk content for bm25 ranking"))
+            .collect();
+        let snapshot = ScreenContextSnapshot::new("term0zzzzzz focus", chunks);
+
+        let terms = select(
+            Some(&snapshot),
+            "",
+            false,
+            DEFAULT_MAX_TERMS,
+        );
+        assert!(
+            terms.len() <= DEFAULT_MAX_SCREEN_TERMS,
+            "terms={terms:?}"
+        );
     }
 }
