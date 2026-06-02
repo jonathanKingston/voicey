@@ -7,10 +7,10 @@ use crate::screen_term_healing;
 use crate::snapshot::ScreenContextSnapshot;
 
 /// Maximum BM25 / query screen-derived terms (beyond manual glossary + built-ins).
-pub const DEFAULT_MAX_SCREEN_TERMS: usize = 16;
+pub const DEFAULT_MAX_SCREEN_TERMS: usize = 8;
 
 /// Hard cap on terms passed into decoder context (manual glossary + screen).
-pub const DEFAULT_MAX_TERMS: usize = 48;
+pub const DEFAULT_MAX_TERMS: usize = 32;
 
 pub fn select(
     snapshot: Option<&ScreenContextSnapshot>,

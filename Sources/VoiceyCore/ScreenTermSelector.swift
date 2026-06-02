@@ -3,10 +3,10 @@ import Foundation
 /// Selects vocabulary terms from accessibility snapshots using BM25 and deduplication.
 public enum ScreenTermSelector {
   /// Maximum BM25 / query screen-derived terms (beyond manual glossary + built-ins).
-  public static let defaultMaxScreenTerms = 16
+  public static let defaultMaxScreenTerms = 8
 
   /// Hard cap on terms passed into decoder context (manual glossary + screen).
-  public static let defaultMaxTerms = 48
+  public static let defaultMaxTerms = 32
 
   public static func select(
     snapshot: ScreenContextSnapshot?,
