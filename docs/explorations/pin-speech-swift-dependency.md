@@ -2,7 +2,16 @@
 
 ## Status
 
-Exploratory proposal.
+Revision pin landed in `Package.swift` (post-#117 exploration). `Package.resolved` remains
+gitignored (`.gitignore`); the manifest `revision:` is the committed source of truth for CI and
+releases.
+
+### Maintainer bump process
+
+1. Choose a reviewed upstream tag or commit (`speech-swift` releases: `v0.0.x` on GitHub).
+2. Update the `revision:` (or switch to `from:` when semver range is appropriate) in `Package.swift`.
+3. On macOS: `swift package resolve`, `make build`, and Qwen smoke / relevant tests.
+4. Note the old and new revision in the PR; do not track `branch: "main"` again.
 
 ## Summary
 
@@ -12,8 +21,8 @@ resolved, which is risky for reproducible releases and CI stability.
 
 ## Evidence
 
-- `Package.swift` declares `.package(url: "https://github.com/soniqo/speech-swift", branch:
-  "main")`.
+- `Package.swift` pins `.package(..., revision: "72a20dbb142d000b73d395b7bc62599fef8387e2")`
+  (the revision previously resolved from `main` at exploration time).
 - Voicey imports `Qwen3ASR` and `AudioCommon` products from that dependency.
 - The README lists `speech-swift` as the native Swift MLX Qwen3 ASR runtime dependency.
 
