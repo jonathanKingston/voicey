@@ -64,8 +64,14 @@ Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is comp
 |----|-------|------|
 | [#150](https://github.com/jonathanKingston/voicey/pull/150) | Screen-context capture gate before steering (#109) | macOS spot-check (can combine with #145 sign-off scenarios) |
 | [#169](https://github.com/jonathanKingston/voicey/pull/169) | Hands-free finish from drained PCM when incremental buffer is partial (#163) | macOS hands-free repro |
+| [#181](https://github.com/jonathanKingston/voicey/pull/181) | Vocabulary decoder prefix, steering-echo hardening, opt-in dictation history (`voicey-archive`) | macOS: history panel + steering checklist |
+| [#175](https://github.com/jonathanKingston/voicey/pull/175) | Shared PCM owner-only permissions + stale cleanup (#114) | Linux/Rust tests + macOS transcription spot-check |
 
 Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
+
+| Issue | Scope | Notes |
+|-------|-------|-------|
+| [#182](https://github.com/jonathanKingston/voicey/issues/182) | Dictation archive overlay save, export CLI, benchmark glue | After #181 lands or splits |
 
 **Automation assessment (Jun 2026, post-#167):** #167 closes [#162](https://github.com/jonathanKingston/voicey/issues/162) (steering-echo sanitization in `voicey-text` `postprocess`; Swift post-process/steering fallbacks removed). It also completes the **text layer** of [#152](https://github.com/jonathanKingston/voicey/issues/152). **Does not** unblock capture fallback deletion until [#150](https://github.com/jonathanKingston/voicey/pull/150) merges. **Highest priority next work:** review/merge #150 and #169 (macOS spot-check where noted). Do not duplicate #150 or #169.
 
@@ -74,8 +80,11 @@ Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 **Suggested GitHub issue comments** (Cloud Agent token lacks `issues: write` — paste manually if helpful):
 
 - **#152:** Text/post-process layer done in #167. Capture (`AVAudioEngine`) deletion remains blocked until #150 merges + macOS QA. Do not open duplicate PRs for #150 / #169.
-- **#163:** Fix is in draft PR #169 (`UtteranceTranscriptionFinishPolicy`); merge gate is macOS hands-free multi-utterance repro per [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
+- **#163:** Fix is in open PR #169 (`UtteranceTranscriptionFinishPolicy`); merge gate is macOS hands-free multi-utterance repro per [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
+- **#185:** Closed by #186 — `Package.swift` uses `revision:`; bump process in [`pin-speech-swift-dependency.md`](explorations/pin-speech-swift-dependency.md).
 
 **Next implementation tranche (after #150 merge):** [#152](https://github.com/jonathanKingston/voicey/issues/152) capture layer (`AudioCaptureManager` AVFoundation path deletion), then fetch Hub fallback. Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).
 
-**Automation assessment (Jun 2026, post-#117):** [#117](https://github.com/jonathanKingston/voicey/pull/117) exploration on `main` documents `speech-swift` supply-chain risk; it does **not** unblock [#150](https://github.com/jonathanKingston/voicey/pull/150) / [#169](https://github.com/jonathanKingston/voicey/pull/169) or [#152](https://github.com/jonathanKingston/voicey/issues/152) capture work. **Does** unblock a Linux-friendly follow-up: pin `speech-swift` in `Package.swift` (revision or tag) — see [`pin-speech-swift-dependency.md`](explorations/pin-speech-swift-dependency.md). **Priority queue unchanged:** macOS review/merge #150 and #169 first; do not duplicate those PRs. Parallel work: #181 (dictation archive), speech-swift pin PR when open.
+**Automation assessment (Jun 2026, post-#117):** [#117](https://github.com/jonathanKingston/voicey/pull/117) exploration on `main` documents `speech-swift` supply-chain risk; it does **not** unblock [#150](https://github.com/jonathanKingston/voicey/pull/150) / [#169](https://github.com/jonathanKingston/voicey/pull/169) or [#152](https://github.com/jonathanKingston/voicey/issues/152) capture work. Pin follow-up landed in [#186](https://github.com/jonathanKingston/voicey/pull/186) (closes [#185](https://github.com/jonathanKingston/voicey/issues/185)).
+
+**Automation assessment (Jun 2026, post-#186):** [#186](https://github.com/jonathanKingston/voicey/pull/186) pins `speech-swift` to reviewed revision `72a20db` in `Package.swift` (same commit previously resolved from `main`; see [`pin-speech-swift-dependency.md`](explorations/pin-speech-swift-dependency.md)). **Does not** unblock [#150](https://github.com/jonathanKingston/voicey/pull/150) / [#169](https://github.com/jonathanKingston/voicey/pull/169) or [#152](https://github.com/jonathanKingston/voicey/issues/152) capture fallback deletion. **Does** close the #117 supply-chain follow-up ([#185](https://github.com/jonathanKingston/voicey/issues/185)). **Highest priority unchanged:** macOS review/merge **#150** and **#169**; do not duplicate those PRs or **#181** / **#175**.
