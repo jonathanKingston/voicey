@@ -30,7 +30,7 @@ pub use screen_term_healing::{
     merged_adjacent_tokens, MAX_MISSING_PREFIX_LENGTH,
 };
 pub use screen_term_selector::{
-    dedupe_preserving_order, select, select_default, DEFAULT_MAX_TERMS,
+    dedupe_preserving_order, select, select_default, DEFAULT_MAX_SCREEN_TERMS, DEFAULT_MAX_TERMS,
 };
 pub use snapshot::ScreenContextSnapshot;
 pub use steering::{build_steering_context, BuildSteeringContextInput, BuildSteeringContextOutput};

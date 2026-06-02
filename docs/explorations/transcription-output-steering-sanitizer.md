@@ -27,6 +27,18 @@ The in-process `QwenEngine` echo strip was removed in #167: `transcribeSinglePas
 - **Low-RMS / short-clip guard** — open a new issue if macOS QA still sees false positives after embedded-run stripping.
 - **Rust-only defense-in-depth in infer clients** — not needed while `voicey-text` is mandatory on all paste paths.
 
+## Decoder context size (2026-06)
+
+Session-archive replay showed long IDE screen steering (~60 terms / ~2000 chars) correlated with ASR garble while audio-only replay was fine. Defaults (Rust + VoiceyCore):
+
+| Constant | Value | Role |
+|----------|-------|------|
+| `DEFAULT_MAX_SCREEN_TERMS` | **16** | BM25 / query tokens beyond manual glossary |
+| `DEFAULT_MAX_TERMS` | **48** | Total terms into decoder context |
+| `maxContextCharacterCount` | **512** | `Vocabulary: …` string cap for Qwen |
+
+Manual glossary terms are kept; screen soup is trimmed. Re-tune with `scripts/replay_session_archive.py` on local `SessionArchive` (never commit user WAVs).
+
 ## Acceptance criteria (#162)
 
 - [x] Infer + hands-free + manual hotkey paths run output sanitizer before paste (`PostProcessor` → `voicey-text`)
