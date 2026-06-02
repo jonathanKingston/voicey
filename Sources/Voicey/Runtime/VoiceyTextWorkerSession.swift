@@ -29,7 +29,9 @@ final class VoiceyTextWorkerSession: @unchecked Sendable {
     text: String,
     segments: [TranscriptionSegment],
     voiceCommandsEnabled: Bool,
-    voiceCommands: [VoiceCommand]
+    voiceCommands: [VoiceCommand],
+    decoderContext: String? = nil,
+    steeringTerms: [String] = []
   ) async throws -> String {
     var request: [String: Any] = [
       "type": "postprocess",
@@ -37,8 +39,12 @@ final class VoiceyTextWorkerSession: @unchecked Sendable {
       "text": text,
       "voice_commands_enabled": voiceCommandsEnabled,
       "voice_commands": voiceCommands.map(wireVoiceCommand),
-      "segments": segments.map(wireSegment)
+      "segments": segments.map(wireSegment),
+      "steering_terms": steeringTerms
     ]
+    if let decoderContext {
+      request["decoder_context"] = decoderContext
+    }
 
     let response = try await client().send(request: request)
     try VoiceyJSONLResponse.ensureSuccess(response, context: "postprocess")

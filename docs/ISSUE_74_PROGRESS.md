@@ -37,7 +37,7 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 - [x] Move steering/glossary golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (#134, #135, #136)
 - [x] Move post-process golden fixtures to shared JSON with Rust + Swift VoiceyCore tests (#137)
 - [x] `voicey-capture` `read_captured_samples` for incremental transcription streaming (Linux IPC tests)
-- [ ] Remaining Swift runtime helpers → Rust / `VoiceyCore` (see [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ fallback deletion)
+- [ ] Remaining Swift runtime helpers → Rust / bundled workers (see [#70](https://github.com/jonathanKingston/voicey/issues/70) Phase 2+ fallback deletion — text layer done in #167; capture/fetch remain)
 
 ### M6 — Longer term (deferred)
 
@@ -52,23 +52,30 @@ This file mirrors the milestone checklist on the GitHub issue so agents and cont
 
 ## Related PRs
 
-#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #134–#137 (M5 golden parity), #138 (in progress — Rust capture PCM streaming for incremental transcription)
+#75, #76, #86, #87, #88, #92, #93, #101, #104 (Tier 1 fetch), #123 (M2 worker I/O timeout), #119 (#73 release strip), #134–#137 (M5 golden parity), #138 (Rust capture PCM streaming), #166 (#138 follow-up), #167 (#162 steering-echo sanitizer + #152 text layer)
 
-## Active implementation priority (May 2026)
+## Active implementation priority (Jun 2026)
 
-Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is complete on `main`. Incremental cancel (#147) is implemented on `main` (`f56ea29`, PR #148); exploration reconciled in PR #111 — remaining work is macOS QA only (see [#147](https://github.com/jonathanKingston/voicey/issues/147)).
+Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is complete on `main`. Incremental cancel (#147) is implemented on `main` (`f56ea29`, PR #148). #138 incremental Rust capture streaming and #166 `read_samples_since` fix are on `main`. #145 macOS QA is **closed** (Jun 2026). #162 paste-side steering sanitizer and #152 text/post-process fallback removal landed in #167 (`75c8142`).
 
 **Open code PRs (do not duplicate):**
 
 | PR | Scope | Gate |
 |----|-------|------|
-| [#138](https://github.com/jonathanKingston/voicey/pull/138) | `read_captured_samples` → incremental coordinator | [#145](https://github.com/jonathanKingston/voicey/issues/145) macOS QA |
-| [#150](https://github.com/jonathanKingston/voicey/pull/150) | Screen-context capture gate before steering (#109) | macOS QA (can combine with #145) |
+| [#150](https://github.com/jonathanKingston/voicey/pull/150) | Screen-context capture gate before steering (#109) | macOS spot-check (can combine with #145 sign-off scenarios) |
+| [#169](https://github.com/jonathanKingston/voicey/pull/169) | Hands-free finish from drained PCM when incremental buffer is partial (#163) | macOS hands-free repro |
 
 Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
-**What the #145 / #153 / #154 / #156 docs merges changed:** agents and contributors now have a single macOS QA doc ([`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md)); exploration docs link there instead of duplicating bullets (#154). #156 adds a paste-ready [#145](https://github.com/jonathanKingston/voicey/issues/145) sign-off template and clarifies in [`RUST_RUNTIME.md`](RUST_RUNTIME.md) that Rust-path incremental streaming lands with #138. That **unblocks manual QA sign-off** on #138/#150; it does **not** replace those PRs or allow Cloud Agent to validate mic/TCC/overlay behavior.
+**Automation assessment (Jun 2026, post-#167):** #167 closes [#162](https://github.com/jonathanKingston/voicey/issues/162) (steering-echo sanitization in `voicey-text` `postprocess`; Swift post-process/steering fallbacks removed). It also completes the **text layer** of [#152](https://github.com/jonathanKingston/voicey/issues/152). **Does not** unblock capture fallback deletion until [#150](https://github.com/jonathanKingston/voicey/pull/150) merges. **Highest priority next work:** review/merge #150 and #169 (macOS spot-check where noted). Do not duplicate #150 or #169.
 
-**Automation assessment (Jun 2026, post-#109):** exploration [#109](https://github.com/jonathanKingston/voicey/pull/109) merged on `main`; it confirms the direction for draft [#150](https://github.com/jonathanKingston/voicey/pull/150) (do not open a duplicate screen-context gate PR). No new Cloud Agent **implementation** PR until macOS QA on [#145](https://github.com/jonathanKingston/voicey/issues/145). Do not duplicate [#138](https://github.com/jonathanKingston/voicey/pull/138) or [#150](https://github.com/jonathanKingston/voicey/pull/150).
+**Automation assessment (Jun 2026, post-#172):** [#172](https://github.com/jonathanKingston/voicey/pull/172) aligns [#147](https://github.com/jonathanKingston/voicey/issues/147) cancel rows in [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md) with the closed issue; it does **not** unblock new implementation PRs. Priority queue unchanged: merge [#150](https://github.com/jonathanKingston/voicey/pull/150) and [#169](https://github.com/jonathanKingston/voicey/pull/169) on macOS; then [#152](https://github.com/jonathanKingston/voicey/issues/152) capture fallback deletion.
 
-**Next implementation tranche (after #138/#150 merge + #145 sign-off):** [#152](https://github.com/jonathanKingston/voicey/issues/152) (Phase 2+ fallback deletion; parent [#70](https://github.com/jonathanKingston/voicey/issues/70)); capture layer first (`AudioCaptureManager` AVFoundation path) after #138 merge. Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).
+**Suggested GitHub issue comments** (Cloud Agent token lacks `issues: write` — paste manually if helpful):
+
+- **#152:** Text/post-process layer done in #167. Capture (`AVAudioEngine`) deletion remains blocked until #150 merges + macOS QA. Do not open duplicate PRs for #150 / #169.
+- **#163:** Fix is in draft PR #169 (`UtteranceTranscriptionFinishPolicy`); merge gate is macOS hands-free multi-utterance repro per [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
+
+**Next implementation tranche (after #150 merge):** [#152](https://github.com/jonathanKingston/voicey/issues/152) capture layer (`AudioCaptureManager` AVFoundation path deletion), then fetch Hub fallback. Prep exploration: [`swift-hot-path-fallback-deletion.md`](explorations/swift-hot-path-fallback-deletion.md).
+
+**Automation assessment (Jun 2026, post-#117):** [#117](https://github.com/jonathanKingston/voicey/pull/117) exploration on `main` documents `speech-swift` supply-chain risk; it does **not** unblock [#150](https://github.com/jonathanKingston/voicey/pull/150) / [#169](https://github.com/jonathanKingston/voicey/pull/169) or [#152](https://github.com/jonathanKingston/voicey/issues/152) capture work. **Does** unblock a Linux-friendly follow-up: pin `speech-swift` in `Package.swift` (revision or tag) — see [`pin-speech-swift-dependency.md`](explorations/pin-speech-swift-dependency.md). **Priority queue unchanged:** macOS review/merge #150 and #169 first; do not duplicate those PRs. Parallel work: #181 (dictation archive), speech-swift pin PR when open.

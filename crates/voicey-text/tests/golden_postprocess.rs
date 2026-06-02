@@ -16,6 +16,10 @@ struct GoldenFixture {
     voice_commands_enabled: bool,
     #[serde(default)]
     voice_commands: Vec<VoiceCommand>,
+    #[serde(default)]
+    decoder_context: Option<String>,
+    #[serde(default)]
+    steering_terms: Vec<String>,
     expected: String,
 }
 
@@ -68,6 +72,8 @@ fn golden_postprocess_fixtures_match_expected() {
                 .collect(),
             voice_commands_enabled: fixture.voice_commands_enabled,
             voice_commands: fixture.voice_commands,
+            decoder_context: fixture.decoder_context,
+            steering_terms: fixture.steering_terms,
         };
         let actual = voicey_text::postprocess::postprocess(&input);
         assert_eq!(

@@ -116,7 +116,8 @@ final class QwenInferWorkerClient: @unchecked Sendable {
   func transcribe(
     pcmHandle: PCMBufferHandle,
     model: SpeechModel,
-    decoderContext: String? = nil
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     try startIfNeeded()
 
@@ -133,6 +134,9 @@ final class QwenInferWorkerClient: @unchecked Sendable {
     }
     if let decoderContext, !decoderContext.isEmpty {
       request["decoder_context"] = decoderContext
+    }
+    if let language, !language.isEmpty {
+      request["language"] = language
     }
 
     let response = try await send(
@@ -154,7 +158,7 @@ final class QwenInferWorkerClient: @unchecked Sendable {
     return TranscriptionResult(
       text: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
       segments: [],
-      language: response.language ?? "auto",
+      language: response.language ?? language ?? "auto",
       processingTime: processingTime,
       performanceMetrics: PerformanceMetrics(
         realTimeFactor: rtf,
@@ -168,7 +172,8 @@ final class QwenInferWorkerClient: @unchecked Sendable {
   func transcribe(
     samples: [Float],
     model: SpeechModel,
-    decoderContext: String? = nil
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     try startIfNeeded()
     let shmName = try SharedMemoryPCM.write(samples: samples)
@@ -184,6 +189,9 @@ final class QwenInferWorkerClient: @unchecked Sendable {
     ]
     if let decoderContext, !decoderContext.isEmpty {
       request["decoder_context"] = decoderContext
+    }
+    if let language, !language.isEmpty {
+      request["language"] = language
     }
 
     let response = try await send(
@@ -205,7 +213,7 @@ final class QwenInferWorkerClient: @unchecked Sendable {
     return TranscriptionResult(
       text: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
       segments: [],
-      language: response.language ?? "auto",
+      language: response.language ?? language ?? "auto",
       processingTime: processingTime,
       performanceMetrics: PerformanceMetrics(
         realTimeFactor: rtf,

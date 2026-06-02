@@ -86,9 +86,11 @@ enum InferWorkerCommand {
         sampleOffset: sampleOffset
       )
       let decoderContext = json["decoder_context"] as? String
+      let language = json["language"] as? String
       let result = try await engine.transcribe(
         audioBuffer: samples,
-        decoderContext: decoderContext
+        decoderContext: decoderContext,
+        language: language
       )
       writeResponse([
         "type": "transcribe_result",

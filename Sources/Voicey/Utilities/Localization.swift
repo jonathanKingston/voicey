@@ -331,6 +331,10 @@ enum L10n {
         static var glossaryEnable: String { L10n.string("transcription.glossaryEnable") }
         static var glossaryDescription: String { L10n.string("transcription.glossaryDescription") }
         static var glossaryPlaceholder: String { L10n.string("transcription.glossaryPlaceholder") }
+        static var spokenLanguage: String { L10n.string("transcription.spokenLanguage") }
+        static var spokenLanguageDescription: String {
+            L10n.string("transcription.spokenLanguageDescription")
+        }
         static var onScreenText: String { L10n.string("transcription.onScreenText") }
         static var screenContextEnable: String { L10n.string("transcription.screenContextEnable") }
         static var screenContextDescription: String {

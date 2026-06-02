@@ -56,9 +56,15 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
   func transcribe(
     pcmHandle: PCMBufferHandle,
     model: SpeechModel,
-    decoderContext: String? = nil
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
-    var request = Self.transcribeRequest(pcmHandle: pcmHandle, model: model, decoderContext: decoderContext)
+    var request = Self.transcribeRequest(
+      pcmHandle: pcmHandle,
+      model: model,
+      decoderContext: decoderContext,
+      language: language
+    )
 
     let response = try await client().send(request: request)
     try VoiceyJSONLResponse.ensureSuccess(response, context: "transcribe")
@@ -85,7 +91,8 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
   private static func transcribeRequest(
     pcmHandle: PCMBufferHandle,
     model: SpeechModel,
-    decoderContext: String?
+    decoderContext: String?,
+    language: String?
   ) -> [String: Any] {
     var request: [String: Any] = [
       "type": "transcribe",
@@ -101,13 +108,17 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
     if let decoderContext, !decoderContext.isEmpty {
       request["decoder_context"] = decoderContext
     }
+    if let language, !language.isEmpty {
+      request["language"] = language
+    }
     return request
   }
 
   func transcribe(
     samples: [Float],
     model: SpeechModel,
-    decoderContext: String? = nil
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     let shmName = try SharedMemoryPCM.write(samples: samples)
     defer { SharedMemoryPCM.remove(name: shmName) }
@@ -122,6 +133,9 @@ final class VoiceyRustSupervisorClient: @unchecked Sendable {
     ]
     if let decoderContext, !decoderContext.isEmpty {
       request["decoder_context"] = decoderContext
+    }
+    if let language, !language.isEmpty {
+      request["language"] = language
     }
 
     let response = try await client().send(request: request)

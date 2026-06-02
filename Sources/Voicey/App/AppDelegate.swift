@@ -43,6 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var outputManager: OutputManager?
   var incrementalTranscriptionCoordinator: IncrementalTranscriptionCoordinator?
 
+  /// Steering hints used for the current utterance. Retained so the `voicey-text`
+  /// post-process can strip regurgitated steering vocabulary before paste.
+  private var lastUtteranceSteering: QwenTranscriptionHints?
+
   // The app that was frontmost when recording started (used for optional auto-paste)
   private var recordingTargetPID: pid_t?
 
@@ -1474,7 +1478,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       )
       let processedText: String
       do {
-        processedText = try await postProcessor?.processAsync(result) ?? result.text
+        processedText = try await postProcessor?.processAsync(
+          result,
+          decoderContext: lastUtteranceSteering?.decoderContext,
+          steeringTerms: lastUtteranceSteering?.steeringTerms ?? []
+        ) ?? result.text
       } catch {
         await handleTranscriptionError(error)
         return
@@ -1608,50 +1616,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func transcribeWithSelectedEngine(capturedAudio: CapturedAudio) async throws -> TranscriptionResult {
     let utteranceModel = transcriptionModelForSession()
-    let decoderContext = try await TranscriptionSteeringContext.make()
+    let hints = try await TranscriptionSteeringContext.qwenHints()
+    lastUtteranceSteering = hints
     if VoiceyRuntimeConfiguration.usesInferWorker(for: utteranceModel) {
       return try await VoiceyRuntimeSupervisor.shared.transcribe(
         capturedAudio: capturedAudio,
         model: utteranceModel,
         warmupAlreadyDone: multiprocessInferReady,
-        decoderContext: decoderContext
+        decoderContext: hints.decoderContext,
+        language: hints.language
       )
     }
     let audioBuffer = try capturedAudio.inMemorySamples()
     return try await transcribeWithSelectedEngine(
       audioBuffer: audioBuffer,
       model: utteranceModel,
-      decoderContext: decoderContext
+      hints: hints
     )
   }
 
   private func transcribeWithSelectedEngine(audioBuffer: [Float]) async throws -> TranscriptionResult {
     let utteranceModel = transcriptionModelForSession()
-    let decoderContext = try await TranscriptionSteeringContext.make()
+    let hints = try await TranscriptionSteeringContext.qwenHints()
+    lastUtteranceSteering = hints
     return try await transcribeWithSelectedEngine(
       audioBuffer: audioBuffer,
       model: utteranceModel,
-      decoderContext: decoderContext
+      hints: hints
     )
   }
 
   private func transcribeWithSelectedEngine(
     audioBuffer: [Float],
     model: SpeechModel,
-    decoderContext: String?
+    hints: QwenTranscriptionHints
   ) async throws -> TranscriptionResult {
     if VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
       return try await VoiceyRuntimeSupervisor.shared.transcribe(
         samples: audioBuffer,
         model: model,
         warmupAlreadyDone: multiprocessInferReady,
-        decoderContext: decoderContext
+        decoderContext: hints.decoderContext,
+        language: hints.language
       )
     }
     guard
       let qwenResult = try await qwenEngine?.transcribe(
         audioBuffer: audioBuffer,
-        decoderContext: decoderContext
+        decoderContext: hints.decoderContext,
+        language: hints.language
       )
     else {
       throw TranscriptionError.transcriptionFailed("No result from Qwen engine")
@@ -1663,10 +1676,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
     AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
 
-    // Post-process text
+    // Post-process text (post-processor strips regurgitated steering vocabulary, issue #162)
     let processedText: String
     do {
-      processedText = try await postProcessor?.processAsync(result) ?? result.text
+      processedText = try await postProcessor?.processAsync(
+        result,
+        decoderContext: lastUtteranceSteering?.decoderContext,
+        steeringTerms: lastUtteranceSteering?.steeringTerms ?? []
+      ) ?? result.text
     } catch {
       await handleTranscriptionError(error)
       return

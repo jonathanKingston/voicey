@@ -2,44 +2,20 @@ import Foundation
 import VoiceyCore
 import os
 
-/// Post-processes transcription output for expansions, voice commands, and formatting.
+/// Post-processes transcription output via the `voicey-text` worker (expansions, voice
+/// commands, formatting, and steering-echo stripping).
 ///
-/// Whisper caption noise filtering and segment-based punctuation run only when
-/// `TranscriptionResult.segments` is non-empty (benchmark / Whisper backends).
+/// The bundled `voicey-text` worker is the only post-processing path; there is no
+/// in-process Swift fallback. Worker failures throw rather than silently degrading.
 final class PostProcessor {
   // MARK: - Processing
 
   /// Synchronous entry point (tests / legacy CLI). Prefer `processAsync` on async call paths.
-  func process(_ result: TranscriptionResult) throws -> String {
-    if VoiceyRuntimeConfiguration.useRustTextPostProcess {
-      return try processViaRustWorkerSync(result)
-    }
-    return processInSwift(result)
-  }
-
-  func processAsync(_ result: TranscriptionResult) async throws -> String {
-    if VoiceyRuntimeConfiguration.useRustTextPostProcess {
-      return try await processViaRustWorker(result)
-    }
-    return processInSwift(result)
-  }
-
-  private func processViaRustWorker(_ result: TranscriptionResult) async throws -> String {
-    do {
-      return try await VoiceyTextWorkerSession.shared.postprocess(
-        text: result.text,
-        segments: result.segments,
-        voiceCommandsEnabled: voiceCommandsEnabled,
-        voiceCommands: voiceCommands
-      )
-    } catch {
-      AppLogger.transcription.error(
-        "PostProcessor: Rust text worker error: \(error.localizedDescription, privacy: .public)")
-      throw error
-    }
-  }
-
-  private func processViaRustWorkerSync(_ result: TranscriptionResult) throws -> String {
+  func process(
+    _ result: TranscriptionResult,
+    decoderContext: String? = nil,
+    steeringTerms: [String] = []
+  ) throws -> String {
     let group = DispatchGroup()
     var processedText: String?
     var thrown: Error?
@@ -47,7 +23,11 @@ final class PostProcessor {
     Task {
       defer { group.leave() }
       do {
-        processedText = try await processViaRustWorker(result)
+        processedText = try await processViaRustWorker(
+          result,
+          decoderContext: decoderContext,
+          steeringTerms: steeringTerms
+        )
       } catch {
         thrown = error
       }
@@ -60,22 +40,33 @@ final class PostProcessor {
     return processedText
   }
 
-  private func processInSwift(_ result: TranscriptionResult) -> String {
-    AppLogger.transcription.info("PostProcessor: Input text: \"\(result.text)\"")
+  func processAsync(
+    _ result: TranscriptionResult,
+    decoderContext: String? = nil,
+    steeringTerms: [String] = []
+  ) async throws -> String {
+    try await processViaRustWorker(result, decoderContext: decoderContext, steeringTerms: steeringTerms)
+  }
 
-    let output = PostProcessBuilder.build(
-      PostProcessBuilder.Input(
+  private func processViaRustWorker(
+    _ result: TranscriptionResult,
+    decoderContext: String?,
+    steeringTerms: [String]
+  ) async throws -> String {
+    do {
+      return try await VoiceyTextWorkerSession.shared.postprocess(
         text: result.text,
-        segments: result.segments.map {
-          PostProcessSegment(text: $0.text, startTime: $0.startTime, endTime: $0.endTime)
-        },
+        segments: result.segments,
         voiceCommandsEnabled: voiceCommandsEnabled,
-        voiceCommands: voiceCommands
+        voiceCommands: voiceCommands,
+        decoderContext: decoderContext,
+        steeringTerms: steeringTerms
       )
-    )
-
-    AppLogger.transcription.info("PostProcessor: Final output: \"\(output)\"")
-    return output
+    } catch {
+      AppLogger.transcription.error(
+        "PostProcessor: Rust text worker error: \(error.localizedDescription, privacy: .public)")
+      throw error
+    }
   }
 
   // MARK: - Settings

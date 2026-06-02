@@ -1,0 +1,10 @@
+{
+  "description": "Issue #162: model regurgitates reordered steering vocabulary instead of speech; cleared before paste",
+  "text": "metformin, Cursor, HbA1c, Voicey",
+  "segments": [],
+  "voice_commands_enabled": false,
+  "voice_commands": [],
+  "decoder_context": "Glossary: Voicey, Cursor, metformin, HbA1c",
+  "steering_terms": ["Cursor", "metformin", "HbA1c"],
+  "expected": ""
+}

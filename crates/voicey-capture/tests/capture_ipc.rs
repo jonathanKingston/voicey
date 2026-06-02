@@ -227,10 +227,16 @@ fn read_captured_samples_after_start_returns_suffix() {
     assert_eq!(response["type"], "capture_samples_read");
     assert_eq!(response["ok"], true);
     let samples = response["samples"].as_array().expect("samples array");
-    assert_eq!(samples.len(), total);
-    assert_eq!(
-        response["sample_count"].as_u64().expect("sample_count") as usize,
-        total
+    let sample_count = response["sample_count"].as_u64().expect("sample_count") as usize;
+    // The reported cursor must equal the delivered slice (start was 0): the host advances
+    // its read index to `sample_count`, so a larger value would silently drop samples.
+    assert_eq!(sample_count, samples.len());
+    // A live mic may append more frames between the level snapshot and the read, so the read
+    // can only ever be at or beyond the earlier count — never fewer.
+    assert!(
+        samples.len() >= total,
+        "expected at least {total} samples, got {}",
+        samples.len()
     );
 
     let _ = session.request_json(
