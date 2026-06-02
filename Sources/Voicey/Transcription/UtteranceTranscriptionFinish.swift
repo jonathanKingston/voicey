@@ -20,3 +20,9 @@ enum UtteranceTranscriptionFinish {
     }
   }
 }
+
+/// Transcription output plus the audio that should be archived for replay fidelity.
+struct UtteranceTranscriptionFinishOutcome: Sendable {
+  let result: TranscriptionResult
+  let archiveAudio: CapturedAudio
+}
