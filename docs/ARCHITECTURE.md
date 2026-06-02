@@ -64,7 +64,7 @@ Runtime reference: [`RUST_RUNTIME.md`](RUST_RUNTIME.md). IPC/versioning:
 | Qwen inference | Swift `Voicey infer-worker` through supervisor/client IPC | In-process `QwenEngine` with `VOICEY_RUNTIME=in-process` | Worker contains MLX memory/thermal spikes; in-process has less IPC and easier breakpoints. |
 | Audio handoff | POSIX shared memory (`SharedMemoryPCM`) | `[Float]` / JSONL paths | Avoids copying long clips; hands-free trimming may still materialize samples. |
 | Model download | `voicey-fetch` | Swift downloader with `VOICEY_USE_RUST_FETCH=0` | Worker narrows network/file authority; direct builds seatbelt it by default. |
-| Post-process | `voicey-text` | Swift `PostProcessor` with `VOICEY_USE_RUST_TEXT=0` or worker error | Rust parity enables Linux tests; Swift fallback remains required. |
+| Post-process | `voicey-text` (only path) | None — `PostProcessor` throws on worker error, no Swift fallback | Rust parity also enables Linux tests; failures surface instead of silently degrading. |
 | Steering | Glossary + Accessibility/OCR context before decode | Settings toggles | Improves names/local terms; uses optional privacy permissions and AX/OCR CPU. |
 | Long clips | Qwen chunking/token budget in `QwenEngine` | None | More stable than one huge decode; joins can lose cross-boundary context. |
 
