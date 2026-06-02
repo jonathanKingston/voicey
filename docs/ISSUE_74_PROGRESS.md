@@ -66,6 +66,7 @@ Model/session lifecycle (#108, #139, #140–#142, #144 Linux validation) is comp
 | [#169](https://github.com/jonathanKingston/voicey/pull/169) | Hands-free finish from drained PCM when incremental buffer is partial (#163) | macOS hands-free repro |
 | [#181](https://github.com/jonathanKingston/voicey/pull/181) | Vocabulary decoder prefix, steering-echo hardening, opt-in dictation history (`voicey-archive`) | macOS: history panel + steering checklist |
 | [#175](https://github.com/jonathanKingston/voicey/pull/175) | Shared PCM owner-only permissions + stale cleanup (#114) | Linux/Rust tests + macOS transcription spot-check |
+| [#188](https://github.com/jonathanKingston/voicey/pull/188) (supersedes [#177](https://github.com/jonathanKingston/voicey/pull/177)) | Privacy: redact transcription logs by default (#113) | macOS: default Console shows lengths only; Advanced → detailed logging restores content |
 | [#191](https://github.com/jonathanKingston/voicey/pull/191) | Steering context caps Phase A (8 / 32 / 256) — steering-only split from #181 | macOS dictation + busy IDE screen context |
 | [#192](https://github.com/jonathanKingston/voicey/pull/192) | Local steering benchmark harness (dev-only; no user audio in git) | Developer workflow; not a product merge gate |
 
