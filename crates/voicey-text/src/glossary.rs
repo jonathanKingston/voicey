@@ -28,7 +28,7 @@ const MIN_EMBEDDED_STEERING_RUN_TOKEN_COUNT: usize = 4;
 const EMBEDDED_RUN_END_NON_STEERING_TOKEN_COUNT: usize = 2;
 
 /// Upper bound on glossary context length passed to the model.
-pub const MAX_CONTEXT_CHARACTER_COUNT: usize = 512;
+pub const MAX_CONTEXT_CHARACTER_COUNT: usize = 256;
 
 /// Always included in steering glossaries when biasing is enabled.
 pub const BUILT_IN_TERMS: &[&str] = &["Voicey"];

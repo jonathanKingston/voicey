@@ -33,11 +33,11 @@ Session-archive replay showed long IDE screen steering (~60 terms / ~2000 chars)
 
 | Constant | Value | Role |
 |----------|-------|------|
-| `DEFAULT_MAX_SCREEN_TERMS` | **16** | BM25 / query tokens beyond manual glossary |
-| `DEFAULT_MAX_TERMS` | **48** | Total terms into decoder context |
-| `maxContextCharacterCount` | **512** | `Vocabulary: …` string cap for Qwen |
+| `DEFAULT_MAX_SCREEN_TERMS` | **8** | BM25 / query tokens beyond manual glossary |
+| `DEFAULT_MAX_TERMS` | **32** | Total terms into decoder context |
+| `maxContextCharacterCount` | **256** | `Vocabulary: …` string cap for Qwen |
 
-Manual glossary terms are kept; screen soup is trimmed. Re-tune with `scripts/replay_session_archive.py` on local `SessionArchive` (never commit user WAVs).
+Manual glossary terms are kept; screen soup is trimmed. Validate on local Session Archive replay (`scripts/replay_session_archive.py`); do not commit user WAVs or transcripts.
 
 ## Acceptance criteria (#162)
 
