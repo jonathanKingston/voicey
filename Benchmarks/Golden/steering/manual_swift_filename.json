@@ -1,0 +1,8 @@
+{
+  "description": "Long Swift path symbol in manual glossary (ASR bias regression; pair with optional TTS audio on macOS)",
+  "manual_glossary_enabled": true,
+  "manual_glossary": "IncrementalTranscriptionCoordinator.swift",
+  "screen_context_enabled": false,
+  "expected_terms": ["IncrementalTranscriptionCoordinator.swift"],
+  "expected_decoder_context": "Vocabulary: Voicey, IncrementalTranscriptionCoordinator.swift"
+}

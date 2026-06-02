@@ -34,6 +34,10 @@ pub enum TextRequest {
         snapshot: Option<ScreenContextSnapshot>,
         #[serde(default)]
         max_terms: Option<usize>,
+        #[serde(default)]
+        max_screen_terms: Option<usize>,
+        #[serde(default)]
+        max_context_character_count: Option<usize>,
     },
     Shutdown { id: String },
 }
@@ -148,6 +152,8 @@ fn handle_line(line: &str) -> (TextResponse, bool) {
             screen_context_enabled,
             snapshot,
             max_terms,
+            max_screen_terms,
+            max_context_character_count,
         } => {
             let max_terms = max_terms.unwrap_or(crate::screen_term_selector::DEFAULT_MAX_TERMS);
             let output = steering::build_steering_context(&BuildSteeringContextInput {
@@ -156,6 +162,8 @@ fn handle_line(line: &str) -> (TextResponse, bool) {
                 screen_context_enabled,
                 snapshot: snapshot.as_ref(),
                 max_terms,
+                max_screen_terms,
+                max_context_character_count,
             });
             (
                 TextResponse::SteeringContextResult {
@@ -235,6 +243,28 @@ mod tests {
                         .unwrap_or("")
                         .contains("Cursor")
                 );
+            }
+            other => panic!("unexpected response: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_steering_context_harness_cap_overrides() {
+        let request = r#"{"type":"build_steering_context","id":"4","manual_glossary_enabled":true,"manual_glossary":"Alpha, Beta, Gamma","screen_context_enabled":false,"max_terms":2,"max_context_character_count":20}"#;
+        let input = Cursor::new(format!("{request}\n"));
+        let mut output = Vec::new();
+        run_jsonl_loop(input, &mut output).expect("jsonl loop");
+        let response: TextResponse =
+            serde_json::from_str(std::str::from_utf8(&output).unwrap().trim()).unwrap();
+        match response {
+            TextResponse::SteeringContextResult {
+                ok,
+                decoder_context,
+                ..
+            } => {
+                assert!(ok);
+                let context = decoder_context.expect("context");
+                assert!(context.len() <= 20);
             }
             other => panic!("unexpected response: {other:?}"),
         }
