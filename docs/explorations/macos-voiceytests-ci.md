@@ -6,16 +6,26 @@ Exploratory proposal.
 
 ## Summary
 
-The macOS CI workflow builds the app but does not run the existing `VoiceyTests` target. Linux CI
-cannot compile app targets that import Apple frameworks, so macOS CI is the only place app-layer
-tests can protect recording, runtime, overlay, and clipboard behavior.
+The macOS CI workflow runs only a hand-curated subset of the `VoiceyTests` target, not the whole
+target. Linux CI cannot compile app targets that import Apple frameworks, so macOS CI is the only
+place app-layer tests can protect recording, runtime, overlay, and clipboard behavior. Because the
+subset is a manually maintained `--filter` allowlist, app-layer test classes that are not listed
+run nowhere in CI and can silently rot.
 
 ## Evidence
 
-- `.github/workflows/build.yml` runs `make build` on `macos-15`.
+- `.github/workflows/build.yml` runs `make build` on `macos-15`, then a `macOS unit tests` step:
+  `swift test --filter 'AudioWaveformEnvelopeTests|HandsFreeFlushBarrierTests|IncrementalTranscriptionCoordinatorTests|UtteranceTranscriptionFinishTests|MultiprocessRuntimeTests'`.
+- That filter covers 5 of the 9 `VoiceyTests` classes. Not run in CI:
+  `ClipboardManagerTests`, `ScreenContextStoreTests`, `TranscriptionOverlayControllerTests`,
+  `VoiceySingleInstanceTests`.
+- The filter is an allowlist that has grown PR-by-PR as specific regressions were fixed (e.g.
+  `UtteranceTranscriptionFinishTests` added in #159); there is no technical reason behind the
+  exclusions. Running the full target locally (`swift test --filter VoiceyTests`) passes all 45
+  tests headlessly, including all four currently-unlisted classes.
 - `Package.swift` defines a `VoiceyTests` test target that depends on `Voicey`.
 - `Tests/VoiceyTests` includes app-layer tests for multiprocess runtime, incremental
-  transcription, clipboard restore, overlay state, and waveform behavior.
+  transcription, clipboard restore, overlay state, single-instance locking, and waveform behavior.
 - `Tests/VoiceyCoreTests` covers only the framework target that is Linux-testable.
 
 Relevant files:
@@ -27,20 +37,23 @@ Relevant files:
 
 ## Risks
 
-- App-layer regressions can pass CI as long as the app compiles.
-- Tests that already exist can silently rot.
+- App-layer regressions in unlisted classes can pass CI as long as the app compiles.
+- New app-layer test classes are not enforced unless someone remembers to extend the `--filter`
+  allowlist; the four unlisted classes already demonstrate this drift.
 - macOS-specific runtime and UI-adjacent behavior has weaker review feedback.
-- Future refactors may avoid adding tests because CI does not enforce them.
+- Future refactors may avoid adding tests because CI does not enforce them by default.
 
 ## Proposed direction
 
-Add a macOS CI test step for `VoiceyTests`, keeping build and test failures visible separately.
-If some tests need special runtime setup, document that and split unsupported cases rather than
-skipping the whole target.
+Run the whole `VoiceyTests` target in CI instead of a hand-maintained allowlist, keeping build and
+test failures visible separately. All 45 tests already pass headlessly on a macOS runner, so the
+default should be to run the full target and only carve out specific cases (with a documented
+reason) if they later prove flaky or require permissions/UI automation.
 
 Possible implementation shape:
 
-1. Run `swift test --filter VoiceyTests` or a package-supported equivalent after `make build`.
+1. Replace the `--filter` allowlist with `swift test --filter VoiceyTests` (the whole target) after
+   `make build`.
 2. Add any required Rust worker setup before tests if app tests depend on worker binaries.
 3. Keep Linux `VoiceyCoreTests` separate.
 4. Document tests that must remain manual due to permissions or UI automation.
