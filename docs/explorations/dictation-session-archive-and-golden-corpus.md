@@ -94,7 +94,7 @@ flowchart TB
   subgraph shared_rust["Shared Rust libraries"]
     VA_LIB[voicey-archive crate SessionArchiveStore]
     PCM[voicey-pcm temp f32 files]
-    VA_LIB --> WAV[16 kHz WAV + index.jsonl + snapshots]
+    VA_LIB --> WAV[16 kHz float32 WAV + index.jsonl + snapshots]
     PCM --> VA_LIB
   end
 
@@ -151,7 +151,7 @@ Keep **heavy logic and schema** in Rust (`voicey-archive`); VoiceyCore mirrors r
 ~/Library/Application Support/Voicey/SessionArchive/
   index.jsonl          # append-only manifest (one JSON object per line)
   audio/
-    {uuid}.wav         # 16 kHz mono PCM16 (same as golden generators)
+    {uuid}.wav         # 16 kHz mono IEEE float32 (lossless infer replay; `audio_format`: `wav_f32`)
   snapshots/           # optional, when screen context was enabled
     {uuid}.json        # redacted ScreenContextSnapshot + exposure flags
 ```
@@ -168,6 +168,7 @@ Keep **heavy logic and schema** in Rust (`voicey-archive`); VoiceyCore mirrors r
   "language_id": "en",
   "audio_seconds": 3.2,
   "audio_path": "audio/{uuid}.wav",
+  "audio_format": "wav_f32",
   "raw_text": "...",
   "processed_text": "...",
   "steering_terms": ["..."],
@@ -184,7 +185,7 @@ Keep **heavy logic and schema** in Rust (`voicey-archive`); VoiceyCore mirrors r
 - Store **full** `decoder_context` only when user enables “include steering text in exports” (default off) — it may contain on-screen secrets.
 - Always store **hashes + term lists** for regression debugging when full context is omitted.
 
-WAV writing lives in **`voicey-archive`** (`hound`, 16 kHz mono PCM16).
+WAV writing lives in **`voicey-archive`** (`hound`, 16 kHz mono **float32** — bit-identical to infer input). Benchmark goldens may stay PCM16 WAV; loaders decode losslessly to f32 for the model.
 
 ### User-facing behavior
 

@@ -18,6 +18,8 @@ public struct UtteranceArchiveRecord: Codable, Sendable, Equatable, Identifiable
   public let audioSeconds: Double
   /// Relative to the session archive root, e.g. `audio/{uuid}.wav`.
   public let audioPath: String
+  /// Lossless container for replay, e.g. `wav_f32` (16 kHz mono IEEE float).
+  public let audioFormat: String?
   public let rawText: String
   public let processedText: String
   public let partialTranscription: String?
@@ -40,6 +42,7 @@ public struct UtteranceArchiveRecord: Codable, Sendable, Equatable, Identifiable
     languageID: String,
     audioSeconds: Double,
     audioPath: String,
+    audioFormat: String? = nil,
     rawText: String,
     processedText: String,
     partialTranscription: String? = nil,
@@ -60,6 +63,7 @@ public struct UtteranceArchiveRecord: Codable, Sendable, Equatable, Identifiable
     self.languageID = languageID
     self.audioSeconds = audioSeconds
     self.audioPath = audioPath
+    self.audioFormat = audioFormat
     self.rawText = rawText
     self.processedText = processedText
     self.partialTranscription = partialTranscription
@@ -82,6 +86,7 @@ public struct UtteranceArchiveRecord: Codable, Sendable, Equatable, Identifiable
     case languageID = "language_id"
     case audioSeconds = "audio_seconds"
     case audioPath = "audio_path"
+    case audioFormat = "audio_format"
     case rawText = "raw_text"
     case processedText = "processed_text"
     case partialTranscription = "partial_transcription"

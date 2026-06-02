@@ -26,7 +26,7 @@ enum UtteranceArchiveCoordinator {
     steering: QwenTranscriptionHints?,
     screenSnapshot: ScreenContextSnapshot?,
     targetAppBundleID: String?
-  ) {
+  ) async {
     guard isEnabled(settings: settings) else { return }
     guard SessionArchiveBackend.isAvailable else {
       AppLogger.transcription.error(
@@ -73,21 +73,19 @@ enum UtteranceArchiveCoordinator {
     }
 
     let root = SessionArchiveStore.shared.rootURL()
-    Task {
-      do {
-        try await SessionArchiveBackend.appendUtterance(
-          archiveRoot: root,
-          audio: audioWire,
-          metadata: metadata,
-          snapshot: snapshot
-        )
-        await MainActor.run {
-          NotificationCenter.default.post(name: .voiceySessionArchiveDidChange, object: nil)
-        }
-      } catch {
-        AppLogger.transcription.error(
-          "Session archive write failed: \(error.localizedDescription, privacy: .public)")
+    do {
+      try await SessionArchiveBackend.appendUtterance(
+        archiveRoot: root,
+        audio: audioWire,
+        metadata: metadata,
+        snapshot: snapshot
+      )
+      await MainActor.run {
+        NotificationCenter.default.post(name: .voiceySessionArchiveDidChange, object: nil)
       }
+    } catch {
+      AppLogger.transcription.error(
+        "Session archive write failed: \(error.localizedDescription, privacy: .public)")
     }
   }
 

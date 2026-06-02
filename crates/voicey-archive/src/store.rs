@@ -3,7 +3,8 @@ use crate::record::{
     UtteranceArchiveScreenSnapshot, TARGET_SAMPLE_RATE,
 };
 use crate::retention::record_ids_to_evict;
-use crate::wav::write_mono_16k_pcm16;
+use crate::record::AUDIO_FORMAT_WAV_F32;
+use crate::wav::write_mono_16k_f32;
 use chrono::Utc;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Write};
@@ -81,6 +82,7 @@ impl SessionArchiveStore {
             language_id: metadata.language_id.clone(),
             audio_seconds,
             audio_path: audio_path.clone(),
+            audio_format: AUDIO_FORMAT_WAV_F32.to_string(),
             raw_text: metadata.raw_text.clone(),
             processed_text: metadata.processed_text.clone(),
             partial_transcription: metadata.partial_transcription.clone(),
@@ -94,7 +96,7 @@ impl SessionArchiveStore {
             runtime: metadata.runtime.clone(),
         };
 
-        write_mono_16k_pcm16(&samples, &self.root.join(&audio_path))
+        write_mono_16k_f32(&samples, &self.root.join(&audio_path))
             .map_err(|error| error.to_string())?;
 
         if let (Some(snapshot), Some(snapshot_path)) = (snapshot, snapshot_path.as_ref()) {

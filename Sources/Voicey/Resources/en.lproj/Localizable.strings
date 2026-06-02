@@ -41,7 +41,7 @@
 "settings.hotkey" = "Hotkey";
 "settings.audio" = "Audio";
 "settings.model" = "Model";
-"settings.transcription" = "Spelling & Context";
+"settings.transcription" = "Transcription";
 "settings.voiceCommands" = "Voice Commands";
 "settings.advanced" = "Advanced";
 

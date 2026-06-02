@@ -4,6 +4,13 @@ use uuid::Uuid;
 
 pub const TARGET_SAMPLE_RATE: u32 = 16_000;
 
+/// `index.jsonl` `audio_format` for lossless infer replay (`audio/*.wav`).
+pub const AUDIO_FORMAT_WAV_F32: &str = "wav_f32";
+
+pub fn default_audio_format() -> String {
+    AUDIO_FORMAT_WAV_F32.to_string()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UtteranceArchiveOutcome {
@@ -29,6 +36,8 @@ pub struct UtteranceArchiveRecord {
     pub language_id: String,
     pub audio_seconds: f64,
     pub audio_path: String,
+    #[serde(default = "default_audio_format")]
+    pub audio_format: String,
     pub raw_text: String,
     pub processed_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
