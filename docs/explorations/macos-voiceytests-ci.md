@@ -2,7 +2,7 @@
 
 ## Status
 
-Exploratory proposal.
+Implemented in CI — see `.github/workflows/build.yml` (`swift test --filter VoiceyTests`).
 
 ## Summary
 
