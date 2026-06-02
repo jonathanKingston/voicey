@@ -17,7 +17,7 @@ pub enum ArchiveRequest {
         #[serde(default = "default_max_entries")]
         max_entries: usize,
         audio: ArchiveAudioSource,
-        metadata: AppendUtteranceMetadata,
+        metadata: Box<AppendUtteranceMetadata>,
         #[serde(default)]
         snapshot: Option<UtteranceArchiveScreenSnapshot>,
     },
@@ -39,7 +39,7 @@ pub enum ArchiveResponse {
     ArchiveResult {
         id: String,
         ok: bool,
-        record: Option<UtteranceArchiveRecord>,
+        record: Box<Option<UtteranceArchiveRecord>>,
         error: Option<String>,
     },
     DeleteAllResult {
@@ -104,7 +104,7 @@ fn handle_line(line: &str) -> (ArchiveResponse, bool) {
                     ArchiveResponse::ArchiveResult {
                         id,
                         ok: true,
-                        record: Some(record),
+                        record: Box::new(Some(record)),
                         error: None,
                     },
                     false,
@@ -113,7 +113,7 @@ fn handle_line(line: &str) -> (ArchiveResponse, bool) {
                     ArchiveResponse::ArchiveResult {
                         id,
                         ok: false,
-                        record: None,
+                        record: Box::new(None),
                         error: Some(message),
                     },
                     false,
