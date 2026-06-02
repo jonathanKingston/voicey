@@ -1,5 +1,6 @@
 //! Post-processes transcription output for punctuation, formatting, and voice commands.
 
+use crate::glossary;
 use crate::noise_filter;
 use crate::text_cleanup;
 use crate::voice_command::{VoiceCommand, VoiceCommandAction};
@@ -19,12 +20,27 @@ pub struct PostProcessInput {
     pub segments: Vec<TranscriptionSegment>,
     pub voice_commands_enabled: bool,
     pub voice_commands: Vec<VoiceCommand>,
+    /// Decoder steering context used for the utterance, for echo sanitization.
+    pub decoder_context: Option<String>,
+    /// Steering terms used for the utterance, for echo sanitization.
+    pub steering_terms: Vec<String>,
 }
 
 /// Post-process transcription text using the same pipeline as Swift `PostProcessor`.
 pub fn postprocess(input: &PostProcessInput) -> String {
     let text_expansions = text_cleanup::default_text_expansions();
-    let mut text = input.text.clone();
+
+    // Strip regurgitated steering vocabulary before any other processing so the model
+    // never pastes its own decoder context (issue #162).
+    let sanitized = glossary::sanitize_steering_echo(
+        &input.text,
+        input.decoder_context.as_deref(),
+        &input.steering_terms,
+    );
+    if sanitized.cleared {
+        return String::new();
+    }
+    let mut text = sanitized.text;
 
     // Whisper caption cleanup (brackets, asterisks, silence tokens) — benchmark / segmented backends only.
     // Qwen and other segment-less backends skip this path.
@@ -236,6 +252,8 @@ mod tests {
             segments: Vec::new(),
             voice_commands_enabled: false,
             voice_commands: Vec::new(),
+            decoder_context: None,
+            steering_terms: Vec::new(),
         }
     }
 
@@ -349,5 +367,25 @@ mod tests {
     #[test]
     fn default_expansions_normalize_spelled_out_ok() {
         assert_eq!(postprocess(&input("that sounds o k to me")), "that sounds OK to me");
+    }
+
+    #[test]
+    fn clears_regurgitated_steering_soup() {
+        let mut request = input("metformin, Cursor, HbA1c, Voicey");
+        request.decoder_context = Some("Glossary: Voicey, Cursor, metformin, HbA1c".to_string());
+        request.steering_terms = vec![
+            "Cursor".to_string(),
+            "metformin".to_string(),
+            "HbA1c".to_string(),
+        ];
+        assert_eq!(postprocess(&request), "");
+    }
+
+    #[test]
+    fn strips_prefix_echo_then_processes_speech() {
+        let mut request = input("Glossary: Voicey, Cursor the patient took metformin");
+        request.decoder_context = Some("Glossary: Voicey, Cursor".to_string());
+        request.steering_terms = vec!["Cursor".to_string()];
+        assert_eq!(postprocess(&request), "the patient took metformin");
     }
 }

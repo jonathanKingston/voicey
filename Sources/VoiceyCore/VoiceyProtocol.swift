@@ -28,7 +28,8 @@ public enum VoiceyHostRequest: Equatable {
     shmName: String,
     sampleCount: Int,
     sampleOffset: Int,
-    decoderContext: String?
+    decoderContext: String?,
+    language: String?
   )
   case downloadModel(id: String, modelID: String, destinationRoot: String)
   case cancelDownload(id: String, modelID: String)
@@ -47,6 +48,7 @@ extension VoiceyHostRequest: Codable {
     case sampleCount = "sample_count"
     case sampleOffset = "sample_offset"
     case decoderContext = "decoder_context"
+    case language
     case destinationRoot = "destination_root"
     case durationSeconds = "duration_seconds"
   }
@@ -84,7 +86,8 @@ extension VoiceyHostRequest: Codable {
         shmName: try container.decode(String.self, forKey: .shmName),
         sampleCount: try container.decode(Int.self, forKey: .sampleCount),
         sampleOffset: try container.decodeIfPresent(Int.self, forKey: .sampleOffset) ?? 0,
-        decoderContext: try container.decodeIfPresent(String.self, forKey: .decoderContext)
+        decoderContext: try container.decodeIfPresent(String.self, forKey: .decoderContext),
+        language: try container.decodeIfPresent(String.self, forKey: .language)
       )
     case "download_model":
       self = .downloadModel(
@@ -140,7 +143,8 @@ extension VoiceyHostRequest: Codable {
       try container.encode("unload_model", forKey: .type)
       try container.encode(id, forKey: .id)
     case .transcribe(
-      let id, let modelID, let sampleRate, let shmName, let sampleCount, let sampleOffset, let decoderContext):
+      let id, let modelID, let sampleRate, let shmName, let sampleCount, let sampleOffset, let decoderContext,
+      let language):
       try container.encode("transcribe", forKey: .type)
       try container.encode(id, forKey: .id)
       try container.encode(modelID, forKey: .modelID)
@@ -149,6 +153,7 @@ extension VoiceyHostRequest: Codable {
       try container.encode(sampleCount, forKey: .sampleCount)
       try container.encode(sampleOffset, forKey: .sampleOffset)
       try container.encodeIfPresent(decoderContext, forKey: .decoderContext)
+      try container.encodeIfPresent(language, forKey: .language)
     case .downloadModel(let id, let modelID, let destinationRoot):
       try container.encode("download_model", forKey: .type)
       try container.encode(id, forKey: .id)
@@ -366,7 +371,8 @@ public enum VoiceyInferWorkerRequest: Equatable {
     shmName: String,
     sampleCount: Int,
     sampleOffset: Int,
-    decoderContext: String?
+    decoderContext: String?,
+    language: String?
   )
   case shutdown(id: String)
 }
@@ -381,6 +387,7 @@ extension VoiceyInferWorkerRequest: Codable {
     case sampleCount = "sample_count"
     case sampleOffset = "sample_offset"
     case decoderContext = "decoder_context"
+    case language
   }
 
   public init(from decoder: Decoder) throws {
@@ -404,7 +411,8 @@ extension VoiceyInferWorkerRequest: Codable {
         shmName: try container.decode(String.self, forKey: .shmName),
         sampleCount: try container.decode(Int.self, forKey: .sampleCount),
         sampleOffset: try container.decodeIfPresent(Int.self, forKey: .sampleOffset) ?? 0,
-        decoderContext: try container.decodeIfPresent(String.self, forKey: .decoderContext)
+        decoderContext: try container.decodeIfPresent(String.self, forKey: .decoderContext),
+        language: try container.decodeIfPresent(String.self, forKey: .language)
       )
     case "shutdown":
       self = .shutdown(id: try container.decode(String.self, forKey: .id))
@@ -431,7 +439,8 @@ extension VoiceyInferWorkerRequest: Codable {
       try container.encode("unload_model", forKey: .type)
       try container.encode(id, forKey: .id)
     case .transcribe(
-      let id, let modelID, let sampleRate, let shmName, let sampleCount, let sampleOffset, let decoderContext):
+      let id, let modelID, let sampleRate, let shmName, let sampleCount, let sampleOffset, let decoderContext,
+      let language):
       try container.encode("transcribe", forKey: .type)
       try container.encode(id, forKey: .id)
       try container.encode(modelID, forKey: .modelID)
@@ -440,6 +449,7 @@ extension VoiceyInferWorkerRequest: Codable {
       try container.encode(sampleCount, forKey: .sampleCount)
       try container.encode(sampleOffset, forKey: .sampleOffset)
       try container.encodeIfPresent(decoderContext, forKey: .decoderContext)
+      try container.encodeIfPresent(language, forKey: .language)
     case .shutdown(let id):
       try container.encode("shutdown", forKey: .type)
       try container.encode(id, forKey: .id)

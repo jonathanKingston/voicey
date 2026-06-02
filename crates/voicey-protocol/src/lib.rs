@@ -59,6 +59,8 @@ pub enum HostRequest {
         sample_offset: usize,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         decoder_context: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
     },
     DownloadModel {
         id: String,
@@ -129,6 +131,8 @@ pub enum InferWorkerRequest {
         sample_offset: usize,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         decoder_context: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
     },
     Shutdown { id: String },
 }

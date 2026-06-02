@@ -67,6 +67,7 @@ fn handle_line(line: &str, mode: InferStubMode, loaded_model: &mut Option<String
             sample_count,
             sample_offset,
             decoder_context,
+            language: _,
         } => {
             if mode == InferStubMode::FailTranscribe {
                 InferWorkerResponse::TranscribeResult {

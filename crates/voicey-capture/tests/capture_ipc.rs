@@ -198,6 +198,53 @@ fn invalid_request_json_returns_error() {
 }
 
 #[test]
+fn read_captured_samples_without_start_returns_not_recording() {
+    let mut session = CaptureSession::spawn();
+    let response = session.request_json(
+        r#"{"type":"read_captured_samples","id":"read-1","start_sample_index":0}"#,
+    );
+    assert_eq!(response["type"], "capture_samples_read");
+    assert_eq!(response["ok"], false);
+    let message = response["error"].as_str().expect("error message");
+    assert!(
+        message.contains("not recording"),
+        "expected not-recording error, got {message:?}"
+    );
+}
+
+#[test]
+fn read_captured_samples_after_start_returns_suffix() {
+    let mut session = CaptureSession::spawn();
+    let start = session.request_json(r#"{"type":"start_recording","id":"start-read"}"#);
+    assert_eq!(start["type"], "capture_ready");
+
+    let level = session.request_json(r#"{"type":"get_level","id":"level-1"}"#);
+    let total = level["sample_count"].as_u64().unwrap_or(0) as usize;
+
+    let response = session.request_json(
+        r#"{"type":"read_captured_samples","id":"read-2","start_sample_index":0}"#,
+    );
+    assert_eq!(response["type"], "capture_samples_read");
+    assert_eq!(response["ok"], true);
+    let samples = response["samples"].as_array().expect("samples array");
+    let sample_count = response["sample_count"].as_u64().expect("sample_count") as usize;
+    // The reported cursor must equal the delivered slice (start was 0): the host advances
+    // its read index to `sample_count`, so a larger value would silently drop samples.
+    assert_eq!(sample_count, samples.len());
+    // A live mic may append more frames between the level snapshot and the read, so the read
+    // can only ever be at or beyond the earlier count — never fewer.
+    assert!(
+        samples.len() >= total,
+        "expected at least {total} samples, got {}",
+        samples.len()
+    );
+
+    let _ = session.request_json(
+        r#"{"type":"stop_recording","id":"stop-read","apply_trailing_trim":false}"#,
+    );
+}
+
+#[test]
 fn drain_hands_free_without_start_returns_not_recording() {
     let mut session = CaptureSession::spawn();
     let response = session.request_json(

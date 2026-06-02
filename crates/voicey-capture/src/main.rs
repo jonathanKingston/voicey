@@ -35,6 +35,10 @@ enum CaptureRequest {
         apply_trailing_trim: bool,
     },
     GetLevel { id: String },
+    ReadCapturedSamples {
+        id: String,
+        start_sample_index: usize,
+    },
     DrainHandsFreeUtterance {
         id: String,
         start_sample_index: usize,
@@ -70,6 +74,13 @@ enum CaptureResponse {
         id: String,
         level: f32,
         sample_count: usize,
+    },
+    CaptureSamplesRead {
+        id: String,
+        ok: bool,
+        samples: Option<Vec<f32>>,
+        sample_count: Option<usize>,
+        error: Option<String>,
     },
     Error {
         id: String,
@@ -148,6 +159,28 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
             level: live_input_level(),
             sample_count: live_recorder().lock().expect("recorder lock").sample_count(),
         },
+        CaptureRequest::ReadCapturedSamples {
+            id,
+            start_sample_index,
+        } => {
+            let recorder = live_recorder().lock().expect("recorder lock");
+            match recorder.read_samples_since(start_sample_index) {
+                Ok((samples, sample_count)) => CaptureResponse::CaptureSamplesRead {
+                    id,
+                    ok: true,
+                    samples: Some(samples),
+                    sample_count: Some(sample_count),
+                    error: None,
+                },
+                Err(message) => CaptureResponse::CaptureSamplesRead {
+                    id,
+                    ok: false,
+                    samples: None,
+                    sample_count: None,
+                    error: Some(message),
+                },
+            }
+        }
         CaptureRequest::DrainHandsFreeUtterance {
             id,
             start_sample_index,

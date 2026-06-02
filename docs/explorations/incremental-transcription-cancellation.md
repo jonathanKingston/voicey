@@ -5,7 +5,7 @@
 Implemented. This exploration drove the cancellation work that landed on `main` in
 commit `f56ea29` (PR #148, tracking issue #147). The "Proposed direction" and "Acceptance
 criteria" below are kept as the original design record; see the **Resolution** section for how
-each was met. The remaining open item on #147 is a manual macOS confirmation.
+each was met. [#147](https://github.com/jonathanKingston/voicey/issues/147) is closed; a manual macOS Escape/cancel check remains in [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md) for merge sign-off.
 
 ## Resolution
 
@@ -17,7 +17,7 @@ each was met. The remaining open item on #147 is a manual macOS confirmation.
   `Tests/VoiceyTests/IncrementalTranscriptionCoordinatorTests.swift`:
   `testCancelDuringActiveTranscriptionDiscardsInFlightWork` and
   `testCancelClearsQueuedChunksBehindInFlightTranscription`.
-- Still pending on #147: manual macOS check that pressing Escape during a long incremental
+- Manual macOS check (checklist, not a blocking issue): pressing Escape during a long incremental
   partial returns the overlay to idle with no late partial text (see [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md)).
 
 ## Summary

@@ -19,6 +19,10 @@ pub enum TextRequest {
         voice_commands: Vec<VoiceCommand>,
         #[serde(default)]
         segments: Vec<WireSegment>,
+        #[serde(default)]
+        decoder_context: Option<String>,
+        #[serde(default)]
+        steering_terms: Vec<String>,
     },
     BuildSteeringContext {
         id: String,
@@ -108,6 +112,8 @@ fn handle_line(line: &str) -> (TextResponse, bool) {
             voice_commands_enabled,
             voice_commands,
             segments,
+            decoder_context,
+            steering_terms,
         } => {
             let input = PostProcessInput {
                 text,
@@ -121,6 +127,8 @@ fn handle_line(line: &str) -> (TextResponse, bool) {
                     .collect(),
                 voice_commands_enabled,
                 voice_commands,
+                decoder_context,
+                steering_terms,
             };
             let processed = postprocess::postprocess(&input);
             (

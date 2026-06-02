@@ -23,6 +23,35 @@ enum AudioWaveformEnvelope {
       rmsPerBar[index] = rms(in: samples, start: start, count: end - start)
     }
 
+    return normalizeBarHeights(rmsPerBar, barCount: barCount)
+  }
+
+  /// Builds bar heights from a `voicey-capture` PCM file without loading the full utterance into memory.
+  static func normalizedBars(fromSharedBuffer handle: PCMBufferHandle, barCount: Int = displayBarCount) throws -> [Float] {
+    guard handle.sampleCount > 0, barCount > 0 else {
+      return Array(repeating: 0.08, count: max(barCount, displayBarCount))
+    }
+
+    var rmsPerBar = [Float](repeating: 0, count: barCount)
+    for index in 0..<barCount {
+      let start = index * handle.sampleCount / barCount
+      let end = (index + 1) * handle.sampleCount / barCount
+      guard end > start else {
+        rmsPerBar[index] = 0
+        continue
+      }
+      let slice = try SharedMemoryPCM.read(
+        name: handle.shmName,
+        sampleCount: end - start,
+        sampleOffset: handle.sampleOffset + start
+      )
+      rmsPerBar[index] = rms(in: slice, start: 0, count: slice.count)
+    }
+
+    return normalizeBarHeights(rmsPerBar, barCount: barCount)
+  }
+
+  private static func normalizeBarHeights(_ rmsPerBar: [Float], barCount: Int) -> [Float] {
     var peak: Float = 0.000_01
     vDSP_maxv(rmsPerBar, 1, &peak, vDSP_Length(barCount))
 

@@ -13,8 +13,8 @@ This table is the **M5 allowlist** for [#74](https://github.com/jonathanKingston
 | `voicey-protocol` fixtures + serde contract | Yes (`make protocol-fixtures`, Swift fixture decode) | — |
 | Supervisor + stub workers (infer/capture/fetch) | Yes (integration tests, worker I/O) | — |
 | `voicey-fetch` HTTP listing/download (local test server) | Yes (`cargo test -p voicey-fetch`, Tier 1) | — |
-| `voicey-capture` JSONL IPC + PCM fixture path (no microphone; includes `drain_hands_free_utterance`) | Yes | — |
-| `voicey-text` / `VoiceyCore` unit + golden postprocess | Yes (`cargo test -p voicey-text`, `linux-core-tests`) | — |
+| `voicey-capture` JSONL IPC + PCM fixture path (no microphone; includes `drain_hands_free_utterance`, `read_captured_samples`) | Yes | — |
+| `voicey-text` unit + golden postprocess / steering | Yes (`cargo test -p voicey-text`, `linux-core-tests`) | — |
 | Benchmark harness **scripts** (Common Voice prep, parity matrix smoke) | Yes (`test-common-voice-benchmark`, Tier 1 script checks) | — |
 | Benchmark **Qwen transcribe RTF / WER** (needs MLX + models) | No | Yes (`make benchmark-compare-runtime`, parity targets) |
 | Full SwiftUI app compile | No | Yes (`build.yml`) |
@@ -33,18 +33,18 @@ Tracking issues:
 
 ### Can Swift duplicates be removed yet? (May 2026)
 
-**No.** Bundled production still needs Swift fallbacks and the Swift MLX infer subprocess. Rust workers and `voicey-text` are additive until Phase 2 in #70.
+**Partially.** The text post-process / steering Swift duplicates are **removed** — `voicey-text` is mandatory there. Capture (`AVAudioEngine`), fetch (`HuggingFaceDownloader`), and the Swift MLX infer subprocess still have Swift paths (Phase 2+ in #70).
 
 | Layer | Rust | Swift still required because |
 |-------|------|------------------------------|
 | Capture | `voicey-capture` (default when bundled) | `AVAudioEngine` only when worker absent or `VOICEY_USE_RUST_CAPTURE=0` / `VOICEY_DISABLE_RUST_WORKERS=1`; worker errors fail fast (no silent empty capture) |
 | Fetch | `voicey-fetch` | `HuggingFaceDownloader` fallback |
-| Post-process | `voicey-text` worker when bundled (#63) | Swift `PostProcessor` only when worker absent or `VOICEY_USE_RUST_TEXT=0` / `VOICEY_DISABLE_RUST_WORKERS=1`; worker errors fail fast (no silent Swift duplicate path) |
-| Text / glossary | `voicey-text` | `VoiceyCore` in host for steering when worker absent or opted out; bundled worker errors fail fast |
+| Post-process | `voicey-text` worker (required) | **Removed** — no Swift `PostProcessor` fallback; the worker is mandatory and errors fail fast |
+| Text / glossary | `voicey-text` (required) | **Removed** — steering + post-process always run on `voicey-text`; no in-process Swift path |
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
 | PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
 
-Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). Utterances captured via `voicey-capture` transcribe from that handle — the incremental coordinator only receives streamed samples on the AVFoundation capture path. Phase 2 (#70) is in progress: post-process, capture, and steering/glossary (via `build_steering_context` on `voicey-text`) no longer fall back to Swift when bundled workers are enabled; worker errors surface to the user. Deletion of remaining opt-out fallbacks (AVAudioEngine / Hub / infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
+Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). `voicey-capture` `read_captured_samples` streams PCM into the incremental coordinator on the Rust capture path (parity with AVFoundation `didCaptureSamples`; macOS QA: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md), [#145](https://github.com/jonathanKingston/voicey/issues/145)). Utterance finish routing (#129, #159) uses shared PCM when the coordinator has no streamed audio. Phase 2 (#70) is in progress: post-process, capture, and steering/glossary (via `build_steering_context` on `voicey-text`) no longer fall back to Swift when bundled workers are enabled; worker errors surface to the user. Deletion of remaining opt-out fallbacks (AVAudioEngine / Hub / infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
 
 ## CI tiers (Rust on Ubuntu)
 
@@ -77,7 +77,6 @@ After `make build-rust` and `make bundle-debug`, workers live in `Voicey.app/Con
 | `VOICEY_USE_RUST_SUPERVISOR=0` | Direct infer-worker IPC (no supervisor) |
 | `VOICEY_USE_RUST_FETCH=0` | Hub-based Qwen downloads |
 | `VOICEY_USE_RUST_CAPTURE=0` | AVAudioEngine mic capture |
-| `VOICEY_USE_RUST_TEXT=0` | Swift `PostProcessor` only (no `voicey-text` worker) |
 | `VOICEY_RUNTIME=in-process` | Qwen MLX inside main app |
 | `VOICEY_USE_FETCH_SANDBOX=0` | Disable the bundled default seatbelt profile for `voicey-fetch` in direct builds |
 | `VOICEY_FETCH_SANDBOX_PROFILE=/path/to/profile.sb` | Launch `voicey-fetch` via `sandbox-exec -f` with the given seatbelt profile |
@@ -100,15 +99,16 @@ In direct-distribution builds, Voicey now defaults `voicey-fetch` to a bundled s
 
 ## Text worker contract (`voicey-text`)
 
-After infer returns raw text, the host may delegate to `voicey-text` over JSONL (`ping`, `postprocess`, `build_steering_context`, `shutdown`):
+After infer returns raw text, the host delegates to `voicey-text` over JSONL (`ping`, `postprocess`, `build_steering_context`, `shutdown`). This is the only post-process / steering path; there is no in-process Swift fallback:
 
-- **Segment-less backends (Qwen):** `segments` is empty; Whisper caption noise filter and intelligent punctuation are skipped (same as Swift `PostProcessor`).
+- **Segment-less backends (Qwen):** `segments` is empty; Whisper caption noise filter and intelligent punctuation are skipped.
+- **Steering-echo stripping:** `postprocess` receives the utterance `decoder_context` + `steering_terms` and strips regurgitated steering vocabulary before any other cleanup (issue #162).
 - **Segmented backends (benchmark Whisper):** optional `segments` with `start_time` / `end_time` enable noise filter and pause-based punctuation.
 - **Voice commands:** host sends enabled commands as structured JSON; settings are snapshotted per request.
 - **Steering / glossary:** host sends manual glossary settings and optional accessibility snapshot; worker returns decoder context via BM25 term selection in Rust.
-- **Golden parity:** `Benchmarks/Golden/postprocess/*.json` — `cargo test -p voicey-text --test golden_postprocess`, `swift test --filter GoldenPostprocessFixtureTests`; `Benchmarks/Golden/steering/*.json` — `cargo test -p voicey-text --test golden_steering`, `swift test --filter GoldenSteeringFixtureTests`.
+- **Golden parity:** `Benchmarks/Golden/postprocess/*.json` — `cargo test -p voicey-text --test golden_postprocess`; `Benchmarks/Golden/steering/*.json` — `cargo test -p voicey-text --test golden_steering`. (Steering + post-process run only on `voicey-text`; the Swift mirrors and their golden tests were removed.)
 
-Swift uses in-process `PostProcessor` only when the worker is missing or opted out (`VOICEY_USE_RUST_TEXT=0`); bundled worker errors propagate to the host.
+The `voicey-text` worker is required for post-process and steering; worker errors propagate to the host (no Swift fallback).
 
 ## Build & run
 
