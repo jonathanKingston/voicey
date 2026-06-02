@@ -1,5 +1,8 @@
 # Compiles the macOS app on a macOS runner (SwiftPM + MLX Metal library via Makefile).
 # Linux CI cannot build Apple-only targets; this workflow is the source of truth for compile health.
+#
+# VoiceyTests: full app-layer target after `make build` (#189). Tests are headless (no mic/TCC);
+# they do not spawn Rust workers — `make build` is sufficient.
 name: Build
 
 on:
@@ -27,4 +30,12 @@ jobs:
         run: make build
 
       - name: macOS unit tests (VoiceyTests target)
-        run: swift test --filter VoiceyTests
+        run: set -o pipefail && swift test --filter VoiceyTests 2>&1 | tee voiceytests.log
+
+      - name: Upload VoiceyTests log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voiceytests-log
+          path: voiceytests.log
+          retention-days: 14
