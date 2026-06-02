@@ -94,4 +94,12 @@ fn append_from_pcm_shm_writes_wav_and_index() {
     let record: serde_json::Value = serde_json::from_str(index.lines().next().unwrap()).unwrap();
     let audio_path = dir.path().join(record["audio_path"].as_str().unwrap());
     assert!(audio_path.is_file());
+    assert_eq!(record["audio_format"], "wav_f32");
+    let mut reader = hound::WavReader::open(&audio_path).expect("open wav");
+    assert_eq!(reader.spec().sample_format, hound::SampleFormat::Float);
+    let read_back: Vec<f32> = reader
+        .samples::<f32>()
+        .collect::<Result<_, _>>()
+        .expect("samples");
+    assert_eq!(read_back, samples);
 }

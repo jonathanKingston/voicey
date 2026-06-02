@@ -1178,14 +1178,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       backgroundJobID: backgroundJobID
     )
     Task {
-      defer {
-        capturedAudio.removeSharedBufferIfNeeded()
-        appState.endHandsFreeIncrementalFlushBarrier()
-      }
+      defer { appState.endHandsFreeIncrementalFlushBarrier() }
       await processHandsFreeIncrementalUtterance(
         coordinator: incrementalTranscriptionCoordinator,
         request: request
       )
+      capturedAudio.removeSharedBufferIfNeeded()
     }
   }
 
@@ -1287,14 +1285,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       backgroundJobID: backgroundJobID
     )
     Task {
-      defer {
-        capturedAudio.removeSharedBufferIfNeeded()
-        appState.endHandsFreeIncrementalFlushBarrier()
-      }
+      defer { appState.endHandsFreeIncrementalFlushBarrier() }
       await processHandsFreeIncrementalUtterance(
         coordinator: incrementalTranscriptionCoordinator,
         request: request
       )
+      capturedAudio.removeSharedBufferIfNeeded()
     }
   }
 
@@ -1372,22 +1368,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       hideOverlay()
       appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
       dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
-      archiveUtteranceIfEnabled(
-        capturedAudio: capturedAudio,
-        errorMessage: "Transcription pipeline unavailable"
-      )
-      capturedAudio.removeSharedBufferIfNeeded()
+      Task {
+        await archiveUtteranceIfEnabled(
+          capturedAudio: capturedAudio,
+          errorMessage: "Transcription pipeline unavailable"
+        )
+        capturedAudio.removeSharedBufferIfNeeded()
+      }
       return
     }
 
     // Finish pause chunks (AVFoundation) or transcribe the Rust capture PCM handle directly.
     Task {
-      defer { capturedAudio.removeSharedBufferIfNeeded() }
       await processIncrementalTranscription(
         coordinator: incrementalTranscriptionCoordinator,
         capturedAudio: capturedAudio,
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
       )
+      capturedAudio.removeSharedBufferIfNeeded()
     }
   }
 
@@ -1502,7 +1500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let hasDeliverableText =
         processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
-      archiveUtteranceIfEnabled(
+      await archiveUtteranceIfEnabled(
         capturedAudio: request.capturedAudio,
         rawText: result.text,
         processedText: processedText,
@@ -1527,7 +1525,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } catch {
       debugPrint("❌ Transcription error: \(error)", category: "ERROR")
       AppLogger.transcription.error("Hands-free incremental transcription error: \(error)")
-      archiveUtteranceIfEnabled(
+      await archiveUtteranceIfEnabled(
         capturedAudio: request.capturedAudio,
         errorMessage: error.localizedDescription
       )
@@ -1721,7 +1719,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let hasDeliverableText =
       processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
-    archiveUtteranceIfEnabled(
+    await archiveUtteranceIfEnabled(
       capturedAudio: capturedAudio,
       rawText: result.text,
       processedText: processedText,
@@ -1771,11 +1769,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.audio.error("Capture error: \(error.localizedDescription, privacy: .public)")
     // Best-effort teardown when Rust capture IPC failed mid-session (stop may fail again).
     if let capturedAudio = try? audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false) {
-      archiveUtteranceIfEnabled(
-        capturedAudio: capturedAudio,
-        errorMessage: error.localizedDescription
-      )
-      capturedAudio.removeSharedBufferIfNeeded()
+      Task {
+        await archiveUtteranceIfEnabled(
+          capturedAudio: capturedAudio,
+          errorMessage: error.localizedDescription
+        )
+        capturedAudio.removeSharedBufferIfNeeded()
+      }
     } else if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
       VoiceyCaptureWorkerSession.shared.stop()
     }
@@ -1814,7 +1814,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint("❌ Transcription error: \(error)", category: "ERROR")
     AppLogger.transcription.error("Transcription error: \(error)")
     if let capturedAudio {
-      archiveUtteranceIfEnabled(
+      await archiveUtteranceIfEnabled(
         capturedAudio: capturedAudio,
         rawText: rawText,
         errorMessage: error.localizedDescription
@@ -1857,7 +1857,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     rawText: String = "",
     processedText: String = "",
     errorMessage: String?
-  ) {
+  ) async {
     let trimmedPartial = appState.partialTranscription.trimmingCharacters(in: .whitespacesAndNewlines)
     let partialTranscription = trimmedPartial.isEmpty ? nil : appState.partialTranscription
     let hasDeliverable = processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
@@ -1868,7 +1868,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let bundleID = recordingTargetPID.flatMap { pid in
       NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
     }
-    UtteranceArchiveCoordinator.archiveUtterance(
+    await UtteranceArchiveCoordinator.archiveUtterance(
       capturedAudio: capturedAudio,
       outcome: outcome,
       rawText: rawText,

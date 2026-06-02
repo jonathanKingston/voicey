@@ -32,6 +32,7 @@ mod tests {
             language_id: "auto".into(),
             audio_seconds: 1.0,
             audio_path: "audio/x.wav".into(),
+            audio_format: crate::record::default_audio_format(),
             raw_text: String::new(),
             processed_text: "x".into(),
             partial_transcription: None,
