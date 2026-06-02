@@ -236,6 +236,7 @@ Hands-free utterances share the same archive unit but differ in orchestration ([
 | Rust (optional) | WAV bytes match golden generator spec |
 | Linux CI | Schema tests only (no AppKit) |
 | macOS manual | [`docs/MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md) rows: toggle on retains utterances, panel lists/plays, delete-all, export + replay |
+| Replay script | `scripts/replay_session_archive.py` — batch `benchmark-transcribe` vs `index.jsonl` (optional multi-model) |
 
 ## Phased implementation
 

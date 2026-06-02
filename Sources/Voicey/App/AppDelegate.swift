@@ -1429,12 +1429,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   ) async {
     do {
       debugPrint("🔄 Finishing incremental transcription...", category: "TRANSCRIBE")
-      let result = try await finishUtteranceTranscription(
+      let outcome = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: capturedAudio,
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
       )
-      await handleTranscriptionResult(result, capturedAudio: capturedAudio)
+      await handleTranscriptionResult(outcome.result, archiveAudio: outcome.archiveAudio)
     } catch {
       await handleTranscriptionError(error, capturedAudio: capturedAudio)
     }
@@ -1446,18 +1446,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     coordinator: IncrementalTranscriptionCoordinator,
     capturedAudio: CapturedAudio,
     applyTrailingTrimHeuristic: Bool
-  ) async throws -> TranscriptionResult {
+  ) async throws -> UtteranceTranscriptionFinishOutcome {
     switch UtteranceTranscriptionFinish.route(for: capturedAudio) {
     case .sharedPCMHandle:
       if coordinator.hasBufferedIncrementalAudio {
-        return try await coordinator.flushAndFinish(
+        let result = try await coordinator.flushAndFinish(
           applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+        let archiveAudio = archiveAudioForIncrementalFinish(
+          coordinator: coordinator,
+          fallback: capturedAudio
+        )
+        return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: archiveAudio)
       }
-      return try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
+      let result = try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
+      return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: capturedAudio)
     case .incrementalCoordinatorFlush:
-      return try await coordinator.flushAndFinish(
+      let result = try await coordinator.flushAndFinish(
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+      let archiveAudio = archiveAudioForIncrementalFinish(
+        coordinator: coordinator,
+        fallback: capturedAudio
+      )
+      return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: archiveAudio)
     }
+  }
+
+  /// Uses coordinator chunk audio when incremental flush ran; otherwise the stop-capture buffer.
+  private func archiveAudioForIncrementalFinish(
+    coordinator: IncrementalTranscriptionCoordinator,
+    fallback: CapturedAudio
+  ) -> CapturedAudio {
+    let samples = coordinator.archivedAudioSamples()
+    guard !samples.isEmpty else { return fallback }
+    return .inMemory(samples)
   }
 
   private func processHandsFreeIncrementalUtterance(
@@ -1473,11 +1494,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     do {
       debugPrint("🔄 Finishing hands-free incremental transcription...", category: "TRANSCRIBE")
-      let result = try await finishUtteranceTranscription(
+      let outcome = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: request.capturedAudio,
         applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic
       )
+      let result = outcome.result
       let processedText: String
       do {
         processedText = try await postProcessor?.processAsync(
@@ -1501,7 +1523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
       await archiveUtteranceIfEnabled(
-        capturedAudio: request.capturedAudio,
+        capturedAudio: outcome.archiveAudio,
         rawText: result.text,
         processedText: processedText,
         errorMessage: nil
@@ -1691,7 +1713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func handleTranscriptionResult(
     _ result: TranscriptionResult,
-    capturedAudio: CapturedAudio
+    archiveAudio: CapturedAudio
   ) async {
     debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
     AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
@@ -1707,7 +1729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } catch {
       await handleTranscriptionError(
         error,
-        capturedAudio: capturedAudio,
+        capturedAudio: archiveAudio,
         rawText: result.text
       )
       return
@@ -1720,7 +1742,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
 
     await archiveUtteranceIfEnabled(
-      capturedAudio: capturedAudio,
+      capturedAudio: archiveAudio,
       rawText: result.text,
       processedText: processedText,
       errorMessage: nil
