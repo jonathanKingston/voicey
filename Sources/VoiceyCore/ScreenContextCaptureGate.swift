@@ -63,21 +63,30 @@ public final class ScreenContextCaptureGate: @unchecked Sendable {
     -> ScreenContextCaptureWaitOutcome {
     let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
     while DispatchTime.now().uptimeNanoseconds < deadline {
-      if Task.isCancelled {
-        lock.lock()
-        defer { lock.unlock() }
-        guard sessionActive else { return .inactive }
-        return isReady ? .ready : .timeout
-      }
+      if Task.isCancelled { return terminalOutcome() }
 
-      lock.lock()
-      let snapshot = (sessionActive, isReady)
-      lock.unlock()
-      if !snapshot.0 { return .inactive }
-      if snapshot.1 { return .ready }
+      let state = snapshotState()
+      if !state.active { return .inactive }
+      if state.ready { return .ready }
       try? await Task.sleep(nanoseconds: Self.pollIntervalNanoseconds)
     }
 
+    return terminalOutcome()
+  }
+
+  /// Atomically reads the gate state for one poll iteration.
+  ///
+  /// Kept synchronous (and out of `waitForReady`'s async body) so `NSLock.unlock()` is never
+  /// called from an async context — `unlock()` is flagged unavailable there under the Swift 6
+  /// language mode, and it also sidesteps Linux Foundation lacking `NSLock.withLock`.
+  private func snapshotState() -> (active: Bool, ready: Bool) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (sessionActive, isReady)
+  }
+
+  /// Resolves the outcome when polling stops (deadline reached or task cancelled).
+  private func terminalOutcome() -> ScreenContextCaptureWaitOutcome {
     lock.lock()
     defer { lock.unlock() }
     guard sessionActive else { return .inactive }
