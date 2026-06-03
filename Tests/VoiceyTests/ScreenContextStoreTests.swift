@@ -53,4 +53,31 @@ final class ScreenContextStoreTests: XCTestCase {
 
     XCTAssertEqual(store.currentSnapshot()?.queryText, "current")
   }
+
+  func testWaitForCaptureReturnsReadyAfterMarkComplete() async {
+    let token = store.beginCaptureSession()
+    store.markCaptureComplete(sessionToken: token)
+
+    let outcome = await store.waitForCaptureIfNeeded()
+    XCTAssertEqual(outcome, .ready)
+  }
+
+  func testWaitForCaptureIgnoresStaleCompletion() async {
+    let staleToken = store.beginCaptureSession()
+    _ = store.beginCaptureSession()
+
+    // A slow capture task from the previous session must not satisfy the new wait.
+    store.markCaptureComplete(sessionToken: staleToken)
+
+    let outcome = await store.waitForCaptureIfNeeded()
+    XCTAssertEqual(outcome, .timeout)
+  }
+
+  func testWaitForCaptureInactiveWhenDeactivated() async {
+    _ = store.beginCaptureSession()
+    store.deactivateCaptureSession()
+
+    let outcome = await store.waitForCaptureIfNeeded()
+    XCTAssertEqual(outcome, .inactive)
+  }
 }
