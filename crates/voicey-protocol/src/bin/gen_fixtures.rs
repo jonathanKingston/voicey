@@ -54,7 +54,7 @@ fn main() {
             shm_name: "voicey-pcm-fixture".into(),
             sample_count: 1024,
             sample_offset: 0,
-            decoder_context: Some("Glossary: Voicey".into()),
+            decoder_context: Some("Vocabulary: Voicey".into()),
             language: Some("English".into()),
         },
     );
@@ -248,7 +248,7 @@ fn main() {
             shm_name: "voicey-pcm-fixture".into(),
             sample_count: 1024,
             sample_offset: 0,
-            decoder_context: Some("Glossary: Voicey".into()),
+            decoder_context: Some("Vocabulary: Voicey".into()),
             language: Some("English".into()),
         },
     );

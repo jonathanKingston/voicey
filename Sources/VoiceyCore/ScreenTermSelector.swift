@@ -2,7 +2,11 @@ import Foundation
 
 /// Selects vocabulary terms from accessibility snapshots using BM25 and deduplication.
 public enum ScreenTermSelector {
-  public static let defaultMaxTerms = 60
+  /// Maximum BM25 / query screen-derived terms (beyond manual glossary + built-ins).
+  public static let defaultMaxScreenTerms = 8
+
+  /// Hard cap on terms passed into decoder context (manual glossary + screen).
+  public static let defaultMaxTerms = 32
 
   public static func select(
     snapshot: ScreenContextSnapshot?,
@@ -38,6 +42,9 @@ public enum ScreenTermSelector {
     selected.append(contentsOf: mustKeep)
 
     let mustKeepKeys = Set(mustKeep.map { normalizedKey($0) })
+    let screenBudget = min(defaultMaxScreenTerms, max(0, maxTerms - selected.count))
+    var screenAdded = 0
+
     for entry in rankedTerms {
       let term = ScreenTermHealing.canonicalTerm(entry.term, anchors: anchors)
       guard !ScreenTermFilter.isSteeringNoiseToken(term) else { continue }
@@ -45,10 +52,11 @@ public enum ScreenTermSelector {
       let key = normalizedKey(entry.term)
       guard !mustKeepKeys.contains(key) else { continue }
       selected.append(term)
-      if selected.count >= maxTerms { break }
+      screenAdded += 1
+      if screenAdded >= screenBudget || selected.count >= maxTerms { break }
     }
 
-    if selected.count < maxTerms, !query.isEmpty {
+    if screenAdded < screenBudget, selected.count < maxTerms, !query.isEmpty {
       let queryTokens = ScreenTermHealing.enrichedTokens(in: query, anchors: anchors)
       for token in queryTokens {
         guard !ScreenTermFilter.isSteeringNoiseToken(token) else { continue }
@@ -57,8 +65,9 @@ public enum ScreenTermSelector {
         guard !mustKeepKeys.contains(key) else { continue }
         if !selected.contains(where: { normalizedKey($0) == key }) {
           selected.append(token)
+          screenAdded += 1
         }
-        if selected.count >= maxTerms { break }
+        if screenAdded >= screenBudget || selected.count >= maxTerms { break }
       }
     }
 

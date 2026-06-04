@@ -4,7 +4,7 @@
   "segments": [],
   "voice_commands_enabled": false,
   "voice_commands": [],
-  "decoder_context": "Glossary: Voicey, Cursor, metformin, HbA1c",
+  "decoder_context": "Vocabulary: Voicey, Cursor, metformin, HbA1c",
   "steering_terms": ["Cursor", "metformin", "HbA1c"],
   "expected": ""
 }

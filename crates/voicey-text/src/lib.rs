@@ -17,7 +17,8 @@ pub use bm25::{rank_terms, rank_terms_default, RankedTerm};
 pub use glossary::{
     decoding_context, decoding_context_enabled, format as format_glossary, format_terms,
     parse_terms, sanitize_steering_echo, stripping_echoed_decoder_context, SanitizeResult,
-    BUILT_IN_TERMS, MAX_CONTEXT_CHARACTER_COUNT, MINIMUM_OVERLAP_TOKEN_COUNT,
+    BUILT_IN_TERMS, DECODER_CONTEXT_PREFIX, MAX_CONTEXT_CHARACTER_COUNT,
+    MINIMUM_OVERLAP_TOKEN_COUNT,
     STEERING_OVERLAP_CLEAR_THRESHOLD,
 };
 pub use screen_term_filter::{
@@ -29,7 +30,7 @@ pub use screen_term_healing::{
     merged_adjacent_tokens, MAX_MISSING_PREFIX_LENGTH,
 };
 pub use screen_term_selector::{
-    dedupe_preserving_order, select, select_default, DEFAULT_MAX_TERMS,
+    dedupe_preserving_order, select, select_default, DEFAULT_MAX_SCREEN_TERMS, DEFAULT_MAX_TERMS,
 };
 pub use snapshot::ScreenContextSnapshot;
 pub use steering::{build_steering_context, BuildSteeringContextInput, BuildSteeringContextOutput};

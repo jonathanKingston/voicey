@@ -12,8 +12,11 @@ Users saw **glossary and screen-context terms in pasted text** when little or no
 
 Sanitization runs in **`voicey-text` `postprocess`** (mandatory worker — no Swift fallback):
 
-1. **Layer 1 — Echo strip:** `glossary::stripping_echoed_decoder_context` removes verbatim prefix/exact echoes of `decoder_context`.
-2. **Layer 2 — Overlap guard:** `glossary::sanitize_steering_echo` clears “screen-term soup” when ≥ 80% of content tokens (minimum 3) match steering vocabulary.
+1. **Prefix / exact substring** of `decoder_context`
+2. **Comma-list filter** — long comma-separated segments that are steering-only (typical screen dump without the vocabulary prefix)
+3. **Embedded `Vocabulary:` / legacy `Glossary:` run** removal between speech
+4. **Soup** — ≥80% steering tokens clears the utterance
+5. **Polish** — seam punctuation cleanup
 
 Host passes per-utterance `decoder_context` + `steering_terms` from `TranscriptionSteeringContext` into `PostProcessor.processAsync`. Golden fixtures: `Benchmarks/Golden/postprocess/steering_echo_*.json` (`cargo test -p voicey-text --test golden_postprocess`).
 
@@ -21,8 +24,20 @@ The in-process `QwenEngine` echo strip was removed in #167: `transcribeSinglePas
 
 ## Not implemented (optional follow-ups)
 
-- **Low-RMS / short-clip guard** — open a new issue if macOS QA still sees false positives after #167.
+- **Low-RMS / short-clip guard** — open a new issue if macOS QA still sees false positives after embedded-run stripping.
 - **Rust-only defense-in-depth in infer clients** — not needed while `voicey-text` is mandatory on all paste paths.
+
+## Decoder context size (2026-06)
+
+Session-archive replay showed long IDE screen steering (~60 terms / ~2000 chars) correlated with ASR garble while audio-only replay was fine. Defaults (Rust + VoiceyCore):
+
+| Constant | Value | Role |
+|----------|-------|------|
+| `DEFAULT_MAX_SCREEN_TERMS` | **8** | BM25 / query tokens beyond manual glossary |
+| `DEFAULT_MAX_TERMS` | **32** | Total terms into decoder context |
+| `maxContextCharacterCount` | **256** | `Vocabulary: …` string cap for Qwen |
+
+Manual glossary terms are kept; screen soup is trimmed. Validate on local Session Archive replay (`scripts/replay_session_archive.py`); do not commit user WAVs or transcripts.
 
 ## Acceptance criteria (#162)
 

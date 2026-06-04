@@ -103,7 +103,7 @@ fn postprocess_applies_voice_command_new_line() {
 fn postprocess_clears_regurgitated_steering_soup() {
     let mut session = TextSession::spawn();
     let response = session.request_json(
-        r#"{"type":"postprocess","id":"pp-3","text":"metformin, Cursor, HbA1c, Voicey","voice_commands_enabled":false,"decoder_context":"Glossary: Voicey, Cursor, metformin, HbA1c","steering_terms":["Cursor","metformin","HbA1c"]}"#,
+        r#"{"type":"postprocess","id":"pp-3","text":"metformin, Cursor, HbA1c, Voicey","voice_commands_enabled":false,"decoder_context":"Vocabulary: Voicey, Cursor, metformin, HbA1c","steering_terms":["Cursor","metformin","HbA1c"]}"#,
     );
     assert_eq!(response["ok"], true);
     assert_eq!(response["text"], "");
