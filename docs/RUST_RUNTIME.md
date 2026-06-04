@@ -42,7 +42,7 @@ Tracking issues:
 | Post-process | `voicey-text` worker (required) | **Removed** — no Swift `PostProcessor` fallback; the worker is mandatory and errors fail fast |
 | Text / glossary | `voicey-text` (required) | **Removed** — steering + post-process always run on `voicey-text`; no in-process Swift path |
 | Infer | — | `QwenEngine` in Swift `infer-worker` |
-| PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks) |
+| PCM files | `voicey-pcm` | `SharedMemoryPCM.swift` (infer read, `[Float]` path, benchmarks); temp `voicey_pcm_*.pcm` files use owner-only `0600` permissions with startup/shutdown stale cleanup |
 
 Phase 1 PCM pass-through for manual hotkey and hands-free `drain_hands_free_utterance` is landed (#82, #84, #126, #129; hands-free drain keeps `PCMBufferHandle` without Swift PCM read). `voicey-capture` `read_captured_samples` streams PCM into the incremental coordinator on the Rust capture path (parity with AVFoundation `didCaptureSamples`; macOS QA: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md), [#145](https://github.com/jonathanKingston/voicey/issues/145)). Utterance finish routing (#129, #159) uses shared PCM when the coordinator has no streamed audio. Phase 2 (#70) is in progress: post-process, capture, and steering/glossary (via `build_steering_context` on `voicey-text`) no longer fall back to Swift when bundled workers are enabled; worker errors surface to the user. Deletion of remaining opt-out fallbacks (AVAudioEngine / Hub / infer) is still Phase 2+. Benchmark Phase 3 (#124, #125) no longer reads PCM in Swift.
 
