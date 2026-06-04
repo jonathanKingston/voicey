@@ -77,8 +77,16 @@ pub fn remove(name: &str) -> io::Result<()> {
 
 /// Best-effort removal of stale `voicey_pcm_*.pcm` files in the system temp directory.
 pub fn cleanup_stale_files() -> io::Result<usize> {
-    let temp_dir = std::env::temp_dir();
-    let entries = match fs::read_dir(&temp_dir) {
+    cleanup_stale_files_in(&std::env::temp_dir())
+}
+
+/// Sweep stale `voicey_pcm_*.pcm` files in a specific directory.
+///
+/// Factored out so tests can target an isolated directory rather than the shared
+/// process temp dir — sweeping the shared temp dir would race sibling tests that
+/// create their own PCM files concurrently (cargo runs tests in parallel).
+fn cleanup_stale_files_in(dir: &Path) -> io::Result<usize> {
+    let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
         Err(error) => return Err(error),
@@ -218,14 +226,24 @@ mod tests {
 
     #[test]
     fn cleanup_stale_files_removes_matching_pcm() {
-        let name = new_buffer_name();
-        let path = file_path(&name);
+        // Use an isolated directory so the sweep cannot race sibling tests that
+        // write their own PCM files into the shared temp dir concurrently.
+        let dir = std::env::temp_dir().join(new_buffer_name());
+        fs::create_dir(&dir).expect("create test dir");
+
+        let path = dir.join(format!("{}.pcm", new_buffer_name()));
         fs::write(&path, [0u8; 4]).expect("write stale");
         #[cfg(unix)]
         apply_owner_only_permissions(&path).expect("chmod");
+        // A non-matching file in the same directory must survive the sweep.
+        let unrelated = dir.join("voicey_pcm_not_a_uuid.pcm");
+        fs::write(&unrelated, [0u8; 4]).expect("write unrelated");
 
-        let removed = cleanup_stale_files().expect("cleanup");
+        let removed = cleanup_stale_files_in(&dir).expect("cleanup");
         assert!(removed >= 1);
         assert!(!path.exists());
+        assert!(unrelated.exists(), "non-matching file must not be swept");
+
+        fs::remove_dir_all(&dir).ok();
     }
 }
