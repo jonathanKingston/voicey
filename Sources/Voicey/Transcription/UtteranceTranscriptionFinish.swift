@@ -1,14 +1,12 @@
 import Foundation
+import VoiceyCore
 
 /// How an utterance captured via `AudioCaptureManager` should complete transcription.
 ///
 /// Regression guard for #129: default `voicey-capture` returns `.sharedBuffer` without
 /// streaming `[Float]` into `IncrementalTranscriptionCoordinator`. Routing those utterances
 /// through `flushAndFinish` alone yields empty text.
-enum UtteranceTranscriptionFinishRoute: Equatable {
-  case sharedPCMHandle
-  case incrementalCoordinatorFlush
-}
+typealias UtteranceTranscriptionFinishRoute = CapturedAudioFinishRoute
 
 enum UtteranceTranscriptionFinish {
   static func route(for capturedAudio: CapturedAudio) -> UtteranceTranscriptionFinishRoute {
@@ -18,5 +16,16 @@ enum UtteranceTranscriptionFinish {
     case .inMemory:
       return .incrementalCoordinatorFlush
     }
+  }
+
+  static func shouldFinishViaIncrementalFlush(
+    for capturedAudio: CapturedAudio,
+    hasBufferedIncrementalAudio: Bool,
+    handsFreeUtterance: Bool
+  ) -> Bool {
+    UtteranceTranscriptionFinishPolicy.shouldFinishViaIncrementalFlush(
+      route: route(for: capturedAudio),
+      hasBufferedIncrementalAudio: hasBufferedIncrementalAudio,
+      handsFreeUtterance: handsFreeUtterance)
   }
 }

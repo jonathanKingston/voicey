@@ -1441,7 +1441,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let result = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: capturedAudio,
-        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
+        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic,
+        handsFreeUtterance: false
       )
       await handleTranscriptionResult(result)
     } catch {
@@ -1454,19 +1455,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func finishUtteranceTranscription(
     coordinator: IncrementalTranscriptionCoordinator,
     capturedAudio: CapturedAudio,
-    applyTrailingTrimHeuristic: Bool
+    applyTrailingTrimHeuristic: Bool,
+    handsFreeUtterance: Bool
   ) async throws -> TranscriptionResult {
-    switch UtteranceTranscriptionFinish.route(for: capturedAudio) {
-    case .sharedPCMHandle:
-      if coordinator.hasBufferedIncrementalAudio {
-        return try await coordinator.flushAndFinish(
-          applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
-      }
-      return try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
-    case .incrementalCoordinatorFlush:
+    if UtteranceTranscriptionFinish.shouldFinishViaIncrementalFlush(
+      for: capturedAudio,
+      hasBufferedIncrementalAudio: coordinator.hasBufferedIncrementalAudio,
+      handsFreeUtterance: handsFreeUtterance) {
       return try await coordinator.flushAndFinish(
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
     }
+    return try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
   }
 
   private func processHandsFreeIncrementalUtterance(
@@ -1485,7 +1484,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let result = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: request.capturedAudio,
-        applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic
+        applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic,
+        handsFreeUtterance: true
       )
       let processedText: String
       do {
