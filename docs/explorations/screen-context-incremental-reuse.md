@@ -45,3 +45,6 @@ Relevant files:
 - [x] macOS: `ScreenContextStoreTests` (VoiceyTests).
 - [ ] macOS manual: dictate a term from the active window before and after a pause; steering applies
   consistently (macOS sign-off: [`MACOS_MANUAL_QA.md`](../MACOS_MANUAL_QA.md), [#145](https://github.com/jonathanKingston/voicey/issues/145)).
+
+See also [`screen-context-capture-determinism.md`](screen-context-capture-determinism.md) for bounded
+wait before the first steering build (short-recording race).

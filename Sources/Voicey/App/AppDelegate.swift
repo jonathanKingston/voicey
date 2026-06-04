@@ -1069,17 +1069,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startScreenContextCaptureIfNeeded() {
-    ScreenContextStore.shared.clear()
+    let captureSessionToken = ScreenContextStore.shared.beginCaptureSession()
 
-    guard dependencies.settings.transcriptionScreenContextEnabled else { return }
+    guard dependencies.settings.transcriptionScreenContextEnabled else {
+      ScreenContextStore.shared.deactivateCaptureSession()
+      return
+    }
     guard dependencies.permissions.checkAccessibilityPermission() else {
       AppLogger.transcription.warning(
         "Screen context enabled but Accessibility permission is not granted")
+      ScreenContextStore.shared.deactivateCaptureSession()
       return
     }
-    guard let targetPID = recordingTargetPID else { return }
+    guard let targetPID = recordingTargetPID else {
+      ScreenContextStore.shared.deactivateCaptureSession()
+      return
+    }
 
     Task.detached(priority: .utility) {
+      defer { ScreenContextStore.shared.markCaptureComplete(sessionToken: captureSessionToken) }
       let windowImage = ScreenContextOCR.grabFrontWindowImageSync(targetPID: targetPID)
       let captured = ScreenContextCollector.captureWithExposure(targetPID: targetPID)
       var snapshot = captured.snapshot
@@ -1096,7 +1104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           "ScreenContext OCR enabled but Screen Recording permission is not granted")
       }
 
-      ScreenContextStore.shared.set(snapshot, exposure: captured.exposure)
+      ScreenContextStore.shared.set(
+        snapshot, exposure: captured.exposure, sessionToken: captureSessionToken)
     }
   }
 
@@ -1191,6 +1200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func endHandsFreeSession() {
     AppLogger.general.info("Ending hands-free session")
+    ScreenContextStore.shared.clear()
     cancelHandsFreeWaitTimeout()
 
     appState.handsFreeSessionActive = false
@@ -1394,6 +1404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     AppLogger.general.info("Cancelling transcription...")
+    ScreenContextStore.shared.clear()
     cancelHandsFreeWaitTimeout()
     appState.handsFreeSessionActive = false
 
