@@ -132,11 +132,25 @@ Download models without running the benchmark:
 
 Use `--all` to download every `SpeechModel` case.
 
+## Apple SpeechAnalyzer comparison (macOS 26+)
+
+A standalone eval CLI lives under [`Benchmarks/AppleSpeech/README.md`](AppleSpeech/README.md).
+It plugs into this same harness via `--apple-speech`:
+
+```bash
+make build-apple-speech-benchmark
+make benchmark-run-apple-speech-vs-qwen-common-voice
+```
+
+That runs Qwen 1.7B (multiprocess + post-process) and Apple offline SpeechTranscriber on
+the same deterministic Common Voice slice.
+
 ## What this is good for
 
 - Quick WER/CER comparisons across Voicey's model wrappers
 - Regression checks when model settings change
 - Accent and speaker diversity from Common Voice
+- Head-to-head Apple Speech vs Qwen spikes before any product backend change
 - Comparing processing time across the same selected clips
 - Comparing batch transcription against the pause-based piecemeal path on the
   same deterministic clips. Use paired `--voicey-model MODEL` and

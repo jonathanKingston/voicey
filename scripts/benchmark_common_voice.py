@@ -162,6 +162,45 @@ def build_parser() -> argparse.ArgumentParser:
     help="Voicey binary used by --voicey-model. Defaults to .build/debug/Voicey.",
   )
   parser.add_argument(
+    "--apple-speech",
+    action="store_true",
+    help=(
+      "Benchmark Apple's SpeechAnalyzer via the standalone "
+      "`voicey-apple-speech-benchmark` CLI (macOS 26+)."
+    ),
+  )
+  parser.add_argument(
+    "--apple-speech-binary",
+    type=Path,
+    default=Path("Benchmarks/AppleSpeech/.build/debug/voicey-apple-speech-benchmark"),
+    help=(
+      "Apple Speech benchmark executable used with --apple-speech. "
+      "Build with `make build-apple-speech-benchmark`."
+    ),
+  )
+  parser.add_argument(
+    "--apple-speech-locale",
+    default="en-US",
+    help="BCP-47 locale passed to --apple-speech runs. Defaults to en-US.",
+  )
+  parser.add_argument(
+    "--apple-speech-preset",
+    choices=("offline", "live"),
+    default="offline",
+    help="Apple SpeechTranscriber preset. Defaults to offline.",
+  )
+  parser.add_argument(
+    "--apple-speech-context",
+    default="",
+    help="Comma-separated contextual strings for Apple AnalysisContext steering eval.",
+  )
+  parser.add_argument(
+    "--apple-speech-warmup",
+    type=int,
+    default=1,
+    help="Untimed Apple transcribes before each measured clip. Defaults to 1.",
+  )
+  parser.add_argument(
     "--limit",
     type=positive_int,
     default=DEFAULT_LIMIT,
@@ -325,6 +364,46 @@ def render_command(runner: Runner, sample: Sample) -> str:
   )
 
 
+def extract_transcript(stdout: str, transcript_regex: str | None) -> str:
+  stripped = stdout.strip()
+  if transcript_regex is None and stripped.startswith("{"):
+    try:
+      payload = json.loads(stripped)
+    except json.JSONDecodeError:
+      payload = None
+    if isinstance(payload, dict) and isinstance(payload.get("text"), str):
+      return payload["text"].strip()
+
+  if transcript_regex is None:
+    return stripped
+
+  match = re.search(transcript_regex, stdout, flags=re.MULTILINE)
+  if match is None:
+    raise BenchmarkError("transcript regex did not match command stdout")
+
+  if "text" in match.groupdict():
+    return match.group("text").strip()
+  if match.lastindex:
+    return match.group(1).strip()
+  return match.group(0).strip()
+
+
+def processing_seconds_from_stdout(stdout: str, elapsed_seconds: float) -> float:
+  stripped = stdout.strip()
+  if not stripped.startswith("{"):
+    return elapsed_seconds
+  try:
+    payload = json.loads(stripped)
+  except json.JSONDecodeError:
+    return elapsed_seconds
+  if not isinstance(payload, dict):
+    return elapsed_seconds
+  processing_seconds = payload.get("processingSeconds")
+  if isinstance(processing_seconds, (int, float)):
+    return float(processing_seconds)
+  return elapsed_seconds
+
+
 def run_transcription_command(
   runner: Runner,
   sample: Sample,
@@ -364,22 +443,8 @@ def run_transcription_command(
       f"{runner.name} produced an empty transcript on {sample.relative_audio_path}"
     )
 
-  return prediction, stdout, stderr, elapsed_seconds
-
-
-def extract_transcript(stdout: str, transcript_regex: str | None) -> str:
-  if transcript_regex is None:
-    return stdout.strip()
-
-  match = re.search(transcript_regex, stdout, flags=re.MULTILINE)
-  if match is None:
-    raise BenchmarkError("transcript regex did not match command stdout")
-
-  if "text" in match.groupdict():
-    return match.group("text").strip()
-  if match.lastindex:
-    return match.group(1).strip()
-  return match.group(0).strip()
+  processing_seconds = processing_seconds_from_stdout(stdout, elapsed_seconds)
+  return prediction, stdout, stderr, processing_seconds
 
 
 def normalize_text(text: str, case_sensitive: bool, keep_punctuation: bool) -> str:
@@ -639,7 +704,12 @@ def format_optional_rate(value: float | None) -> str:
 
 
 def benchmark(args: argparse.Namespace) -> int:
-  if (args.voicey_model or args.voicey_incremental_model) and not args.model_command:
+  use_voicey_batch = (
+    (args.voicey_model or args.voicey_incremental_model)
+    and not args.model_command
+    and not args.apple_speech
+  )
+  if use_voicey_batch:
     return benchmark_voicey_batch(args)
   if args.voicey_incremental_model:
     raise BenchmarkError(
@@ -649,10 +719,21 @@ def benchmark(args: argparse.Namespace) -> int:
 
   runners: list[Runner] = list(args.model_command)
   runners.extend(voicey_runners(args.voicey_model, args.voicey_binary))
+  if args.apple_speech:
+    runners.extend(
+      apple_speech_runners(
+        binary=args.apple_speech_binary,
+        locale=args.apple_speech_locale,
+        preset=args.apple_speech_preset,
+        context=args.apple_speech_context,
+        warmup=args.apple_speech_warmup,
+      )
+    )
   runner_names = [runner.name for runner in runners]
   if not runners:
     raise BenchmarkError(
-      "provide at least one --model-command, --voicey-model, or --voicey-incremental-model"
+      "provide at least one --model-command, --voicey-model, --voicey-incremental-model, "
+      "or --apple-speech"
     )
   if len(set(runner_names)) != len(runner_names):
     raise BenchmarkError("model command names must be unique")
@@ -954,6 +1035,36 @@ def voicey_transcribe_cli_flags(model: str) -> str:
   if model.startswith("qwen3-asr"):
     return "--runtime multiprocess --post-process "
   return ""
+
+
+def apple_speech_runners(
+  binary: Path,
+  locale: str,
+  preset: str,
+  context: str,
+  warmup: int,
+) -> list[Runner]:
+  label = f"apple-speech:{locale}:{preset}"
+  if context.strip():
+    label = f"{label}:context"
+
+  binary_command = shlex.quote(str(binary))
+  command_parts = [
+    binary_command,
+    f"--locale {shlex.quote(locale)}",
+    f"--preset {shlex.quote(preset)}",
+    f"--warmup {warmup}",
+    "--json",
+  ]
+  if context.strip():
+    command_parts.append(f"--context {shlex.quote(context)}")
+  command_parts.append(f"--audio {MODEL_COMMAND_PLACEHOLDER}")
+  return [
+    Runner(
+      name=label,
+      command_template=" ".join(command_parts),
+    )
+  ]
 
 
 def voicey_runners(models: Sequence[str], binary: Path) -> list[Runner]:
