@@ -9,12 +9,46 @@ final class ScreenContextStore: @unchecked Sendable {
   private let lock = NSLock()
   private var snapshot: ScreenContextSnapshot?
   private var exposure: ScreenContextExposureAssessment.Result?
+  private var captureSessionToken: UInt64 = 0
+  private let captureGate = ScreenContextCaptureGate()
 
   private init() {}
 
-  func set(_ snapshot: ScreenContextSnapshot, exposure: ScreenContextExposureAssessment.Result? = nil) {
+  /// Clears stored context and starts a capture gate for the new recording.
+  @discardableResult
+  func beginCaptureSession() -> UInt64 {
     lock.lock()
     defer { lock.unlock() }
+    snapshot = nil
+    exposure = nil
+    let token = captureGate.beginSession()
+    captureSessionToken = token
+    return token
+  }
+
+  /// Ends the capture gate without waiting (screen context disabled or prerequisites missing).
+  func deactivateCaptureSession() {
+    captureGate.deactivateSession()
+  }
+
+  /// Signals that the detached capture task finished (or was skipped with an empty snapshot).
+  func markCaptureComplete(sessionToken: UInt64) {
+    captureGate.markReady(sessionToken: sessionToken)
+  }
+
+  /// Waits up to `ScreenContextCaptureGate.defaultWaitNanoseconds` when a capture session is active.
+  func waitForCaptureIfNeeded() async -> ScreenContextCaptureWaitOutcome {
+    await captureGate.waitForReady()
+  }
+
+  func set(
+    _ snapshot: ScreenContextSnapshot,
+    exposure: ScreenContextExposureAssessment.Result? = nil,
+    sessionToken: UInt64? = nil
+  ) {
+    lock.lock()
+    defer { lock.unlock() }
+    if let sessionToken, sessionToken != captureSessionToken { return }
     self.snapshot = snapshot
     self.exposure = exposure
   }
@@ -24,6 +58,7 @@ final class ScreenContextStore: @unchecked Sendable {
     defer { lock.unlock() }
     snapshot = nil
     exposure = nil
+    captureGate.reset()
   }
 
   /// Last exposure assessment for the captured snapshot (consumed with the snapshot).
@@ -37,8 +72,9 @@ final class ScreenContextStore: @unchecked Sendable {
 
   /// Returns the accessibility snapshot captured at record start without clearing it.
   ///
-  /// The snapshot is cleared at recording boundaries via `clear()` (see `AppDelegate`
-  /// screen-context capture). Incremental transcription reads the same snapshot for every
+  /// The snapshot is cleared at recording boundaries via `beginCaptureSession()` and on
+  /// cancel / hands-free teardown via `clear()` (see `AppDelegate`). Incremental transcription
+  /// reads the same snapshot for every
   /// pause-separated chunk in one session.
   func currentSnapshot() -> ScreenContextSnapshot? {
     lock.lock()

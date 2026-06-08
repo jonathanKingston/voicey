@@ -7,3 +7,6 @@ description = "Shared PCM file transport between Voicey workers and the Swift ho
 
 [dependencies]
 uuid = { version = "=1.11.0", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

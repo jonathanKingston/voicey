@@ -87,7 +87,7 @@ fn append_from_pcm_shm_writes_wav_and_index() {
     assert_eq!(response["type"], "archive_result");
     assert_eq!(response["ok"], true);
 
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 
     let index = std::fs::read_to_string(dir.path().join("index.jsonl")).expect("index");
     assert!(index.contains("Test"));

@@ -28,7 +28,7 @@ const MIN_EMBEDDED_STEERING_RUN_TOKEN_COUNT: usize = 4;
 const EMBEDDED_RUN_END_NON_STEERING_TOKEN_COUNT: usize = 2;
 
 /// Upper bound on glossary context length passed to the model.
-pub const MAX_CONTEXT_CHARACTER_COUNT: usize = 512;
+pub const MAX_CONTEXT_CHARACTER_COUNT: usize = 256;
 
 /// Always included in steering glossaries when biasing is enabled.
 pub const BUILT_IN_TERMS: &[&str] = &["Voicey"];
@@ -232,8 +232,7 @@ fn strip_steering_word_affixes(
                 }
                 let prefix = format!("{phrase_lower}{sep}");
                 if lower.starts_with(&prefix)
-                    && non_steering_token_count_after_prefix(&out, phrase.len() + sep.len(), &steering)
-                        > 0
+                    && leading_echo_allowed_after_prefix(&out, phrase.len() + sep.len(), &steering)
                 {
                     let trim_len = phrase.len() + sep.len();
                     out = out[trim_len..].trim_start().to_string();
@@ -270,13 +269,30 @@ fn trailing_echo_allowed_before_suffix(
     non_steering_token_count(body, steering) > 0
 }
 
-fn non_steering_token_count_after_prefix(
+/// Leading steering echo (e.g. `Voicey Cursor the patient ...`) — only peel a leading term
+/// when the token immediately after it is ALSO steering. This marks a run of regurgitated
+/// terms rather than ordinary dictation that merely starts with a biased common word
+/// ("Plan the next sprint" must keep its "Plan"). Mirrors the sentence-boundary guard the
+/// trailing branch uses to avoid eating real speech.
+fn leading_echo_allowed_after_prefix(
     text: &str,
     prefix_byte_len: usize,
     steering: &HashSet<String>,
-) -> usize {
+) -> bool {
     let body = text[prefix_byte_len.min(text.len())..].trim();
-    non_steering_token_count(body, steering)
+    if body.is_empty() {
+        return false;
+    }
+    // Don't strip if nothing non-steering would remain (pure soup is handled by the
+    // overlap guard, not here).
+    if non_steering_token_count(body, steering) == 0 {
+        return false;
+    }
+    // The next token must itself be steering for this to be an echoed run.
+    screen_term_filter::tokenize(body)
+        .first()
+        .map(|first| is_steering_token(&first.to_lowercase(), steering))
+        .unwrap_or(false)
 }
 
 fn non_steering_token_count(text: &str, steering: &HashSet<String>) -> usize {
@@ -766,6 +782,27 @@ mod tests {
     fn sanitize_without_context_keeps_text() {
         let result = sanitize_steering_echo("metformin Cursor HbA1c Voicey", None, &[]);
         assert_eq!(result.text, "metformin Cursor HbA1c Voicey");
+        assert!(!result.cleared);
+    }
+
+    #[test]
+    fn sanitize_keeps_leading_common_word_steering_term_in_real_speech() {
+        // "Plan" is a screen-context steering term (e.g. an IDE button label) but is also a
+        // common English word the user may legitimately start a sentence with. The leading
+        // affix strip must NOT eat it when the rest is ordinary dictation.
+        let context = "Vocabulary: Voicey, Cursor, Plan, Branch, Create";
+        let terms = vec![
+            "Cursor".to_string(),
+            "Plan".to_string(),
+            "Branch".to_string(),
+            "Create".to_string(),
+        ];
+        let result = sanitize_steering_echo(
+            "Plan the next sprint with the team tomorrow",
+            Some(context),
+            &terms,
+        );
+        assert_eq!(result.text, "Plan the next sprint with the team tomorrow");
         assert!(!result.cleared);
     }
 }

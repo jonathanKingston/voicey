@@ -153,7 +153,7 @@ fn load_model_and_transcribe_via_infer_stub() {
         decoder_context: Some("Glossary".into()),
         language: None,
     });
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 
     match transcribe {
         HostResponse::TranscribeResult {
@@ -250,7 +250,7 @@ fn capture_fixture_returns_capture_stopped() {
             assert!(shm_name.starts_with(voicey_pcm::NAME_PREFIX));
             assert!(sample_count > 0);
             assert_eq!(sample_rate, 16_000);
-            voicey_pcm::remove(&shm_name);
+            let _ = voicey_pcm::remove(&shm_name);
         }
         other => panic!("unexpected capture_fixture response: {other:?}"),
     }
@@ -294,7 +294,7 @@ fn capture_fixture_then_transcribe_uses_capture_shm() {
         decoder_context: None,
         language: None,
     });
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 
     match transcribe {
         HostResponse::TranscribeResult {
@@ -383,7 +383,7 @@ fn transcribe_with_sample_offset_uses_pcm_slice() {
         decoder_context: None,
         language: None,
     });
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 
     match transcribe {
         HostResponse::TranscribeResult {
@@ -422,7 +422,7 @@ fn infer_stub_fail_transcribe_returns_transcribe_error() {
         decoder_context: None,
         language: None,
     });
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 
     match response {
         HostResponse::TranscribeResult { id, ok, error, .. } => {
@@ -454,7 +454,7 @@ fn infer_stub_malformed_json_line_surfaces_transcribe_error() {
         decoder_context: None,
         language: None,
     });
-    voicey_pcm::remove(&shm_name);
+    let _ = voicey_pcm::remove(&shm_name);
 
     match response {
         HostResponse::TranscribeResult { id, ok, error, .. } => {

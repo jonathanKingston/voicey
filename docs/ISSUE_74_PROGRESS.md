@@ -79,6 +79,8 @@ Consolidated macOS checklist: [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md).
 
 **Automation assessment (Jun 2026, post-#172):** [#172](https://github.com/jonathanKingston/voicey/pull/172) aligns [#147](https://github.com/jonathanKingston/voicey/issues/147) cancel rows in [`MACOS_MANUAL_QA.md`](MACOS_MANUAL_QA.md) with the closed issue; it does **not** unblock new implementation PRs. Priority queue unchanged: merge [#150](https://github.com/jonathanKingston/voicey/pull/150) and [#169](https://github.com/jonathanKingston/voicey/pull/169) on macOS; then [#152](https://github.com/jonathanKingston/voicey/issues/152) capture fallback deletion.
 
+**Automation assessment (Jun 2026, post-#114 exploration):** The merged exploration doc does **not** change the #150 / #169 / #152 priority queue. It enables **shared PCM file hardening** implementation (owner-only permissions, cleanup logging, stale-file sweep) as parallel security work that does not duplicate open PRs.
+
 **Suggested GitHub issue comments** (Cloud Agent token lacks `issues: write` — paste manually if helpful):
 
 - **#152:** Text/post-process layer done in #167. Capture (`AVAudioEngine`) deletion remains blocked until #150 merges + macOS QA. Do not open duplicate PRs for #150 / #169.

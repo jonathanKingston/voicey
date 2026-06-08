@@ -28,6 +28,11 @@ enum TranscriptionSteeringContext {
       return QwenTranscriptionHints(decoderContext: nil, language: language, steeringTerms: [])
     }
 
+    if settings.transcriptionScreenContextEnabled {
+      let captureOutcome = await ScreenContextStore.shared.waitForCaptureIfNeeded()
+      logCaptureWaitOutcome(captureOutcome)
+    }
+
     let snapshot = settings.transcriptionScreenContextEnabled
       ? ScreenContextStore.shared.currentSnapshot()
       : nil
@@ -49,6 +54,18 @@ enum TranscriptionSteeringContext {
       AppLogger.transcription.error(
         "Steering: Rust text worker error: \(error.localizedDescription, privacy: .public)")
       throw error
+    }
+  }
+
+  private static func logCaptureWaitOutcome(_ outcome: ScreenContextCaptureWaitOutcome) {
+    switch outcome {
+    case .inactive:
+      AppLogger.transcription.debug("ScreenContext capture: inactive")
+    case .ready:
+      AppLogger.transcription.info("ScreenContext capture: ready")
+    case .timeout:
+      AppLogger.transcription.info(
+        "ScreenContext capture: timeout (steering may omit screen terms)")
     }
   }
 

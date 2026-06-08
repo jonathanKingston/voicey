@@ -54,7 +54,7 @@ enum CaptureRequest {
         #[serde(default = "default_max_archive_entries")]
         max_entries: usize,
         audio: voicey_archive::ArchiveAudioSource,
-        metadata: voicey_archive::AppendUtteranceMetadata,
+        metadata: Box<voicey_archive::AppendUtteranceMetadata>,
         #[serde(default)]
         snapshot: Option<voicey_archive::UtteranceArchiveScreenSnapshot>,
     },
@@ -100,7 +100,7 @@ enum CaptureResponse {
         id: String,
         ok: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
-        record: Option<voicey_archive::UtteranceArchiveRecord>,
+        record: Box<Option<voicey_archive::UtteranceArchiveRecord>>,
         error: Option<String>,
     },
     DeleteArchiveResult {
@@ -240,13 +240,13 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
                 Ok(record) => CaptureResponse::ArchiveResult {
                     id,
                     ok: true,
-                    record: Some(record),
+                    record: Box::new(Some(record)),
                     error: None,
                 },
                 Err(message) => CaptureResponse::ArchiveResult {
                     id,
                     ok: false,
-                    record: None,
+                    record: Box::new(None),
                     error: Some(message),
                 },
             }

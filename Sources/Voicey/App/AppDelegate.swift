@@ -135,6 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Setup ESC key monitor
     setupEscapeKeyMonitor()
 
+    SharedMemoryPCM.cleanupStaleFiles()
+
     setupWorkspaceWakeObserver()
 
     // Check if setup is complete - show onboarding if anything is missing
@@ -210,6 +212,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       shutdownSemaphore.signal()
     }
     _ = shutdownSemaphore.wait(timeout: .now() + 6)
+
+    SharedMemoryPCM.cleanupStaleFiles()
 
     // Remove monitors
     if let monitor = localEscKeyMonitor {
@@ -1069,17 +1073,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startScreenContextCaptureIfNeeded() {
-    ScreenContextStore.shared.clear()
+    let captureSessionToken = ScreenContextStore.shared.beginCaptureSession()
 
-    guard dependencies.settings.transcriptionScreenContextEnabled else { return }
+    guard dependencies.settings.transcriptionScreenContextEnabled else {
+      ScreenContextStore.shared.deactivateCaptureSession()
+      return
+    }
     guard dependencies.permissions.checkAccessibilityPermission() else {
       AppLogger.transcription.warning(
         "Screen context enabled but Accessibility permission is not granted")
+      ScreenContextStore.shared.deactivateCaptureSession()
       return
     }
-    guard let targetPID = recordingTargetPID else { return }
+    guard let targetPID = recordingTargetPID else {
+      ScreenContextStore.shared.deactivateCaptureSession()
+      return
+    }
 
     Task.detached(priority: .utility) {
+      defer { ScreenContextStore.shared.markCaptureComplete(sessionToken: captureSessionToken) }
       let windowImage = ScreenContextOCR.grabFrontWindowImageSync(targetPID: targetPID)
       let captured = ScreenContextCollector.captureWithExposure(targetPID: targetPID)
       var snapshot = captured.snapshot
@@ -1096,7 +1108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           "ScreenContext OCR enabled but Screen Recording permission is not granted")
       }
 
-      ScreenContextStore.shared.set(snapshot, exposure: captured.exposure)
+      ScreenContextStore.shared.set(
+        snapshot, exposure: captured.exposure, sessionToken: captureSessionToken)
     }
   }
 
@@ -1189,6 +1202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func endHandsFreeSession() {
     AppLogger.general.info("Ending hands-free session")
+    ScreenContextStore.shared.clear()
     cancelHandsFreeWaitTimeout()
 
     appState.handsFreeSessionActive = false
@@ -1396,6 +1410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     AppLogger.general.info("Cancelling transcription...")
+    ScreenContextStore.shared.clear()
     cancelHandsFreeWaitTimeout()
     appState.handsFreeSessionActive = false
 
@@ -1432,7 +1447,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let outcome = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: capturedAudio,
-        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
+        applyTrailingTrimHeuristic: applyTrailingTrimHeuristic,
+        handsFreeUtterance: false
       )
       await handleTranscriptionResult(outcome.result, archiveAudio: outcome.archiveAudio)
     } catch {
@@ -1445,22 +1461,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func finishUtteranceTranscription(
     coordinator: IncrementalTranscriptionCoordinator,
     capturedAudio: CapturedAudio,
-    applyTrailingTrimHeuristic: Bool
+    applyTrailingTrimHeuristic: Bool,
+    handsFreeUtterance: Bool
   ) async throws -> UtteranceTranscriptionFinishOutcome {
-    switch UtteranceTranscriptionFinish.route(for: capturedAudio) {
-    case .sharedPCMHandle:
-      if coordinator.hasBufferedIncrementalAudio {
-        let result = try await coordinator.flushAndFinish(
-          applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
-        let archiveAudio = archiveAudioForIncrementalFinish(
-          coordinator: coordinator,
-          fallback: capturedAudio
-        )
-        return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: archiveAudio)
-      }
-      let result = try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
-      return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: capturedAudio)
-    case .incrementalCoordinatorFlush:
+    if UtteranceTranscriptionFinish.shouldFinishViaIncrementalFlush(
+      for: capturedAudio,
+      hasBufferedIncrementalAudio: coordinator.hasBufferedIncrementalAudio,
+      handsFreeUtterance: handsFreeUtterance) {
       let result = try await coordinator.flushAndFinish(
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
       let archiveAudio = archiveAudioForIncrementalFinish(
@@ -1469,6 +1476,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       )
       return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: archiveAudio)
     }
+    let result = try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
+    return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: capturedAudio)
   }
 
   /// Uses coordinator chunk audio when incremental flush ran; otherwise the stop-capture buffer.
@@ -1497,7 +1506,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let outcome = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: request.capturedAudio,
-        applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic
+        applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic,
+        handsFreeUtterance: true
       )
       let result = outcome.result
       let processedText: String
