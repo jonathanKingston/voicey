@@ -185,9 +185,9 @@ def build_parser() -> argparse.ArgumentParser:
   )
   parser.add_argument(
     "--apple-speech-preset",
-    choices=("offline", "live"),
+    choices=("offline", "live", "transcription", "progressiveTranscription", "progressiveLiveTranscription"),
     default="offline",
-    help="Apple SpeechTranscriber preset. Defaults to offline.",
+    help="Apple SpeechTranscriber preset. offline/transcription (default) or live/progressiveTranscription.",
   )
   parser.add_argument(
     "--apple-speech-context",

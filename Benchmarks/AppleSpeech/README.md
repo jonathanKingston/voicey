@@ -68,13 +68,30 @@ matching the existing Common Voice harness format.
 
 ## Presets
 
+Apple renamed SpeechTranscriber presets in recent macOS 26 SDK drops. The CLI accepts
+both legacy and current names:
+
 | CLI `--preset` | SpeechTranscriber preset | Use |
 |---|---|---|
-| `offline` (default) | `.offlineTranscription` | WER/RTF parity with batch Qwen |
-| `live` | `.progressiveLiveTranscription` | Volatile/live path smoke |
+| `offline` or `transcription` (default) | `.transcription` | WER/RTF parity with batch Qwen |
+| `live`, `progressiveTranscription`, or `progressiveLiveTranscription` | `.progressiveTranscription` | Volatile/live path smoke |
+
+## Asset / model updates
+
+Apple Speech models update silently via `AssetInventory` when macOS installs new speech
+assets. To record what is on the device before benchmarking:
+
+```bash
+Benchmarks/AppleSpeech/.build/debug/voicey-apple-speech-benchmark \
+  --probe-assets --locale en-US --json
+```
+
+Each transcribe JSON line now includes `platformVersion`, `assetStatus`, `preset`, and
+`localeInstalled` so you can compare runs before and after an OS model refresh.
 
 ## Notes
 
 - Apple inference runs **out of process**; RTF from `--json` excludes first-clip asset download unless `--warmup` covers it.
+- Live preset results use **finalized** text only (`isFinal`) so WER stays comparable to offline/Qwen runs.
 - Empty transcripts fail the CLI (exit 1); use `--keep-going` on the Python harness to record failures.
-- This harness does **not** exercise Voicey glossary BM25 / screen-context steering — only Apple's `contextualStrings` API.
+- This harness does **not** exercise Voicey glossary BM25 / screen-context steering — only Apple's `contextualStrings` API (which Apple documents primarily for `DictationTranscriber`).

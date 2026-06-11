@@ -34,7 +34,7 @@ BENCHMARK_APPLE_SPEECH_PRESET ?= offline
 BENCHMARK_APPLE_SPEECH_WARMUP ?= 1
 QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
-.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice build-apple-speech-benchmark benchmark-run-apple-speech-common-voice benchmark-run-apple-speech-vs-qwen-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
+.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice build-apple-speech-benchmark probe-apple-speech-assets benchmark-run-apple-speech-common-voice benchmark-run-apple-speech-vs-qwen-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
 
@@ -526,6 +526,9 @@ format:
 build-apple-speech-benchmark:
 	cd "$(APPLE_SPEECH_BENCHMARK_DIR)" && swift build
 
+probe-apple-speech-assets: build-apple-speech-benchmark
+	"$(APPLE_SPEECH_BENCHMARK_BIN)" --probe-assets --locale "$(BENCHMARK_APPLE_SPEECH_LOCALE)" --json
+
 # Run the Common Voice benchmark harness.
 benchmark-common-voice:
 	python3 scripts/benchmark_common_voice.py $(ARGS)
@@ -787,6 +790,7 @@ help:
 	@echo "  test-sparkle-linking - Verify Sparkle is only linked in direct builds"
 	@echo "  benchmark-common-voice - Run Common Voice benchmark harness (pass ARGS='...')"
 	@echo "  build-apple-speech-benchmark - Build SpeechAnalyzer eval CLI (macOS 26+ SDK)"
+	@echo "  probe-apple-speech-assets - Print installed Speech asset status (macOS 26+)"
 	@echo "  benchmark-run-apple-speech-common-voice - Common Voice WER for Apple Speech only"
 	@echo "  benchmark-run-apple-speech-vs-qwen-common-voice - Apple Speech vs Qwen 1.7B"
 	@echo "  test-common-voice-benchmark - Test benchmark harness fixtures"
