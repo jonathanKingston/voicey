@@ -707,10 +707,11 @@ def benchmark(args: argparse.Namespace) -> int:
   use_voicey_batch = (
     (args.voicey_model or args.voicey_incremental_model)
     and not args.model_command
-    and not args.apple_speech
   )
-  if use_voicey_batch:
+  if use_voicey_batch and not args.apple_speech:
     return benchmark_voicey_batch(args)
+  if use_voicey_batch and args.apple_speech and not args.voicey_incremental_model:
+    return benchmark_voicey_batch_with_apple(args)
   if args.voicey_incremental_model:
     raise BenchmarkError(
       "--voicey-incremental-model uses the optimized batch runner and cannot be "
@@ -937,6 +938,172 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
       "limit": args.limit,
       "seed": args.seed,
       "models": [run.label for run in batch_runs],
+      "results_path": str(results_path),
+      "examples_path": str(examples_path),
+      "summaries": summaries,
+    },
+  )
+  print_summary(summaries)
+  print(f"Summary: {summary_path}")
+  print(f"Examples: {examples_path}")
+  return 0
+
+
+def benchmark_voicey_batch_with_apple(args: argparse.Namespace) -> int:
+  validate_paths(args.tsv, args.clips_dir)
+  if args.measure_duration:
+    ensure_ffprobe(args.ffprobe)
+
+  samples, eligible_rows = sample_common_voice_rows(
+    tsv_path=args.tsv,
+    clips_dir=args.clips_dir,
+    limit=args.limit,
+    seed=args.seed,
+    skip_missing=args.skip_missing,
+  )
+  apple_runners = apple_speech_runners(
+    binary=args.apple_speech_binary,
+    locale=args.apple_speech_locale,
+    preset=args.apple_speech_preset,
+    context=args.apple_speech_context,
+    warmup=args.apple_speech_warmup,
+  )
+
+  args.output_dir.mkdir(parents=True, exist_ok=True)
+  timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+  sample_tsv_path = args.output_dir / f"{args.suite_name}_{timestamp}_sample.tsv"
+  results_path = args.output_dir / f"{args.suite_name}_{timestamp}.jsonl"
+  summary_path = args.output_dir / f"{args.suite_name}_{timestamp}_summary.json"
+  examples_path = args.output_dir / f"{args.suite_name}_{timestamp}_examples.md"
+
+  write_batch_sample_tsv(sample_tsv_path, samples)
+  batch_runs = voicey_batch_runs(args.voicey_model, [], [])
+
+  print(
+    f"Benchmarking {len(batch_runs)} Voicey batch run(s) and {len(apple_runners)} "
+    f"Apple Speech run(s) on {len(samples)} of {eligible_rows} eligible Common Voice rows"
+  )
+  print(f"Results: {results_path}")
+
+  samples_by_audio = {sample.relative_audio_path: sample for sample in samples}
+  records: list[dict[str, Any]] = []
+  with results_path.open("w", encoding="utf-8") as results_file:
+    for run in batch_runs:
+      print(f"[batch] {run.label}", flush=True)
+      predictions = run_voicey_batch(
+        binary=args.voicey_binary,
+        command_name=run.command_name,
+        model=run.model,
+        extra_args=run.extra_args,
+        tsv_path=sample_tsv_path,
+        clips_dir=args.clips_dir,
+        timeout_seconds=args.timeout * len(samples),
+      )
+      for prediction in predictions:
+        sample = samples_by_audio[prediction["audio"]]
+        metrics = compute_text_metrics(
+          reference=sample.reference,
+          prediction=prediction["text"],
+          case_sensitive=args.case_sensitive,
+          keep_punctuation=args.keep_punctuation,
+        )
+        record = {
+          "model": run.label,
+          "source_row": sample.source_row,
+          "client_id": sample.client_id,
+          "audio": sample.relative_audio_path,
+          "reference": sample.reference,
+          "prediction": prediction["text"],
+          "normalized_reference": metrics.normalized_reference,
+          "normalized_prediction": metrics.normalized_prediction,
+          "reference_words": metrics.reference_words,
+          "word_errors": metrics.word_errors,
+          "wer": metrics.wer,
+          "reference_chars": metrics.reference_chars,
+          "char_errors": metrics.char_errors,
+          "cer": metrics.cer,
+          "processing_seconds": prediction.get("processingSeconds", 0.0),
+          "audio_seconds": prediction.get("audioSeconds"),
+          "real_time_factor": prediction.get("realTimeFactor"),
+          "stdout": "",
+          "stderr": "",
+        }
+        records.append(record)
+        results_file.write(json.dumps(record, sort_keys=True) + "\n")
+        results_file.flush()
+
+    for sample_index, sample in enumerate(samples, start=1):
+      audio_seconds = (
+        audio_duration_seconds(sample.audio_path, args.ffprobe) if args.measure_duration else None
+      )
+      for runner in apple_runners:
+        print(
+          f"[{sample_index}/{len(samples)}] {runner.name}: {sample.relative_audio_path}",
+          flush=True,
+        )
+        try:
+          prediction, stdout, stderr, processing_seconds = run_transcription_command(
+            runner=runner,
+            sample=sample,
+            timeout_seconds=args.timeout,
+            transcript_regex=args.transcript_regex,
+          )
+          metrics = compute_text_metrics(
+            reference=sample.reference,
+            prediction=prediction,
+            case_sensitive=args.case_sensitive,
+            keep_punctuation=args.keep_punctuation,
+          )
+          record = {
+            "model": runner.name,
+            "source_row": sample.source_row,
+            "client_id": sample.client_id,
+            "audio": sample.relative_audio_path,
+            "reference": sample.reference,
+            "prediction": prediction,
+            "normalized_reference": metrics.normalized_reference,
+            "normalized_prediction": metrics.normalized_prediction,
+            "reference_words": metrics.reference_words,
+            "word_errors": metrics.word_errors,
+            "wer": metrics.wer,
+            "reference_chars": metrics.reference_chars,
+            "char_errors": metrics.char_errors,
+            "cer": metrics.cer,
+            "processing_seconds": processing_seconds,
+            "audio_seconds": audio_seconds,
+            "real_time_factor": (
+              processing_seconds / audio_seconds if audio_seconds is not None else None
+            ),
+            "stdout": stdout,
+            "stderr": stderr,
+          }
+        except BenchmarkError as error:
+          if not args.keep_going:
+            raise
+          record = {
+            "model": runner.name,
+            "source_row": sample.source_row,
+            "client_id": sample.client_id,
+            "audio": sample.relative_audio_path,
+            "reference": sample.reference,
+            "error": str(error),
+          }
+
+        records.append(record)
+        results_file.write(json.dumps(record, sort_keys=True) + "\n")
+        results_file.flush()
+
+  summaries = summarize_results(records)
+  write_examples(examples_path, records, summaries)
+  write_json(
+    summary_path,
+    {
+      "created_at": timestamp,
+      "tsv": str(args.tsv),
+      "clips_dir": str(args.clips_dir),
+      "limit": args.limit,
+      "seed": args.seed,
+      "models": [run.label for run in batch_runs] + [runner.name for runner in apple_runners],
       "results_path": str(results_path),
       "examples_path": str(examples_path),
       "summaries": summaries,

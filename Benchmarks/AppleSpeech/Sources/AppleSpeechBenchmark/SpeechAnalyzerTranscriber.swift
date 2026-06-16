@@ -105,7 +105,7 @@ enum AppleSpeechTranscriber {
     contextTerms: [String],
     warmupCount: Int
   ) async throws -> AppleSpeechTranscriptionResult {
-    let resolvedLocale = try resolveLocale(locale)
+    let resolvedLocale = try await resolveLocale(locale)
     let transcriber = SpeechTranscriber(locale: resolvedLocale, preset: preset.speechPreset)
     let snapshot = try await ensureAssets(transcriber: transcriber, locale: resolvedLocale, preset: preset)
 
@@ -143,8 +143,8 @@ enum AppleSpeechTranscriber {
     )
   }
 
-  private static func resolveLocale(_ locale: Locale) throws -> Locale {
-    if let supported = SpeechTranscriber.supportedLocale(equivalentTo: locale) {
+  private static func resolveLocale(_ locale: Locale) async throws -> Locale {
+    if let supported = await SpeechTranscriber.supportedLocale(equivalentTo: locale) {
       return supported
     }
     throw AppleSpeechTranscriberError.unsupportedLocale(locale.identifier(.bcp47))
@@ -220,7 +220,7 @@ enum AppleSpeechTranscriber {
     if let lastSample = try await analyzer.analyzeSequence(from: audioFile) {
       try await analyzer.finalizeAndFinish(through: lastSample)
     } else {
-      try analyzer.cancelAndFinishNow()
+      await analyzer.cancelAndFinishNow()
     }
 
     let transcript = try await resultsTask.value
