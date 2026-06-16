@@ -609,6 +609,10 @@ struct TranscriptionSteeringSettingsView: View {
     var transcriptionScreenContextEnabled = true
   @AppStorage("transcriptionScreenContextOCREnabled", store: defaults) private
     var transcriptionScreenContextOCREnabled = false
+  @AppStorage("localLMRefinementEnabled", store: defaults) private var localLMRefinementEnabled =
+    false
+  @State private var localLMBaseURL = SettingsManager.shared.localLMBaseURL
+  @State private var localLMModelName = SettingsManager.shared.localLMModelName
   @State private var transcriptionLanguageID = SettingsManager.shared.transcriptionLanguageID
   @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
   @State private var screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
@@ -624,9 +628,13 @@ struct TranscriptionSteeringSettingsView: View {
       Section(L10n.Transcription.customVocabulary) {
         Toggle(L10n.Transcription.glossaryEnable, isOn: $transcriptionGlossaryEnabled)
 
-        Text(L10n.Transcription.glossaryDescription)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        Text(
+          localLMRefinementEnabled
+            ? L10n.Transcription.glossaryDescriptionLocalLM
+            : L10n.Transcription.glossaryDescription
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
 
         if transcriptionGlossaryEnabled {
           MonospacedGlossaryEditor(
@@ -652,9 +660,13 @@ struct TranscriptionSteeringSettingsView: View {
       Section(L10n.Transcription.onScreenText) {
         Toggle(L10n.Transcription.screenContextEnable, isOn: $transcriptionScreenContextEnabled)
 
-        Text(L10n.Transcription.screenContextDescription)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        Text(
+          localLMRefinementEnabled
+            ? L10n.Transcription.screenContextDescriptionLocalLM
+            : L10n.Transcription.screenContextDescription
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
 
         if transcriptionScreenContextEnabled {
           Toggle(
@@ -681,12 +693,38 @@ struct TranscriptionSteeringSettingsView: View {
           }
         }
       }
+
+      Section(L10n.Transcription.localLM) {
+        Toggle(L10n.Transcription.localLMEnable, isOn: $localLMRefinementEnabled)
+
+        Text(L10n.Transcription.localLMDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if localLMRefinementEnabled {
+          TextField(L10n.Transcription.localLMBaseURL, text: $localLMBaseURL)
+            .textFieldStyle(.roundedBorder)
+
+          Text(L10n.Transcription.localLMBaseURLDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          TextField(L10n.Transcription.localLMModelName, text: $localLMModelName)
+            .textFieldStyle(.roundedBorder)
+
+          Text(L10n.Transcription.localLMModelNameDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
     }
     .formStyle(.grouped)
     .padding()
     .onAppear {
       transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
       transcriptionLanguageID = SettingsManager.shared.transcriptionLanguageID
+      localLMBaseURL = SettingsManager.shared.localLMBaseURL
+      localLMModelName = SettingsManager.shared.localLMModelName
       screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
     }
     .onChange(of: transcriptionGlossary) {
@@ -695,9 +733,17 @@ struct TranscriptionSteeringSettingsView: View {
     .onChange(of: transcriptionLanguageID) {
       SettingsManager.shared.transcriptionLanguageID = transcriptionLanguageID
     }
+    .onChange(of: localLMBaseURL) {
+      SettingsManager.shared.localLMBaseURL = localLMBaseURL
+    }
+    .onChange(of: localLMModelName) {
+      SettingsManager.shared.localLMModelName = localLMModelName
+    }
     .onDisappear {
       SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
       SettingsManager.shared.transcriptionLanguageID = transcriptionLanguageID
+      SettingsManager.shared.localLMBaseURL = localLMBaseURL
+      SettingsManager.shared.localLMModelName = localLMModelName
     }
   }
 }
@@ -736,7 +782,8 @@ struct ModelRowView: View {
         .foregroundStyle(.secondary)
 
         if model.isQwenModel,
-          VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
+          VoiceyRuntimeConfiguration.usesInferWorker(for: model)
+        {
           Text(L10n.Model.memoryFootnoteMultiprocess)
             .font(.caption2)
             .foregroundStyle(.tertiary)
@@ -1340,10 +1387,10 @@ struct SetupStepRow: View {
 // MARK: - Preview
 
 #if DEBUG
-struct SettingsView_Previews: PreviewProvider {
-  static var previews: some View {
-    SettingsView()
-      .environmentObject(AppState())
+  struct SettingsView_Previews: PreviewProvider {
+    static var previews: some View {
+      SettingsView()
+        .environmentObject(AppState())
+    }
   }
-}
 #endif

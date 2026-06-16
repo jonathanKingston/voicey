@@ -33,7 +33,8 @@ enum TranscriptionSteeringContext {
       logCaptureWaitOutcome(captureOutcome)
     }
 
-    let snapshot = settings.transcriptionScreenContextEnabled
+    let snapshot =
+      settings.transcriptionScreenContextEnabled
       ? ScreenContextStore.shared.currentSnapshot()
       : nil
 
@@ -45,8 +46,14 @@ enum TranscriptionSteeringContext {
         snapshot: snapshot
       )
       logSteeringResult(terms: result.terms, context: result.decoderContext, settings: settings)
+      if settings.localLMRefinementEnabled {
+        AppLogger.transcription.info(
+          "Steering: local LM refinement enabled; skipping Qwen decoder context"
+        )
+      }
+      let passDecoderContextToQwen = !settings.localLMRefinementEnabled
       return QwenTranscriptionHints(
-        decoderContext: result.decoderContext,
+        decoderContext: passDecoderContextToQwen ? result.decoderContext : nil,
         language: language,
         steeringTerms: result.terms
       )
