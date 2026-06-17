@@ -512,10 +512,13 @@ def summarize_results(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, 
         "failures": 0,
         "word_errors": 0,
         "reference_words": 0,
+        "raw_word_errors": 0,
+        "raw_reference_words": 0,
         "char_errors": 0,
         "reference_chars": 0,
         "total_processing_seconds": 0.0,
         "total_audio_seconds": 0.0,
+        "post_process_changed_clips": 0,
       },
     )
 
@@ -526,6 +529,11 @@ def summarize_results(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, 
     summary["clips"] += 1
     summary["word_errors"] += record["word_errors"]
     summary["reference_words"] += record["reference_words"]
+    if "raw_word_errors" in record:
+      summary["raw_word_errors"] += record["raw_word_errors"]
+      summary["raw_reference_words"] += record.get("raw_reference_words", record["reference_words"])
+      if record.get("post_process_changed"):
+        summary["post_process_changed_clips"] += 1
     summary["char_errors"] += record["char_errors"]
     summary["reference_chars"] += record["reference_chars"]
     summary["total_processing_seconds"] += record["processing_seconds"]
@@ -535,6 +543,14 @@ def summarize_results(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, 
   for summary in summaries.values():
     summary["wer"] = safe_divide(summary["word_errors"], summary["reference_words"])
     summary["cer"] = safe_divide(summary["char_errors"], summary["reference_chars"])
+    if summary["raw_reference_words"] > 0:
+      summary["raw_wer"] = safe_divide(
+        summary["raw_word_errors"],
+        summary["raw_reference_words"],
+      )
+      processed = summary["wer"] or 0.0
+      raw = summary["raw_wer"] or 0.0
+      summary["post_process_wer_delta"] = processed - raw
     if summary["total_audio_seconds"] > 0:
       summary["real_time_factor"] = (
         summary["total_processing_seconds"] / summary["total_audio_seconds"]
@@ -558,6 +574,22 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 def print_summary(summaries: dict[str, dict[str, Any]]) -> None:
   print("")
   print("Common Voice benchmark summary")
+  has_raw = any(summary.get("raw_wer") is not None for summary in summaries.values())
+  if has_raw:
+    print("model\tclips\tfailures\traw_WER\tproc_WER\tdelta\tchanged\tCER\tRTF")
+    for model, summary in sorted(summaries.items()):
+      raw_wer = format_optional_rate(summary.get("raw_wer"))
+      proc_wer = format_optional_rate(summary["wer"])
+      delta = format_optional_rate(summary.get("post_process_wer_delta"))
+      changed = summary.get("post_process_changed_clips", 0)
+      cer = format_optional_rate(summary["cer"])
+      rtf = format_optional_rate(summary["real_time_factor"])
+      print(
+        f"{model}\t{summary['clips']}\t{summary['failures']}\t{raw_wer}\t"
+        f"{proc_wer}\t{delta}\t{changed}\t{cer}\t{rtf}"
+      )
+    return
+
   print("model\tclips\tfailures\tWER\tCER\tRTF")
   for model, summary in sorted(summaries.items()):
     wer = format_optional_rate(summary["wer"])
@@ -578,15 +610,45 @@ def write_examples(
     "",
     "## Summary",
     "",
-    "| Model | Clips | WER | CER | RTF |",
-    "| --- | ---: | ---: | ---: | ---: |",
   ]
-  for model, summary in sorted(summaries.items(), key=lambda item: item[1]["wer"] or 0):
-    lines.append(
-      "| "
-      f"{model} | {summary['clips']} | {format_optional_rate(summary['wer'])} | "
-      f"{format_optional_rate(summary['cer'])} | {format_optional_rate(summary['real_time_factor'])} |"
+  has_raw = any(summary.get("raw_wer") is not None for summary in summaries.values())
+  if has_raw:
+    lines.extend(
+      [
+        "| Model | Clips | raw WER | proc WER | delta | changed | CER | RTF |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+      ]
     )
+    for model, summary in sorted(summaries.items(), key=lambda item: item[1]["wer"] or 0):
+      lines.append(
+        "| "
+        + " | ".join(
+          [
+            model,
+            str(summary["clips"]),
+            format_optional_rate(summary.get("raw_wer")),
+            format_optional_rate(summary["wer"]),
+            format_optional_rate(summary.get("post_process_wer_delta")),
+            str(summary.get("post_process_changed_clips", 0)),
+            format_optional_rate(summary["cer"]),
+            format_optional_rate(summary["real_time_factor"]),
+          ]
+        )
+        + " |"
+      )
+  else:
+    lines.extend(
+      [
+        "| Model | Clips | WER | CER | RTF |",
+        "| --- | ---: | ---: | ---: | ---: |",
+      ]
+    )
+    for model, summary in sorted(summaries.items(), key=lambda item: item[1]["wer"] or 0):
+      lines.append(
+        "| "
+        f"{model} | {summary['clips']} | {format_optional_rate(summary['wer'])} | "
+        f"{format_optional_rate(summary['cer'])} | {format_optional_rate(summary['real_time_factor'])} |"
+      )
 
   lines.extend(["", "## Per-Model Examples", ""])
   for model in sorted({record["model"] for record in records}):
@@ -619,13 +681,20 @@ def write_examples(
 
 
 def example_lines(label: str, record: dict[str, Any]) -> list[str]:
-  return [
+  lines = [
     f"**{label}** `{record['audio']}` WER {record['wer']:.3f}, CER {record['cer']:.3f}",
     "",
     f"- Reference: {single_line(record['reference'])}",
     f"- Prediction: {single_line(record['prediction'])}",
-    "",
   ]
+  if "raw_prediction" in record:
+    lines.extend(
+      [
+        f"- Raw ASR: {single_line(record['raw_prediction'])} (WER {record['raw_wer']:.3f})",
+      ]
+    )
+  lines.append("")
+  return lines
 
 
 def single_line(text: str) -> str:
@@ -814,9 +883,11 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
       )
       for prediction in predictions:
         sample = samples_by_audio[prediction["audio"]]
-        metrics = compute_text_metrics(
+        raw_prediction = prediction.get("rawText", prediction["text"])
+        processed_prediction = prediction["text"]
+        processed_metrics = compute_text_metrics(
           reference=sample.reference,
-          prediction=prediction["text"],
+          prediction=processed_prediction,
           case_sensitive=args.case_sensitive,
           keep_punctuation=args.keep_punctuation,
         )
@@ -826,21 +897,42 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
           "client_id": sample.client_id,
           "audio": sample.relative_audio_path,
           "reference": sample.reference,
-          "prediction": prediction["text"],
-          "normalized_reference": metrics.normalized_reference,
-          "normalized_prediction": metrics.normalized_prediction,
-          "reference_words": metrics.reference_words,
-          "word_errors": metrics.word_errors,
-          "wer": metrics.wer,
-          "reference_chars": metrics.reference_chars,
-          "char_errors": metrics.char_errors,
-          "cer": metrics.cer,
+          "prediction": processed_prediction,
+          "normalized_reference": processed_metrics.normalized_reference,
+          "normalized_prediction": processed_metrics.normalized_prediction,
+          "reference_words": processed_metrics.reference_words,
+          "word_errors": processed_metrics.word_errors,
+          "wer": processed_metrics.wer,
+          "reference_chars": processed_metrics.reference_chars,
+          "char_errors": processed_metrics.char_errors,
+          "cer": processed_metrics.cer,
           "processing_seconds": prediction.get("processingSeconds", 0.0),
           "audio_seconds": prediction.get("audioSeconds"),
           "real_time_factor": prediction.get("realTimeFactor"),
           "stdout": "",
           "stderr": "",
         }
+        if "rawText" in prediction:
+          raw_metrics = compute_text_metrics(
+            reference=sample.reference,
+            prediction=raw_prediction,
+            case_sensitive=args.case_sensitive,
+            keep_punctuation=args.keep_punctuation,
+          )
+          record.update(
+            {
+              "raw_prediction": raw_prediction,
+              "raw_normalized_prediction": raw_metrics.normalized_prediction,
+              "raw_word_errors": raw_metrics.word_errors,
+              "raw_reference_words": raw_metrics.reference_words,
+              "raw_wer": raw_metrics.wer,
+              "raw_char_errors": raw_metrics.char_errors,
+              "raw_cer": raw_metrics.cer,
+              "post_process_changed": (
+                raw_metrics.normalized_prediction != processed_metrics.normalized_prediction
+              ),
+            }
+          )
         records.append(record)
         results_file.write(json.dumps(record, sort_keys=True) + "\n")
         results_file.flush()
@@ -883,12 +975,15 @@ def voicey_batch_runs(
   runs: list[VoiceyBatchRun] = []
   for model in batch_models:
     label = model if not incremental_models else f"{model}:batch"
+    extra_args: list[str] = []
+    if model.startswith("qwen3-asr"):
+      extra_args.append("--post-process")
     runs.append(
       VoiceyBatchRun(
         label=label,
         model=model,
         command_name="benchmark-transcribe-batch",
-        extra_args=[],
+        extra_args=extra_args,
       )
     )
   for model in incremental_models:

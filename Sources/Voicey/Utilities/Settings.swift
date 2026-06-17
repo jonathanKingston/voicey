@@ -45,6 +45,9 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.pauseMediaDuringTranscription: true,
       Keys.voiceCommandsEnabled: false,
       Keys.transcriptionGlossaryEnabled: true,
+      Keys.transcriptionVocabularyMode: TranscriptionVocabularyMode.decoderSteering.rawValue,
+      Keys.lmStudioBaseURL: "http://127.0.0.1:1234/v1",
+      Keys.lmStudioModel: "",
       Keys.transcriptionScreenContextEnabled: true,
       Keys.transcriptionScreenContextOCREnabled: false,
       Keys.transcriptionLanguageID: TranscriptionQwenLanguage.autoOption.id,
@@ -69,6 +72,9 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let voiceCommands = "voiceCommands"
     static let transcriptionGlossaryEnabled = "transcriptionGlossaryEnabled"
     static let transcriptionGlossary = "transcriptionGlossary"
+    static let transcriptionVocabularyMode = "transcriptionVocabularyMode"
+    static let lmStudioBaseURL = "lmStudioBaseURL"
+    static let lmStudioModel = "lmStudioModel"
     static let transcriptionScreenContextEnabled = "transcriptionScreenContextEnabled"
     static let transcriptionScreenContextOCREnabled = "transcriptionScreenContextOCREnabled"
     static let transcriptionLanguageID = "transcriptionLanguageID"
@@ -179,6 +185,30 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var transcriptionGlossary: String {
     get { defaults.string(forKey: Keys.transcriptionGlossary) ?? "" }
     set { defaults.set(newValue, forKey: Keys.transcriptionGlossary) }
+  }
+
+  /// Whether vocabulary is applied as Qwen decoder steering or LM Studio post-processing.
+  var transcriptionVocabularyMode: TranscriptionVocabularyMode {
+    get {
+      let raw = defaults.string(forKey: Keys.transcriptionVocabularyMode)
+        ?? TranscriptionVocabularyMode.decoderSteering.rawValue
+      return TranscriptionVocabularyMode(rawValue: raw) ?? .decoderSteering
+    }
+    set {
+      defaults.set(newValue.rawValue, forKey: Keys.transcriptionVocabularyMode)
+    }
+  }
+
+  /// OpenAI-compatible base URL for LM Studio (for example `http://127.0.0.1:1234/v1`).
+  var lmStudioBaseURL: String {
+    get { defaults.string(forKey: Keys.lmStudioBaseURL) ?? "http://127.0.0.1:1234/v1" }
+    set { defaults.set(newValue, forKey: Keys.lmStudioBaseURL) }
+  }
+
+  /// LM Studio model id. Leave empty to use whichever model is loaded in LM Studio.
+  var lmStudioModel: String {
+    get { defaults.string(forKey: Keys.lmStudioModel) ?? "" }
+    set { defaults.set(newValue, forKey: Keys.lmStudioModel) }
   }
 
   /// When enabled, reads the target app's accessibility tree at record start and steers Qwen spelling.

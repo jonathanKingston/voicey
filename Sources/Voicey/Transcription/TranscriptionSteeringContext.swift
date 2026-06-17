@@ -45,8 +45,15 @@ enum TranscriptionSteeringContext {
         snapshot: snapshot
       )
       logSteeringResult(terms: result.terms, context: result.decoderContext, settings: settings)
+      let decoderContext =
+        settings.transcriptionVocabularyMode == .decoderSteering ? result.decoderContext : nil
+      if settings.transcriptionVocabularyMode == .lmStudioPostProcess, result.decoderContext != nil {
+        AppLogger.transcription.info(
+          "Steering: LM Studio post-process mode — skipping decoder context for ASR"
+        )
+      }
       return QwenTranscriptionHints(
-        decoderContext: result.decoderContext,
+        decoderContext: decoderContext,
         language: language,
         steeringTerms: result.terms
       )

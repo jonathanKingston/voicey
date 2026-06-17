@@ -82,6 +82,35 @@ class CommonVoiceBenchmarkTests(unittest.TestCase):
     self.assertEqual(runs[1].command_name, "benchmark-transcribe-incremental-batch")
     self.assertEqual(runs[1].extra_args, ["--pause-duration", "1.5"])
 
+  def test_voicey_batch_runs_qwen_enable_post_process(self) -> None:
+    runs = benchmark.voicey_batch_runs(["qwen3-asr-1.7b-bf16"], [], [])
+
+    self.assertEqual(len(runs), 1)
+    self.assertEqual(runs[0].extra_args, ["--post-process"])
+
+  def test_summarize_results_tracks_raw_and_processed_wer(self) -> None:
+    summaries = benchmark.summarize_results(
+      [
+        {
+          "model": "qwen3-asr-1.7b-bf16",
+          "word_errors": 0,
+          "reference_words": 10,
+          "raw_word_errors": 1,
+          "raw_reference_words": 10,
+          "char_errors": 0,
+          "reference_chars": 50,
+          "processing_seconds": 1.0,
+          "post_process_changed": True,
+        }
+      ]
+    )
+
+    summary = summaries["qwen3-asr-1.7b-bf16"]
+    self.assertEqual(summary["raw_wer"], 0.1)
+    self.assertEqual(summary["wer"], 0.0)
+    self.assertEqual(summary["post_process_wer_delta"], -0.1)
+    self.assertEqual(summary["post_process_changed_clips"], 1)
+
   def test_cli_writes_results_for_small_fixture(self) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
       root = Path(temp_dir)

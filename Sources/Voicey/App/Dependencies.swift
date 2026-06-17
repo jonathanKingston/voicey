@@ -18,6 +18,9 @@ protocol SettingsProviding: AnyObject {
   var voiceCommands: [VoiceCommand] { get set }
   var transcriptionGlossaryEnabled: Bool { get set }
   var transcriptionGlossary: String { get set }
+  var transcriptionVocabularyMode: TranscriptionVocabularyMode { get set }
+  var lmStudioBaseURL: String { get set }
+  var lmStudioModel: String { get set }
   var transcriptionScreenContextEnabled: Bool { get set }
   var transcriptionScreenContextOCREnabled: Bool { get set }
   var transcriptionLanguageID: String { get set }

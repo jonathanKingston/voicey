@@ -350,6 +350,21 @@ enum L10n {
         static var openScreenCaptureSettings: String {
             L10n.string("transcription.openScreenCaptureSettings")
         }
+        static var vocabularyMode: String { L10n.string("transcription.vocabularyMode") }
+        static var vocabularyModeDescription: String {
+            L10n.string("transcription.vocabularyModeDescription")
+        }
+        static var lmStudioBaseURL: String { L10n.string("transcription.lmStudioBaseURL") }
+        static var lmStudioBaseURLDescription: String {
+            L10n.string("transcription.lmStudioBaseURLDescription")
+        }
+        static var lmStudioModel: String { L10n.string("transcription.lmStudioModel") }
+        static var lmStudioModelDescription: String {
+            L10n.string("transcription.lmStudioModelDescription")
+        }
+        static var lmStudioModelPlaceholder: String {
+            L10n.string("transcription.lmStudioModelPlaceholder")
+        }
     }
 
     // MARK: - Voice Commands

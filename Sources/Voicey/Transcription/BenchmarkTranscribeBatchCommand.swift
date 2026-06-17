@@ -18,7 +18,7 @@ enum BenchmarkTranscribeBatchCommand {
       }
 
       let samples = try BenchmarkBatchSample.load(tsvURL: options.tsvURL, clipsDirectory: options.clipsDirectory)
-      try await transcribe(samples: samples, model: options.model)
+      try await transcribe(samples: samples, model: options.model, postProcess: options.postProcess)
       return 0
     } catch {
       fputs("error: \(error.localizedDescription)\n", stderr)
@@ -26,7 +26,11 @@ enum BenchmarkTranscribeBatchCommand {
     }
   }
 
-  private static func transcribe(samples: [BenchmarkBatchSample], model: SpeechModel) async throws {
+  private static func transcribe(
+    samples: [BenchmarkBatchSample],
+    model: SpeechModel,
+    postProcess: Bool
+  ) async throws {
     SettingsManager.shared.selectedModel = model
 
     switch model.backendKind {
@@ -41,7 +45,19 @@ enum BenchmarkTranscribeBatchCommand {
             warmupCount: 0
           )
         }
-        try printBatchJSON(result: result, sample: sample, model: model)
+        let processedText: String
+        if postProcess {
+          processedText = try await BenchmarkPostProcessor.process(result)
+        } else {
+          processedText = result.text
+        }
+        try printBatchJSON(
+          result: result,
+          processedText: processedText,
+          sample: sample,
+          model: model,
+          postProcess: postProcess
+        )
       }
     case .whisperKit:
       let engine = WhisperEngine()
@@ -52,7 +68,13 @@ enum BenchmarkTranscribeBatchCommand {
         let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
           try await engine.transcribe(audioBuffer: sample.audioSamples())
         }
-        try printBatchJSON(result: result, sample: sample, model: model)
+        try printBatchJSON(
+          result: result,
+          processedText: result.text,
+          sample: sample,
+          model: model,
+          postProcess: false
+        )
       }
     case .granitePython:
       let engine = GraniteEngine()
@@ -63,25 +85,36 @@ enum BenchmarkTranscribeBatchCommand {
         let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
           try await engine.transcribe(audioBuffer: sample.audioSamples())
         }
-        try printBatchJSON(result: result, sample: sample, model: model)
+        try printBatchJSON(
+          result: result,
+          processedText: result.text,
+          sample: sample,
+          model: model,
+          postProcess: false
+        )
       }
     }
   }
 
   private static func printBatchJSON(
     result: TranscriptionResult,
+    processedText: String,
     sample: BenchmarkBatchSample,
-    model: SpeechModel
+    model: SpeechModel,
+    postProcess: Bool
   ) throws {
-    let payload: [String: Any] = [
+    var payload: [String: Any] = [
       "audio": sample.relativeAudioPath,
       "model": model.rawValue,
-      "text": result.text,
+      "text": processedText,
       "language": result.language,
       "processingSeconds": result.processingTime,
       "audioSeconds": result.performanceMetrics.audioDuration,
       "realTimeFactor": result.performanceMetrics.realTimeFactor
     ]
+    if postProcess {
+      payload["rawText"] = result.text
+    }
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     guard let json = String(data: data, encoding: .utf8) else {
       throw BenchmarkTranscribeError.invalidJSONOutput
@@ -93,21 +126,25 @@ enum BenchmarkTranscribeBatchCommand {
 private struct BatchOptions {
   static let helpText = """
     Usage:
-      Voicey benchmark-transcribe-batch --model MODEL --tsv PATH --clips-dir DIR
+      Voicey benchmark-transcribe-batch --model MODEL --tsv PATH --clips-dir DIR [--post-process]
 
     Loads one Voicey model once, then transcribes every row in the TSV.
     Qwen models use the multiprocess Rust supervisor path; Whisper/Granite remain in-process legacy paths.
+
+    With --post-process, each JSON line includes rawText (ASR output) and text (voicey-text output).
     """
 
   let model: SpeechModel
   let tsvURL: URL
   let clipsDirectory: URL
+  let postProcess: Bool
   let showHelp: Bool
 
   init(arguments: [String]) throws {
     var model: SpeechModel?
     var tsvURL: URL?
     var clipsDirectory: URL?
+    var postProcess = false
     var showHelp = false
 
     var index = 0
@@ -120,6 +157,8 @@ private struct BatchOptions {
         tsvURL = URL(fileURLWithPath: try Self.value(after: argument, arguments: arguments, index: &index))
       case "--clips-dir":
         clipsDirectory = URL(fileURLWithPath: try Self.value(after: argument, arguments: arguments, index: &index))
+      case "--post-process":
+        postProcess = true
       case "--help", "-h":
         showHelp = true
       default:
@@ -129,6 +168,7 @@ private struct BatchOptions {
     }
 
     self.showHelp = showHelp
+    self.postProcess = postProcess
     if showHelp {
       self.model = ModelManager.defaultModel
       self.tsvURL = URL(fileURLWithPath: "/dev/null")

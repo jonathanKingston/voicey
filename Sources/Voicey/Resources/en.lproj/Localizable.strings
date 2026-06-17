@@ -127,6 +127,13 @@
 
 /* Spelling & context (transcription steering) */
 "transcription.intro" = "Improve recognition of names, jargon, and words visible in the app you're dictating into. Voicey is always included in vocabulary steering; add more terms below if you like. Use Spoken language to hint Qwen3 ASR. Processing stays on your Mac.";
+"transcription.vocabularyMode" = "Apply vocabulary";
+"transcription.vocabularyModeDescription" = "During transcription sends terms to Qwen3 ASR before speech is decoded. After transcription (LM Studio) skips ASR steering and asks a local LM Studio chat model to fix spelling using your glossary and on-screen terms.";
+"transcription.lmStudioBaseURL" = "LM Studio API URL";
+"transcription.lmStudioBaseURLDescription" = "OpenAI-compatible base URL for your local LM Studio server (default http://127.0.0.1:1234/v1). Start the server in LM Studio before dictating.";
+"transcription.lmStudioModel" = "LM Studio model";
+"transcription.lmStudioModelDescription" = "Optional model id. Leave blank to use whichever model is loaded in LM Studio.";
+"transcription.lmStudioModelPlaceholder" = "local-model";
 "transcription.customVocabulary" = "Custom vocabulary";
 "transcription.glossaryEnable" = "Prefer my vocabulary list";
 "transcription.glossaryDescription" = "Terms you list here are sent to the speech model before transcription to improve spelling (along with Voicey). Separate entries with commas or new lines.";

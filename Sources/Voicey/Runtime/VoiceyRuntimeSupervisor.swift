@@ -89,9 +89,6 @@ actor VoiceyRuntimeSupervisor {
     guard model.isQwenModel else {
       throw VoiceyRuntimeError.unsupportedModel(model.rawValue)
     }
-    defer {
-      capturedAudio.removeSharedBufferIfNeeded()
-    }
     do {
       switch capturedAudio {
       case .sharedBuffer(let handle):

@@ -605,13 +605,21 @@ struct TranscriptionSteeringSettingsView: View {
   private static let defaults = SettingsManager.defaultsStore
   @AppStorage("transcriptionGlossaryEnabled", store: defaults) private
     var transcriptionGlossaryEnabled = true
+  @AppStorage("transcriptionVocabularyMode", store: defaults) private
+    var transcriptionVocabularyMode = TranscriptionVocabularyMode.decoderSteering.rawValue
   @AppStorage("transcriptionScreenContextEnabled", store: defaults) private
     var transcriptionScreenContextEnabled = true
   @AppStorage("transcriptionScreenContextOCREnabled", store: defaults) private
     var transcriptionScreenContextOCREnabled = false
   @State private var transcriptionLanguageID = SettingsManager.shared.transcriptionLanguageID
   @State private var transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
+  @State private var lmStudioBaseURL = SettingsManager.shared.lmStudioBaseURL
+  @State private var lmStudioModel = SettingsManager.shared.lmStudioModel
   @State private var screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
+
+  private var selectedVocabularyMode: TranscriptionVocabularyMode {
+    TranscriptionVocabularyMode(rawValue: transcriptionVocabularyMode) ?? .decoderSteering
+  }
 
   var body: some View {
     Form {
@@ -619,6 +627,35 @@ struct TranscriptionSteeringSettingsView: View {
         Text(L10n.Transcription.intro)
           .font(.callout)
           .foregroundStyle(.secondary)
+      }
+
+      Section(L10n.Transcription.vocabularyMode) {
+        Picker(L10n.Transcription.vocabularyMode, selection: $transcriptionVocabularyMode) {
+          ForEach(TranscriptionVocabularyMode.allCases, id: \.rawValue) { mode in
+            Text(mode.displayName).tag(mode.rawValue)
+          }
+        }
+        .pickerStyle(.menu)
+
+        Text(L10n.Transcription.vocabularyModeDescription)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        if selectedVocabularyMode == .lmStudioPostProcess {
+          TextField(L10n.Transcription.lmStudioBaseURL, text: $lmStudioBaseURL)
+            .textFieldStyle(.roundedBorder)
+
+          Text(L10n.Transcription.lmStudioBaseURLDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          TextField(L10n.Transcription.lmStudioModel, text: $lmStudioModel, prompt: Text(L10n.Transcription.lmStudioModelPlaceholder))
+            .textFieldStyle(.roundedBorder)
+
+          Text(L10n.Transcription.lmStudioModelDescription)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
       }
 
       Section(L10n.Transcription.customVocabulary) {
@@ -687,6 +724,8 @@ struct TranscriptionSteeringSettingsView: View {
     .onAppear {
       transcriptionGlossary = SettingsManager.shared.transcriptionGlossary
       transcriptionLanguageID = SettingsManager.shared.transcriptionLanguageID
+      lmStudioBaseURL = SettingsManager.shared.lmStudioBaseURL
+      lmStudioModel = SettingsManager.shared.lmStudioModel
       screenCaptureGranted = PermissionsManager.shared.checkScreenCapturePermission()
     }
     .onChange(of: transcriptionGlossary) {
@@ -695,9 +734,17 @@ struct TranscriptionSteeringSettingsView: View {
     .onChange(of: transcriptionLanguageID) {
       SettingsManager.shared.transcriptionLanguageID = transcriptionLanguageID
     }
+    .onChange(of: lmStudioBaseURL) {
+      SettingsManager.shared.lmStudioBaseURL = lmStudioBaseURL
+    }
+    .onChange(of: lmStudioModel) {
+      SettingsManager.shared.lmStudioModel = lmStudioModel
+    }
     .onDisappear {
       SettingsManager.shared.transcriptionGlossary = transcriptionGlossary
       SettingsManager.shared.transcriptionLanguageID = transcriptionLanguageID
+      SettingsManager.shared.lmStudioBaseURL = lmStudioBaseURL
+      SettingsManager.shared.lmStudioModel = lmStudioModel
     }
   }
 }
