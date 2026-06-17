@@ -102,7 +102,7 @@ private struct ChatCompletionResponse: Decodable {
 }
 
 extension LocalLMRefinementError: LocalizedError {
-  var errorDescription: String? {
+  public var errorDescription: String? {
     switch self {
     case .invalidBaseURL:
       return

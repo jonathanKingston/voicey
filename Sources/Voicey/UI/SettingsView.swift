@@ -782,8 +782,7 @@ struct ModelRowView: View {
         .foregroundStyle(.secondary)
 
         if model.isQwenModel,
-          VoiceyRuntimeConfiguration.usesInferWorker(for: model)
-        {
+          VoiceyRuntimeConfiguration.usesInferWorker(for: model) {
           Text(L10n.Model.memoryFootnoteMultiprocess)
             .font(.caption2)
             .foregroundStyle(.tertiary)

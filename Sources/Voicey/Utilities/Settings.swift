@@ -52,7 +52,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.localLMBaseURL: LocalLMRefinementDefaults.baseURL,
       Keys.localLMModelName: LocalLMRefinementDefaults.modelName,
       Keys.enableDetailedLogging: false,
-      Keys.hasCompletedOnboarding: false,
+      Keys.hasCompletedOnboarding: false
     ])
   }
 
