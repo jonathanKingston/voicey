@@ -88,6 +88,47 @@ class PrepareCommonVoiceTests(unittest.TestCase):
       self.assertEqual((prepared_dir / "clips" / "clip-one.mp3").read_bytes(), b"one")
       self.assertEqual((prepared_dir / "clips" / "clip-two.mp3").read_bytes(), b"two")
 
+  def test_extracts_csv_archive_with_extensionless_ipfs_audio_files(self) -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+      root = Path(temp_dir)
+      source_dir = root / "effect-ai"
+      audio_dir = source_dir / "audio"
+      audio_dir.mkdir(parents=True)
+      cid = "QmWU8tiurj4SS1eUFkX14g69wancWE9kC4sW8vxQUfieWi"
+      (audio_dir / f"{cid}.mp3").write_bytes(b"audio")
+
+      (source_dir / "effectai_sentence_recording_dataset.csv").write_text(
+        "sentence,sentence_length,author_id,audio_file,duration_sec\n"
+        f"I'm heading out now.,4,4061,{cid},0.91\n",
+        encoding="utf-8",
+      )
+
+      archive_path = root / "effect-ai.tar.gz"
+      with tarfile.open(archive_path, "w:gz") as archive:
+        archive.add(source_dir, arcname=".")
+
+      with contextlib.redirect_stdout(io.StringIO()):
+        exit_code = prepare.main(
+          [
+            "--source",
+            "archive",
+            "--archive",
+            str(archive_path),
+            "--dataset-id",
+            "cmkfm9fbl00nto0070sdcrak2",
+            "--prepared-root",
+            str(root / "prepared"),
+            "--limit",
+            "1",
+            "--seed",
+            "1",
+          ]
+        )
+
+      self.assertEqual(exit_code, 0)
+      prepared_dir = root / "prepared" / "cmkfm9fbl00nto0070sdcrak2" / "test-limit1-seed1"
+      self.assertEqual((prepared_dir / "clips" / f"{cid}.mp3").read_bytes(), b"audio")
+
 
 if __name__ == "__main__":
   unittest.main()

@@ -670,9 +670,53 @@ def canonical_fieldnames(fieldnames: Sequence[str]) -> list[str]:
 
 def canonicalize_row(row: dict[str, str], path_column: str, text_column: str) -> dict[str, str]:
   canonical = dict(row)
-  canonical[CANONICAL_PATH_COLUMN] = (row.get(path_column) or "").strip()
+  canonical[CANONICAL_PATH_COLUMN] = normalize_clip_filename((row.get(path_column) or "").strip())
   canonical[CANONICAL_TEXT_COLUMN] = (row.get(text_column) or "").strip()
   return canonical
+
+
+def normalize_clip_filename(relative_path: str) -> str:
+  """Ensure clip filenames include an extension (Effect AI CSV uses bare IPFS CIDs)."""
+  if not relative_path:
+    return relative_path
+  if PurePosixPath(relative_path).suffix:
+    return relative_path
+  return f"{relative_path}.mp3"
+
+
+def archive_clip_member_names(split_parent: PurePosixPath, relative_audio_path: str) -> list[str]:
+  relative_variants = [relative_audio_path]
+  if PurePosixPath(relative_audio_path).suffix == "":
+    relative_variants.append(f"{relative_audio_path}.mp3")
+  prefixes = [
+    split_parent / "clips",
+    split_parent / "audio",
+    split_parent / "audios",
+    split_parent,
+  ]
+  names: list[str] = []
+  for prefix in prefixes:
+    for relative in relative_variants:
+      for candidate in (str(prefix / relative),):
+        names.append(candidate)
+        if candidate and not candidate.startswith("./"):
+          names.append(f"./{candidate}")
+  return names
+
+
+def find_archive_clip_member(
+  archive: tarfile.TarFile,
+  split_parent: PurePosixPath,
+  relative_audio_path: str,
+) -> tuple[tarfile.TarInfo, str]:
+  last_name = relative_audio_path
+  for member_name in archive_clip_member_names(split_parent, relative_audio_path):
+    last_name = member_name
+    try:
+      return archive.getmember(member_name), member_name
+    except KeyError:
+      continue
+  raise CommonVoicePrepareError(f"Archive is missing sampled clip: {last_name}")
 
 
 def write_sample_tsv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
@@ -689,26 +733,14 @@ def extract_sample_clips(
   clips_dir: Path,
 ) -> None:
   split_parent = PurePosixPath(split_member.name).parent
-  archive_clips_prefixes = [
-    split_parent / "clips",
-    split_parent / "audio",
-    split_parent / "audios",
-    split_parent,
-  ]
 
   for row in rows:
     relative_audio_path = (row.get(CANONICAL_PATH_COLUMN) or "").strip()
-    clip_member = None
-    member_name = ""
-    for archive_clips_prefix in archive_clips_prefixes:
-      member_name = str(archive_clips_prefix / relative_audio_path)
-      try:
-        clip_member = archive.getmember(member_name)
-        break
-      except KeyError:
-        continue
-    if clip_member is None:
-      raise CommonVoicePrepareError(f"Archive is missing sampled clip: {member_name}")
+    clip_member, member_name = find_archive_clip_member(
+      archive,
+      split_parent,
+      relative_audio_path,
+    )
 
     if not clip_member.isfile():
       raise CommonVoicePrepareError(f"Sampled clip is not a file: {member_name}")
@@ -847,22 +879,17 @@ def extract_streamed_clips(
   clips_dir: Path,
 ) -> None:
   split_parent = PurePosixPath(split_member.name).parent
-  archive_clips_prefixes = [
-    split_parent / "clips",
-    split_parent / "audio",
-    split_parent / "audios",
-    split_parent,
-  ]
   wanted_paths = {(row.get(CANONICAL_PATH_COLUMN) or "").strip() for row in rows}
-  wanted_members = {
-    str(archive_clips_prefix / path): path
-    for archive_clips_prefix in archive_clips_prefixes
-    for path in wanted_paths
-  }
+  wanted_members: dict[str, str] = {}
+  for path in wanted_paths:
+    for member_name in archive_clip_member_names(split_parent, path):
+      wanted_members[member_name] = normalize_clip_filename(path)
   extracted_paths: set[str] = set()
 
   for member in archive:
     relative_audio_path = wanted_members.get(member.name)
+    if relative_audio_path is None and member.name.startswith("./"):
+      relative_audio_path = wanted_members.get(member.name[2:])
     if relative_audio_path is None:
       continue
     if not member.isfile():
