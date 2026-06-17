@@ -22,7 +22,7 @@ after the command path is stable.
 
 ```bash
 # One-time: create an MDC API key, accept the English dataset terms on Mozilla
-# Data Collective, and export the key or put it in an untracked .env file.
+# Data Collective, and put the key in an untracked `.env`, `.env.production`, or `.env.local`.
 export MDC_API_KEY=...
 make benchmark-run-common-voice
 ```
@@ -90,12 +90,29 @@ The default dataset is Common Voice Spontaneous Speech 3.0 English:
 cmn1pv5hi00uto1072y1074y7
 ```
 
-It is about 459 MB and is a better fit for Voicey than scripted read speech
-because it contains spontaneous responses. The prep script also supports the
-larger scripted English archive in streaming mode, but MDC does not expose a
-split/sample endpoint.
+As of mid-2026 that ID is **no longer on MDC** (English spontaneous was pulled for QA).
+Use one of these instead after accepting terms on the dataset page:
 
-To try the 87.84 GB scripted English archive without saving the whole archive,
+| Dataset | ID | Notes |
+|---------|-----|-------|
+| Effect AI Scripted English | `cmkfm9fbl00nto0070sdcrak2` | ~10 h, small full download |
+| CV Scripted Speech 25 English | `cmndapwry02jnmh07dyo46mot` | ~88 GB — use `mdc-stream` |
+
+Example (200 clips, scripted English, stream):
+
+```bash
+make benchmark-prepare-common-voice \
+  BENCHMARK_COMMON_VOICE_SOURCE=mdc-stream \
+  BENCHMARK_COMMON_VOICE_DATASET=cmndapwry02jnmh07dyo46mot \
+  BENCHMARK_COMMON_VOICE_LIMIT=200
+```
+
+Spontaneous English was closer to real dictation, but MDC no longer hosts that alpha
+release. Scripted/read speech is still useful for regression; prefer streaming for
+the 88 GB English archive. The prep script also supports Hugging Face streaming
+(`BENCHMARK_COMMON_VOICE_SOURCE=hf-stream`) when MDC access is unavailable.
+
+To try the scripted English archive without saving the whole archive,
 use streaming mode:
 
 ```bash

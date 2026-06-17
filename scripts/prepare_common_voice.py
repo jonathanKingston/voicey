@@ -9,6 +9,7 @@ import csv
 import importlib.util
 import io
 import json
+import os
 import random
 import subprocess
 import sys
@@ -31,14 +32,20 @@ DEFAULT_SAMPLE_STRATEGY = "first"
 DEFAULT_MAX_ARCHIVE_GB = 2.0
 DEFAULT_MAX_STREAM_GB = 10.0
 DEFAULT_HF_SHUFFLE_BUFFER = 250
+LOCAL_ENV_FILES = (".env.production", ".env.local", ".env")
 TEXT_COLUMNS = ("text", "sentence", "transcription", "reference")
 PATH_COLUMNS = ("path", "audio_file", "audio")
 CANONICAL_PATH_COLUMN = "path"
 CANONICAL_TEXT_COLUMN = "text"
 KNOWN_DATASETS = {
+  # Pulled from MDC (2026-06): spontaneous English alpha ID no longer exists.
   "cmn1pv5hi00uto1072y1074y7": {
-    "name": "Common Voice Spontaneous Speech 3.0 - English",
+    "name": "Common Voice Spontaneous Speech 3.0 - English (deprecated on MDC)",
     "size_gb": 0.449,
+  },
+  "cmkfm9fbl00nto0070sdcrak2": {
+    "name": "Effect AI Scripted Speech 1.0 - English",
+    "size_gb": 1.0,
   },
   "cmn2cxzy701iumm077t5ayw0e": {
     "name": "Common Voice Scripted Speech 25.0 - Hindi",
@@ -53,6 +60,25 @@ KNOWN_DATASETS = {
 
 class CommonVoicePrepareError(RuntimeError):
   """Raised when Common Voice preparation cannot continue."""
+
+
+def load_local_env_files(repo_root: Path | None = None) -> None:
+  """Load untracked env files so MDC/HF tokens work without exporting in the shell."""
+  root = repo_root or Path(__file__).resolve().parents[1]
+  for name in LOCAL_ENV_FILES:
+    path = root / name
+    if not path.is_file():
+      continue
+    for line in path.read_text(encoding="utf-8").splitlines():
+      stripped = line.strip()
+      if not stripped or stripped.startswith("#") or "=" not in stripped:
+        continue
+      key, _, value = stripped.partition("=")
+      key = key.strip()
+      if not key:
+        continue
+      value = value.strip().strip('"').strip("'")
+      os.environ.setdefault(key, value)
 
 
 @dataclass(frozen=True)
@@ -868,6 +894,7 @@ def print_result(result: PreparedCommonVoiceDataset, output_json: bool) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+  load_local_env_files()
   parser = build_parser()
   args = parser.parse_args(argv)
   try:
