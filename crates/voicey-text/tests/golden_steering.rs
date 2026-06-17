@@ -70,6 +70,8 @@ fn golden_steering_fixtures_match_expected() {
             screen_context_enabled: fixture.screen_context_enabled,
             snapshot: snapshot.as_ref(),
             max_terms,
+            max_screen_terms: None,
+            max_context_character_count: None,
         });
 
         assert_eq!(

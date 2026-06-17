@@ -55,6 +55,10 @@ Models/
 benchmark-data/
 benchmark-results/
 
+# Local dictation session recordings (user WAV/PCM/metadata — never commit)
+**/SessionArchive/
+*.pcm
+
 # Python tooling caches
 __pycache__/
 .venv/

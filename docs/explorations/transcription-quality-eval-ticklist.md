@@ -28,9 +28,9 @@ read-aloud steering — not aggregate LibriSpeech WER alone.
 |---|------|--------|-------|
 | A1 | Raw vs proc WER in Common Voice harness | ✅ tried | 200 clips, qwen3-asr-1.7b-bf16: raw=proc=2.13%, changed=0 (`cv-200-librispeech/`) |
 | A2 | Quality matrix runner (multi-variant) | ✅ tried | Smoke 25-clip + full 200-clip run |
-| A3 | Term-recall / steering-specific metrics | ⬜ planned | Needs read-aloud corpus + Session Archive WAVs |
-| A4 | Read-aloud steering corpus on main | ⬜ planned | Branch `jkt/steering-benchmark-harness` |
-| A5 | Session archive replay | ⬜ planned | Design: `dictation-session-archive-and-golden-corpus.md` |
+| A3 | Term-recall / steering-specific metrics | 🔧 impl | `eval_readaloud_quality_matrix.py`, `eval_readaloud_runtime_matrix.py` |
+| A4 | Read-aloud steering corpus on main | ✅ tried | `Benchmarks/readaloud_steering_corpus.json` + harness scripts merged |
+| A5 | Session archive replay | 🔧 impl | `scripts/replay_session_archive.py` + `make replay-session-archive` |
 | A6 | Fake proper-noun glossary for repair eval | ✅ tried | `eval_proper_noun_glossary.txt` |
 
 ---
@@ -40,18 +40,18 @@ read-aloud steering — not aggregate LibriSpeech WER alone.
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | B1 | **Model: qwen3-asr-1.7b-bf16** | ✅ tried | 200-clip WER 2.13%, RTF 0.16 |
-| B2 | **Model: qwen3-asr-0.6b-6bit** | 🔧 impl | Matrix variant `model-0.6b` |
+| B2 | **Model: qwen3-asr-0.6b-6bit** | ✅ tried | 25-clip smoke: 4.47% raw WER vs ~2% for 1.7b |
 | B3 | **Language: auto-detect** | ✅ tried | Default benchmark path (no hint passed) |
 | B4 | **Language: English hint** | ✅ tried | Smoke: 1.94% vs 1.75% auto (25 clips) |
-| B5 | Incremental vs full-buffer | ⬜ planned | Harness supports `--voicey-incremental-model`; not in matrix yet |
+| B5 | Incremental vs full-buffer | 🔧 impl | Matrix variant `incremental-1.7b-raw`; read-aloud runtime matrix for filename clips |
 | B6 | Qwen long-audio chunk merge | ⬜ planned | Seam errors at chunk boundaries |
 | B7 | Quiet-audio gain (Granite-style) | ⬜ planned | Port `conditionAudioForInference` to Qwen/infer path |
 | B8 | Trailing low-energy trim tuning | ⬜ planned | `AudioCaptureManager` — hands-free vs hotkey |
 | B9 | Hands-free VAD vs push-to-talk | ⬜ planned | Needs read-aloud + same mic |
 | B10 | Audio stress: quiet (−12 dB) | 🔧 impl | Matrix variant `audio-quiet` |
 | B11 | Audio stress: noise bed | 🔧 impl | Matrix variant `audio-noisy` |
-| B12 | Decoder steering / glossary at ASR | ⬜ planned | Matrix variant with `--glossary` (separate from LM mode) |
-| B13 | LM Studio vocabulary (post-ASR) | 🔧 impl | Settings landed; not in offline matrix yet (needs LM Studio server) |
+| B12 | Decoder steering / glossary at ASR | ✅ tried | Matrix `steer-glossary-*` −0.25 pp WER on 200-clip LibriSpeech |
+| B13 | LM Studio vocabulary (post-ASR) | 🔧 impl | Settings + `eval_lm_studio_vocabulary.py` (text goldens; skips if server down) |
 
 ---
 
@@ -86,7 +86,7 @@ Use rules for high-confidence patterns (compounds, `Mr`/`Mrs`, `OK`). Add LLM IT
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| D1 | Manual glossary decoder steering | ⬜ planned | Matrix `--glossary` |
+| D1 | Manual glossary decoder steering | ✅ tried | Matrix `steer-glossary-*` |
 | D2 | Screen context BM25 | ⬜ planned | Needs AX snapshot fixtures |
 | D3 | Exposure gate (skip steer when AX poor) | ⬜ planned | #150 merged; eval pending |
 | D4 | Window title / metadata dictionary | ⬜ planned | Post-process only |
@@ -125,7 +125,8 @@ Use rules for high-confidence patterns (compounds, `Mr`/`Mrs`, `OK`). Add LLM IT
 | `audio-quiet-1.7b` | 1.7b on −12 dB clips |
 | `audio-noisy-1.7b` | 1.7b on noise-mixed clips |
 | `repair-glossary-1.7b` | 1.7b + post-process + vocabulary repair + eval glossary |
-| `itn-1.7b` | 1.7b + post-process + ITN rules |
+| `incremental-1.7b-raw` | 1.7b pause-based incremental batch |
+| `steer-glossary-1.7b-*` | 1.7b + decoder glossary steering |
 
 ---
 
@@ -145,7 +146,8 @@ Full 200-clip matrix: `make eval-transcription-quality-matrix ARGS='--limit 200'
 
 ## Next actions
 
-1. Run full matrix on 200-clip corpus; fill ✅ with numbers in `benchmark-results/quality-matrix/summary.md`.
-2. Merge read-aloud corpus; add term-recall rows to matrix.
-3. Port quiet-audio conditioning to Qwen infer path if `audio-quiet` regresses badly.
-4. Add incremental vs batch variant on read-aloud filename lines.
+1. Record any pending read-aloud lines (`id_prefix: null` in corpus); run `make eval-readaloud-quality-matrix`.
+2. Run `make eval-readaloud-runtime-matrix` on filename clips (batch vs incremental term recall).
+3. Run `make replay-session-archive` after bad dictation sessions to validate sanitizer replay.
+4. Download **0.6b** (`make benchmark-download-models`) and rerun `model-0.6b-raw`.
+5. Run `make eval-lm-studio-vocabulary` when LM Studio is up (optional `--require-server`).

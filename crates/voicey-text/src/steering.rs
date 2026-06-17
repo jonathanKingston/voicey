@@ -10,6 +10,10 @@ pub struct BuildSteeringContextInput<'a> {
     pub screen_context_enabled: bool,
     pub snapshot: Option<&'a ScreenContextSnapshot>,
     pub max_terms: usize,
+    /// When set (benchmark IPC), overrides [`screen_term_selector::DEFAULT_MAX_SCREEN_TERMS`].
+    pub max_screen_terms: Option<usize>,
+    /// When set (benchmark IPC), overrides [`glossary::MAX_CONTEXT_CHARACTER_COUNT`].
+    pub max_context_character_count: Option<usize>,
 }
 
 pub struct BuildSteeringContextOutput {
@@ -38,12 +42,17 @@ pub fn build_steering_context(input: &BuildSteeringContextInput<'_>) -> BuildSte
             input.manual_glossary,
             false,
             input.max_terms,
+            input.max_screen_terms,
         );
     }
 
     let mut terms = manual_terms;
     terms.extend(screen_terms);
-    let decoder_context = glossary::decoding_context(&terms);
+    let max_context = input
+        .max_context_character_count
+        .unwrap_or(glossary::MAX_CONTEXT_CHARACTER_COUNT);
+    let decoder_context =
+        glossary::decoding_context_with_limits(&terms, input.max_terms, max_context);
     BuildSteeringContextOutput {
         terms,
         decoder_context,
@@ -62,6 +71,8 @@ mod tests {
             screen_context_enabled: false,
             snapshot: None,
             max_terms: screen_term_selector::DEFAULT_MAX_TERMS,
+            max_screen_terms: None,
+            max_context_character_count: None,
         });
         assert_eq!(output.terms, vec!["Cursor", "Composer"]);
         assert!(
@@ -81,6 +92,8 @@ mod tests {
             screen_context_enabled: false,
             snapshot: None,
             max_terms: screen_term_selector::DEFAULT_MAX_TERMS,
+            max_screen_terms: None,
+            max_context_character_count: None,
         });
         assert!(output.terms.is_empty());
         assert!(output.decoder_context.is_none());

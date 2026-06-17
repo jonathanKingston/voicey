@@ -55,19 +55,32 @@ pub const STEERING_OVERLAP_RELAXED_MIN_TOKENS: usize = 12;
 
 /// Returns decoder context for the combined term list, or `None` when empty.
 pub fn decoding_context(terms: &[String]) -> Option<String> {
+    decoding_context_with_limits(
+        terms,
+        screen_term_selector::DEFAULT_MAX_TERMS,
+        MAX_CONTEXT_CHARACTER_COUNT,
+    )
+}
+
+/// Like [`decoding_context`] with explicit caps (benchmark harness / IPC overrides only).
+pub fn decoding_context_with_limits(
+    terms: &[String],
+    max_terms: usize,
+    max_context_character_count: usize,
+) -> Option<String> {
     let merged: Vec<String> = BUILT_IN_TERMS
         .iter()
         .map(|s| (*s).to_string())
         .chain(terms.iter().cloned())
         .collect();
-    let unique = screen_term_selector::dedupe_preserving_order(
-        &merged,
-        screen_term_selector::DEFAULT_MAX_TERMS,
-    );
+    let unique = screen_term_selector::dedupe_preserving_order(&merged, max_terms);
     if unique.is_empty() {
         return None;
     }
-    Some(format_terms(&unique))
+    Some(format_terms_with_limit(
+        &unique,
+        max_context_character_count,
+    ))
 }
 
 /// Returns decoder context when only a manual glossary is enabled.
@@ -85,16 +98,23 @@ pub fn format(raw: &str) -> String {
 
 /// Formats an ordered term list into decoder context.
 pub fn format_terms(terms: &[String]) -> String {
+    format_terms_with_limit(terms, MAX_CONTEXT_CHARACTER_COUNT)
+}
+
+/// Formats terms into decoder context with an explicit character cap.
+pub fn format_terms_with_limit(terms: &[String], max_context_character_count: usize) -> String {
     if terms.is_empty() {
         return String::new();
     }
 
     let joined = terms.join(", ");
     let body = format!("{DECODER_CONTEXT_PREFIX}{joined}");
-    if body.len() <= MAX_CONTEXT_CHARACTER_COUNT {
+    if body.len() <= max_context_character_count {
         return body;
     }
-    body.chars().take(MAX_CONTEXT_CHARACTER_COUNT).collect()
+    body.chars()
+        .take(max_context_character_count)
+        .collect()
 }
 
 /// Removes decoder steering text when the model echoes the (glossary-only) decoder

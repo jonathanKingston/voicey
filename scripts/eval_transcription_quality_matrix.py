@@ -36,6 +36,7 @@ class Variant:
   extra_args: tuple[str, ...] = ()
   clips_dir: Path | None = None
   metric_note: str = ""
+  command: str = "benchmark-transcribe-batch"
 
 
 def load_benchmark_module():
@@ -69,6 +70,13 @@ def default_variants(glossary_file: Path) -> list[Variant]:
       "model-0.6b-raw",
       "0.6b raw ASR",
       "qwen3-asr-0.6b-6bit",
+    ),
+    Variant(
+      "incremental-1.7b-raw",
+      "1.7b pause-based incremental batch",
+      "qwen3-asr-1.7b-bf16",
+      command="benchmark-transcribe-incremental-batch",
+      metric_note="Simulates hands-free pause-based decode; compare to batch on filename read-aloud.",
     ),
     Variant(
       "repair-glossary-1.7b",
@@ -177,7 +185,7 @@ def run_variant(
 
   command = [
     str(binary),
-    "benchmark-transcribe-batch",
+    variant.command,
     "--model",
     variant.model,
     "--tsv",

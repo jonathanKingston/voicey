@@ -34,6 +34,12 @@ class EvalTranscriptionQualityMatrixTests(unittest.TestCase):
     self.assertIn("lang-english-1.7b-raw", ids)
     self.assertIn("repair-glossary-1.7b", ids)
     self.assertIn("itn-1.7b", ids)
+    self.assertIn("incremental-1.7b-raw", ids)
+
+  def test_incremental_variant_uses_incremental_batch_command(self) -> None:
+    variants = matrix.default_variants(Path("glossary.txt"))
+    incremental = next(variant for variant in variants if variant.id == "incremental-1.7b-raw")
+    self.assertEqual(incremental.command, "benchmark-transcribe-incremental-batch")
 
   def test_repair_variant_passes_vocabulary_repair_flag(self) -> None:
     variants = matrix.default_variants(Path("glossary.txt"))

@@ -70,7 +70,8 @@ flowchart LR
 | Fuzzy vocabulary repair (post-ASR) | 2.28% proc WER (+0.15 pp) with broad glossary |
 | Deterministic ITN | 2.18% proc WER (+0.05 pp) — hurts vs archaic references |
 | Quiet (−12 dB) / noisy audio | ~2.11–2.18% — little change on studio speech |
-| 0.6b model | Not evaluated (model not downloaded) |
+| 0.6b model | **4.47% WER** on 25-clip smoke (downloaded); rerun full 200-clip matrix |
+| Incremental 1.7b batch | **1.94% WER** on 25-clip smoke — matches batch baseline on this sample |
 
 **Conclusion:** On generic read speech, only **decoder steering** moved WER meaningfully. Post-ASR tricks need a **dictation-shaped eval** (read-aloud steering corpus, term recall) before product decisions.
 
@@ -154,11 +155,26 @@ Glossary for steer/repair variants: `eval_proper_noun_glossary.txt` (proper noun
 
 ## What to eval next
 
-1. Merge **read-aloud steering corpus** — metric: **term recall**, not WER.
-2. Download **0.6b** and rerun `model-0.6b-raw`.
-3. **Incremental vs batch** on filename / homophone lines.
-4. **Session archive** replay for real failure clips.
-5. LM Studio A/B when server available.
+1. Run **read-aloud term-recall matrix** — `make eval-readaloud-quality-matrix` (Session Archive WAVs required).
+2. Compare **batch vs incremental** on filename clips — `make eval-readaloud-runtime-matrix`.
+3. **Session archive replay** — `make replay-session-archive` to validate sanitizer after cap changes.
+4. Download **0.6b** and rerun `model-0.6b-raw` in the WER matrix.
+5. **LM Studio A/B** — `make eval-lm-studio-vocabulary` when server available.
+
+---
+
+## Local steering harness (merged)
+
+Scripts from `jkt/steering-benchmark-harness` are on main. See [`Benchmarks/STEERING_LOCAL_BENCHMARK.md`](../../Benchmarks/STEERING_LOCAL_BENCHMARK.md).
+
+| Command | Purpose |
+|---------|---------|
+| `make eval-readaloud-steering` | Artificial glossary/screen replay on read-aloud corpus |
+| `make eval-readaloud-quality-matrix` | Term-recall summary over read-aloud modes |
+| `make eval-readaloud-runtime-matrix` | Batch vs incremental on filename clips |
+| `make replay-session-archive` | Replay stored utterances vs archived transcripts |
+| `make eval-lm-studio-vocabulary` | Text golden LM Studio post-process |
+| `make benchmark-broad-steering-analysis` | Cap sweep on session archive clips |
 
 ---
 
@@ -168,4 +184,8 @@ Glossary for steer/repair variants: `eval_proper_noun_glossary.txt` (proper noun
 make build build-rust
 make eval-transcription-quality-matrix-smoke
 make eval-transcription-quality-matrix ARGS='--limit 200'
+make eval-readaloud-quality-matrix
+make eval-readaloud-runtime-matrix
+make replay-session-archive
+make eval-lm-studio-vocabulary
 ```

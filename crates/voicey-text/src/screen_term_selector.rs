@@ -17,6 +17,7 @@ pub fn select(
     manual_glossary: &str,
     manual_glossary_enabled: bool,
     max_terms: usize,
+    max_screen_terms: Option<usize>,
 ) -> Vec<String> {
     let mut must_keep = Vec::new();
     if manual_glossary_enabled {
@@ -66,7 +67,8 @@ pub fn select(
     let mut selected = must_keep.clone();
     let must_keep_keys: std::collections::HashSet<String> =
         must_keep.iter().map(|term| normalized_key(term)).collect();
-    let screen_budget = DEFAULT_MAX_SCREEN_TERMS.min(max_terms.saturating_sub(selected.len()));
+    let screen_cap = max_screen_terms.unwrap_or(DEFAULT_MAX_SCREEN_TERMS);
+    let screen_budget = screen_cap.min(max_terms.saturating_sub(selected.len()));
     let mut screen_added = 0usize;
 
     for entry in ranked_terms {
@@ -127,6 +129,7 @@ pub fn select_default(
         manual_glossary,
         manual_glossary_enabled,
         DEFAULT_MAX_TERMS,
+        None,
     )
 }
 
@@ -218,6 +221,7 @@ mod tests {
             "",
             false,
             DEFAULT_MAX_TERMS,
+            None,
         );
         assert!(
             terms.len() <= DEFAULT_MAX_SCREEN_TERMS,

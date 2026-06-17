@@ -122,6 +122,8 @@ fn postprocess_strips_forced_steering_model_output() {
         screen_context_enabled: false,
         snapshot: None,
         max_terms: voicey_text::DEFAULT_MAX_TERMS,
+        max_screen_terms: None,
+        max_context_character_count: None,
     });
     let decoder_context = steering.decoder_context.expect("decoder context");
     let terms = steering.terms;
