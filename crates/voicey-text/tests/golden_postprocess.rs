@@ -74,6 +74,8 @@ fn golden_postprocess_fixtures_match_expected() {
             voice_commands: fixture.voice_commands,
             decoder_context: fixture.decoder_context,
             steering_terms: fixture.steering_terms,
+            vocabulary_repair_enabled: false,
+            itn_enabled: false,
         };
         let actual = voicey_text::postprocess::postprocess(&input);
         assert_eq!(

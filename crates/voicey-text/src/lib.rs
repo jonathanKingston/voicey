@@ -2,8 +2,10 @@
 
 pub mod bm25;
 pub mod glossary;
+pub mod itn;
 pub mod noise_filter;
 pub mod postprocess;
+pub mod vocabulary_repair;
 pub mod screen_term_filter;
 pub mod screen_term_healing;
 pub mod screen_term_selector;

@@ -31,7 +31,9 @@ final class VoiceyTextWorkerSession: @unchecked Sendable {
     voiceCommandsEnabled: Bool,
     voiceCommands: [VoiceCommand],
     decoderContext: String? = nil,
-    steeringTerms: [String] = []
+    steeringTerms: [String] = [],
+    vocabularyRepairEnabled: Bool = false,
+    itnEnabled: Bool = false
   ) async throws -> String {
     var request: [String: Any] = [
       "type": "postprocess",
@@ -40,7 +42,9 @@ final class VoiceyTextWorkerSession: @unchecked Sendable {
       "voice_commands_enabled": voiceCommandsEnabled,
       "voice_commands": voiceCommands.map(wireVoiceCommand),
       "segments": segments.map(wireSegment),
-      "steering_terms": steeringTerms
+      "steering_terms": steeringTerms,
+      "vocabulary_repair_enabled": vocabularyRepairEnabled,
+      "itn_enabled": itnEnabled
     ]
     if let decoderContext {
       request["decoder_context"] = decoderContext

@@ -22,7 +22,9 @@ enum TranscriptionRuntime {
     audioURL: URL,
     model: SpeechModel,
     runtime: TranscriptionRuntimeKind,
-    warmupCount: Int
+    warmupCount: Int,
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     let capturedAudio = try await BenchmarkAudioLoader.loadCapturedAudio(
       from: audioURL,
@@ -34,7 +36,9 @@ enum TranscriptionRuntime {
       capturedAudio: capturedAudio,
       model: model,
       runtime: runtime,
-      warmupCount: warmupCount
+      warmupCount: warmupCount,
+      decoderContext: decoderContext,
+      language: language
     )
   }
 
@@ -42,13 +46,17 @@ enum TranscriptionRuntime {
     samples: [Float],
     model: SpeechModel,
     runtime: TranscriptionRuntimeKind,
-    warmupCount: Int
+    warmupCount: Int,
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     try await transcribe(
       capturedAudio: .inMemory(samples),
       model: model,
       runtime: runtime,
-      warmupCount: warmupCount
+      warmupCount: warmupCount,
+      decoderContext: decoderContext,
+      language: language
     )
   }
 
@@ -56,7 +64,9 @@ enum TranscriptionRuntime {
     capturedAudio: CapturedAudio,
     model: SpeechModel,
     runtime: TranscriptionRuntimeKind,
-    warmupCount: Int
+    warmupCount: Int,
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     SettingsManager.shared.selectedModel = model
 
@@ -72,7 +82,9 @@ enum TranscriptionRuntime {
       return try await transcribeMultiprocess(
         capturedAudio: capturedAudio,
         model: model,
-        warmupCount: warmupCount
+        warmupCount: warmupCount,
+        decoderContext: decoderContext,
+        language: language
       )
     }
   }
@@ -80,7 +92,9 @@ enum TranscriptionRuntime {
   private static func transcribeMultiprocess(
     capturedAudio: CapturedAudio,
     model: SpeechModel,
-    warmupCount: Int
+    warmupCount: Int,
+    decoderContext: String? = nil,
+    language: String? = nil
   ) async throws -> TranscriptionResult {
     guard model.isQwenModel else {
       throw TranscriptionRuntimeError.multiprocessRequiresQwen(model)
@@ -92,13 +106,17 @@ enum TranscriptionRuntime {
       _ = try await supervisor.transcribe(
         capturedAudio: capturedAudio,
         model: model,
-        warmupAlreadyDone: true
+        warmupAlreadyDone: true,
+        decoderContext: decoderContext,
+        language: language
       )
     }
     return try await supervisor.transcribe(
       capturedAudio: capturedAudio,
       model: model,
-      warmupAlreadyDone: true
+      warmupAlreadyDone: true,
+      decoderContext: decoderContext,
+      language: language
     )
   }
 }

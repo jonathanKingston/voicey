@@ -23,6 +23,10 @@ pub enum TextRequest {
         decoder_context: Option<String>,
         #[serde(default)]
         steering_terms: Vec<String>,
+        #[serde(default)]
+        vocabulary_repair_enabled: bool,
+        #[serde(default)]
+        itn_enabled: bool,
     },
     BuildSteeringContext {
         id: String,
@@ -114,6 +118,8 @@ fn handle_line(line: &str) -> (TextResponse, bool) {
             segments,
             decoder_context,
             steering_terms,
+            vocabulary_repair_enabled,
+            itn_enabled,
         } => {
             let input = PostProcessInput {
                 text,
@@ -129,6 +135,8 @@ fn handle_line(line: &str) -> (TextResponse, bool) {
                 voice_commands,
                 decoder_context,
                 steering_terms,
+                vocabulary_repair_enabled,
+                itn_enabled,
             };
             let processed = postprocess::postprocess(&input);
             (

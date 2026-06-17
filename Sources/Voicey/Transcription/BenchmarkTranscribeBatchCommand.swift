@@ -1,4 +1,5 @@
 import Foundation
+import VoiceyCore
 
 enum BenchmarkTranscribeBatchCommand {
   private static let commandName = "benchmark-transcribe-batch"
@@ -18,7 +19,7 @@ enum BenchmarkTranscribeBatchCommand {
       }
 
       let samples = try BenchmarkBatchSample.load(tsvURL: options.tsvURL, clipsDirectory: options.clipsDirectory)
-      try await transcribe(samples: samples, model: options.model, postProcess: options.postProcess)
+      try await transcribe(samples: samples, options: options)
       return 0
     } catch {
       fputs("error: \(error.localizedDescription)\n", stderr)
@@ -28,26 +29,29 @@ enum BenchmarkTranscribeBatchCommand {
 
   private static func transcribe(
     samples: [BenchmarkBatchSample],
-    model: SpeechModel,
-    postProcess: Bool
+    options: BatchOptions
   ) async throws {
-    SettingsManager.shared.selectedModel = model
+    SettingsManager.shared.selectedModel = options.model
+    let decoderContext = options.decoderContext
+    let postProcessOptions = options.postProcessOptions
 
-    switch model.backendKind {
+    switch options.model.backendKind {
     case .qwenMLX:
       try BenchmarkRustRequirements.requireTranscribeBenchmarkStack()
       for sample in samples {
         let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
           try await TranscriptionRuntime.transcribe(
             audioURL: sample.audioURL,
-            model: model,
+            model: options.model,
             runtime: .multiprocess,
-            warmupCount: 0
+            warmupCount: 0,
+            decoderContext: decoderContext,
+            language: options.qwenLanguage
           )
         }
         let processedText: String
-        if postProcess {
-          processedText = try await BenchmarkPostProcessor.process(result)
+        if options.postProcess {
+          processedText = try await BenchmarkPostProcessor.process(result, options: postProcessOptions)
         } else {
           processedText = result.text
         }
@@ -55,14 +59,14 @@ enum BenchmarkTranscribeBatchCommand {
           result: result,
           processedText: processedText,
           sample: sample,
-          model: model,
-          postProcess: postProcess
+          model: options.model,
+          postProcess: options.postProcess
         )
       }
     case .whisperKit:
       let engine = WhisperEngine()
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-        try await engine.loadModel(variant: model.rawValue)
+        try await engine.loadModel(variant: options.model.rawValue)
       }
       for sample in samples {
         let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
@@ -72,14 +76,14 @@ enum BenchmarkTranscribeBatchCommand {
           result: result,
           processedText: result.text,
           sample: sample,
-          model: model,
+          model: options.model,
           postProcess: false
         )
       }
     case .granitePython:
       let engine = GraniteEngine()
       try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
-        try await engine.loadModel(variant: model.rawValue)
+        try await engine.loadModel(variant: options.model.rawValue)
       }
       for sample in samples {
         let result = try await BenchmarkTranscribeCommand.withStdoutRedirectedToStderr {
@@ -89,7 +93,7 @@ enum BenchmarkTranscribeBatchCommand {
           result: result,
           processedText: result.text,
           sample: sample,
-          model: model,
+          model: options.model,
           postProcess: false
         )
       }
@@ -126,18 +130,28 @@ enum BenchmarkTranscribeBatchCommand {
 private struct BatchOptions {
   static let helpText = """
     Usage:
-      Voicey benchmark-transcribe-batch --model MODEL --tsv PATH --clips-dir DIR [--post-process]
+      Voicey benchmark-transcribe-batch --model MODEL --tsv PATH --clips-dir DIR [options]
 
     Loads one Voicey model once, then transcribes every row in the TSV.
     Qwen models use the multiprocess Rust supervisor path; Whisper/Granite remain in-process legacy paths.
 
-    With --post-process, each JSON line includes rawText (ASR output) and text (voicey-text output).
+    Options:
+      --post-process                 Apply voicey-text post-processing (rawText + text in JSON).
+      --language ID                  Qwen spoken-language hint (auto, english, ...).
+      --glossary-file PATH           Terms list for steering and/or repair.
+      --glossary-steer               Pass glossary to Qwen decoder context.
+      --vocabulary-repair            Fuzzy-match tokens to glossary terms during post-process.
+      --itn                          Apply deterministic inverse text normalization.
     """
 
   let model: SpeechModel
   let tsvURL: URL
   let clipsDirectory: URL
   let postProcess: Bool
+  let qwenLanguage: String?
+  let decoderContext: String?
+  let steeringTerms: [String]
+  let postProcessOptions: BenchmarkPostProcessor.Options
   let showHelp: Bool
 
   init(arguments: [String]) throws {
@@ -145,6 +159,11 @@ private struct BatchOptions {
     var tsvURL: URL?
     var clipsDirectory: URL?
     var postProcess = false
+    var languageID = TranscriptionQwenLanguage.autoOption.id
+    var glossaryFile: URL?
+    var glossarySteer = false
+    var vocabularyRepair = false
+    var itn = false
     var showHelp = false
 
     var index = 0
@@ -159,6 +178,18 @@ private struct BatchOptions {
         clipsDirectory = URL(fileURLWithPath: try Self.value(after: argument, arguments: arguments, index: &index))
       case "--post-process":
         postProcess = true
+      case "--language":
+        languageID = TranscriptionQwenLanguage.normalizedStoredID(
+          try Self.value(after: argument, arguments: arguments, index: &index)
+        )
+      case "--glossary-file":
+        glossaryFile = URL(fileURLWithPath: try Self.value(after: argument, arguments: arguments, index: &index))
+      case "--glossary-steer":
+        glossarySteer = true
+      case "--vocabulary-repair":
+        vocabularyRepair = true
+      case "--itn":
+        itn = true
       case "--help", "-h":
         showHelp = true
       default:
@@ -173,15 +204,34 @@ private struct BatchOptions {
       self.model = ModelManager.defaultModel
       self.tsvURL = URL(fileURLWithPath: "/dev/null")
       self.clipsDirectory = URL(fileURLWithPath: "/dev/null")
+      self.qwenLanguage = nil
+      self.decoderContext = nil
+      self.steeringTerms = []
+      self.postProcessOptions = .default
       return
     }
 
     guard let model else { throw BenchmarkTranscribeError.requiredArgument("--model") }
     guard let tsvURL else { throw BenchmarkTranscribeError.requiredArgument("--tsv") }
     guard let clipsDirectory else { throw BenchmarkTranscribeError.requiredArgument("--clips-dir") }
+
+    let parsedTerms = try glossaryFile.map { try Self.loadGlossaryTerms(from: $0) } ?? []
     self.model = model
     self.tsvURL = tsvURL
     self.clipsDirectory = clipsDirectory
+    self.qwenLanguage = TranscriptionQwenLanguage.qwenLanguageParameter(storedID: languageID)
+    self.steeringTerms = parsedTerms
+    self.decoderContext = glossarySteer ? TranscriptionGlossary.decodingContext(terms: parsedTerms) : nil
+    self.postProcessOptions = BenchmarkPostProcessor.Options(
+      vocabularyRepairEnabled: vocabularyRepair,
+      itnEnabled: itn,
+      steeringTerms: parsedTerms
+    )
+  }
+
+  private static func loadGlossaryTerms(from url: URL) throws -> [String] {
+    let raw = try String(contentsOf: url, encoding: .utf8)
+    return TranscriptionGlossary.parseTerms(raw.components(separatedBy: .newlines).joined(separator: ","))
   }
 
   private static func value(

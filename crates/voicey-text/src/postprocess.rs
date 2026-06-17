@@ -1,8 +1,10 @@
 //! Post-processes transcription output for punctuation, formatting, and voice commands.
 
 use crate::glossary;
+use crate::itn;
 use crate::noise_filter;
 use crate::text_cleanup;
+use crate::vocabulary_repair;
 use crate::voice_command::{VoiceCommand, VoiceCommandAction};
 use regex::Regex;
 use std::collections::HashMap;
@@ -22,8 +24,12 @@ pub struct PostProcessInput {
     pub voice_commands: Vec<VoiceCommand>,
     /// Decoder steering context used for the utterance, for echo sanitization.
     pub decoder_context: Option<String>,
-    /// Steering terms used for the utterance, for echo sanitization.
+    /// Steering terms used for the utterance, for echo sanitization and optional repair.
     pub steering_terms: Vec<String>,
+    /// When true, fuzzy-match whole words against `steering_terms`.
+    pub vocabulary_repair_enabled: bool,
+    /// When true, apply deterministic inverse text normalization.
+    pub itn_enabled: bool,
 }
 
 /// Post-process transcription text using the same pipeline as Swift `PostProcessor`.
@@ -53,6 +59,14 @@ pub fn postprocess(input: &PostProcessInput) -> String {
 
     text = apply_intelligent_punctuation(&text, &input.segments);
     text = apply_text_expansions(&text, &text_expansions);
+
+    if input.vocabulary_repair_enabled {
+        text = vocabulary_repair::repair_vocabulary_default(&text, &input.steering_terms);
+    }
+
+    if input.itn_enabled {
+        text = itn::apply_itn(&text);
+    }
 
     if input.voice_commands_enabled {
         let enabled_commands: Vec<_> = input
@@ -254,6 +268,8 @@ mod tests {
             voice_commands: Vec::new(),
             decoder_context: None,
             steering_terms: Vec::new(),
+            vocabulary_repair_enabled: false,
+            itn_enabled: false,
         }
     }
 
