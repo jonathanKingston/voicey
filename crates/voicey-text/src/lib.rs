@@ -2,6 +2,7 @@
 
 pub mod bm25;
 pub mod glossary;
+pub mod contractions;
 pub mod itn;
 pub mod noise_filter;
 pub mod postprocess;

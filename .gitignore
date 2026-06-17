@@ -69,6 +69,7 @@ __pycache__/
 
 # App bundle
 Voicey.app/
+Benchmarks/AppleSpeech/voicey-apple-speech-benchmark.app/
 
 # Distribution artifacts
 *.pkg

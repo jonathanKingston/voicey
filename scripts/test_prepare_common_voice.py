@@ -7,11 +7,13 @@ import importlib.util
 import json
 import contextlib
 import io
+import shutil
 import sys
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT_PATH = Path(__file__).with_name("prepare_common_voice.py")
@@ -29,6 +31,11 @@ def load_prepare_module():
 
 
 prepare = load_prepare_module()
+
+
+def fake_convert_to_wav(source: Path, dest: Path) -> None:
+  dest.parent.mkdir(parents=True, exist_ok=True)
+  shutil.copyfile(source, dest)
 
 
 class PrepareCommonVoiceTests(unittest.TestCase):
@@ -60,24 +67,25 @@ class PrepareCommonVoiceTests(unittest.TestCase):
       with tarfile.open(archive_path, "w:gz") as archive:
         archive.add(source_dir, arcname="cv-corpus")
 
-      with contextlib.redirect_stdout(io.StringIO()):
-        exit_code = prepare.main(
-          [
-            "--source",
-            "archive",
-            "--archive",
-            str(archive_path),
-            "--dataset-id",
-            "fixture",
-            "--prepared-root",
-            str(root / "prepared"),
-            "--limit",
-            "2",
-            "--seed",
-            "1",
-            "--json",
-          ]
-        )
+      with mock.patch.object(prepare, "convert_to_16k_mono_wav", side_effect=fake_convert_to_wav):
+        with contextlib.redirect_stdout(io.StringIO()):
+          exit_code = prepare.main(
+            [
+              "--source",
+              "archive",
+              "--archive",
+              str(archive_path),
+              "--dataset-id",
+              "fixture",
+              "--prepared-root",
+              str(root / "prepared"),
+              "--limit",
+              "2",
+              "--seed",
+              "1",
+              "--json",
+            ]
+          )
 
       self.assertEqual(exit_code, 0)
       manifest_path = root / "prepared" / "fixture" / "test-limit2-seed1" / "manifest.json"
@@ -85,8 +93,11 @@ class PrepareCommonVoiceTests(unittest.TestCase):
       prepared_dir = Path(manifest["prepared_dir"])
 
       self.assertTrue((prepared_dir / "test.tsv").is_file())
-      self.assertEqual((prepared_dir / "clips" / "clip-one.mp3").read_bytes(), b"one")
-      self.assertEqual((prepared_dir / "clips" / "clip-two.mp3").read_bytes(), b"two")
+      self.assertTrue((prepared_dir / "clips" / "clip-one.wav").is_file())
+      self.assertTrue((prepared_dir / "clips" / "clip-two.wav").is_file())
+      tsv_text = (prepared_dir / "test.tsv").read_text(encoding="utf-8")
+      self.assertIn("clip-one.wav", tsv_text)
+      self.assertIn("clip-two.wav", tsv_text)
 
   def test_extracts_csv_archive_with_extensionless_ipfs_audio_files(self) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -107,27 +118,28 @@ class PrepareCommonVoiceTests(unittest.TestCase):
       with tarfile.open(archive_path, "w:gz") as archive:
         archive.add(source_dir, arcname=".")
 
-      with contextlib.redirect_stdout(io.StringIO()):
-        exit_code = prepare.main(
-          [
-            "--source",
-            "archive",
-            "--archive",
-            str(archive_path),
-            "--dataset-id",
-            "cmkfm9fbl00nto0070sdcrak2",
-            "--prepared-root",
-            str(root / "prepared"),
-            "--limit",
-            "1",
-            "--seed",
-            "1",
-          ]
-        )
+      with mock.patch.object(prepare, "convert_to_16k_mono_wav", side_effect=fake_convert_to_wav):
+        with contextlib.redirect_stdout(io.StringIO()):
+          exit_code = prepare.main(
+            [
+              "--source",
+              "archive",
+              "--archive",
+              str(archive_path),
+              "--dataset-id",
+              "cmkfm9fbl00nto0070sdcrak2",
+              "--prepared-root",
+              str(root / "prepared"),
+              "--limit",
+              "1",
+              "--seed",
+              "1",
+            ]
+          )
 
       self.assertEqual(exit_code, 0)
       prepared_dir = root / "prepared" / "cmkfm9fbl00nto0070sdcrak2" / "test-limit1-seed1"
-      self.assertEqual((prepared_dir / "clips" / f"{cid}.mp3").read_bytes(), b"audio")
+      self.assertTrue((prepared_dir / "clips" / f"{cid}.wav").is_file())
 
 
 if __name__ == "__main__":

@@ -11,9 +11,11 @@ import io
 import json
 import os
 import random
+import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Sequence
@@ -420,8 +422,9 @@ def prepare_common_voice(args: argparse.Namespace) -> PreparedCommonVoiceDataset
       args.sample_strategy,
       delimiter=delimiter,
     )
-    write_sample_tsv(tsv_path, rows, fieldnames)
     extract_sample_clips(archive, split_member, rows, clips_dir)
+    update_rows_to_prepared_wav(rows)
+    write_sample_tsv(tsv_path, rows, fieldnames)
 
   write_manifest(
     manifest_path,
@@ -684,6 +687,75 @@ def normalize_clip_filename(relative_path: str) -> str:
   return f"{relative_path}.mp3"
 
 
+def prepared_wav_filename(relative_path: str) -> str:
+  path = PurePosixPath(relative_path)
+  if path.suffix.lower() == ".wav":
+    return relative_path
+  return str(path.with_suffix(".wav"))
+
+
+def update_rows_to_prepared_wav(rows: list[dict[str, str]]) -> None:
+  for row in rows:
+    source_path = (row.get(CANONICAL_PATH_COLUMN) or "").strip()
+    row[CANONICAL_PATH_COLUMN] = prepared_wav_filename(source_path)
+
+
+def convert_to_16k_mono_wav(source: Path, dest: Path) -> None:
+  dest.parent.mkdir(parents=True, exist_ok=True)
+  if sys.platform == "darwin":
+    afconvert = shutil.which("afconvert")
+    if afconvert:
+      completed = subprocess.run(
+        [
+          afconvert,
+          "-f",
+          "WAVE",
+          "-d",
+          "LEI16@16000",
+          "-c",
+          "1",
+          str(source),
+          str(dest),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+      )
+      if completed.returncode == 0 and dest.is_file():
+        return
+  ffmpeg = shutil.which("ffmpeg")
+  if not ffmpeg:
+    raise CommonVoicePrepareError(
+      "Need afconvert (macOS) or ffmpeg on PATH to convert clips to 16 kHz mono WAV"
+    )
+  completed = subprocess.run(
+    [
+      ffmpeg,
+      "-nostdin",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      str(source),
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "-c:a",
+      "pcm_s16le",
+      str(dest),
+    ],
+    capture_output=True,
+    text=True,
+    check=False,
+  )
+  if completed.returncode != 0:
+    raise CommonVoicePrepareError(
+      f"ffmpeg failed for {source}:\n{completed.stderr.strip()}"
+    )
+
+
 def archive_clip_member_names(split_parent: PurePosixPath, relative_audio_path: str) -> list[str]:
   relative_variants = [relative_audio_path]
   if PurePosixPath(relative_audio_path).suffix == "":
@@ -745,7 +817,11 @@ def extract_sample_clips(
     if not clip_member.isfile():
       raise CommonVoicePrepareError(f"Sampled clip is not a file: {member_name}")
 
-    write_clip(archive, clip_member, clips_dir / relative_audio_path)
+    write_clip(
+      archive,
+      clip_member,
+      clips_dir / prepared_wav_filename(relative_audio_path),
+    )
 
 
 def stream_mdc_sample(
@@ -775,8 +851,9 @@ def stream_mdc_sample(
         sample_strategy,
         delimiter=delimiter,
       )
-      write_sample_tsv(tsv_path, rows, fieldnames)
       extract_streamed_clips(archive, split_member, rows, clips_dir)
+      update_rows_to_prepared_wav(rows)
+      write_sample_tsv(tsv_path, rows, fieldnames)
     return counting_stream.bytes_read
 
 
@@ -895,9 +972,10 @@ def extract_streamed_clips(
     if not member.isfile():
       raise CommonVoicePrepareError(f"Sampled clip is not a file: {member.name}")
 
-    write_clip(archive, member, clips_dir / relative_audio_path)
+    prepared_path = prepared_wav_filename(relative_audio_path)
+    write_clip(archive, member, clips_dir / prepared_path)
     extracted_paths.add(relative_audio_path)
-    print(f"Extracted {len(extracted_paths)}/{len(wanted_paths)}: {relative_audio_path}")
+    print(f"Extracted {len(extracted_paths)}/{len(wanted_paths)}: {prepared_path}")
     if extracted_paths == wanted_paths:
       return
 
@@ -912,9 +990,20 @@ def write_clip(archive: tarfile.TarFile, member: tarfile.TarInfo, destination: P
   if extracted is None:
     raise CommonVoicePrepareError(f"Unable to extract sampled clip: {member.name}")
 
-  destination.parent.mkdir(parents=True, exist_ok=True)
-  with destination.open("wb") as output_file:
-    shutil_copyfileobj(extracted, output_file)
+  member_suffix = PurePosixPath(member.name).suffix or ".bin"
+  with tempfile.NamedTemporaryFile(suffix=member_suffix, delete=False) as temp_file:
+    temp_path = Path(temp_file.name)
+    shutil_copyfileobj(extracted, temp_file)
+
+  try:
+    if destination.suffix.lower() == ".wav":
+      convert_to_16k_mono_wav(temp_path, destination)
+      return
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(temp_path, destination)
+  finally:
+    temp_path.unlink(missing_ok=True)
 
 
 class CountingReader:

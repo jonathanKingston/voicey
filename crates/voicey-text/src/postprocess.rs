@@ -1,5 +1,6 @@
 //! Post-processes transcription output for punctuation, formatting, and voice commands.
 
+use crate::contractions;
 use crate::glossary;
 use crate::itn;
 use crate::noise_filter;
@@ -59,6 +60,7 @@ pub fn postprocess(input: &PostProcessInput) -> String {
 
     text = apply_intelligent_punctuation(&text, &input.segments);
     text = apply_text_expansions(&text, &text_expansions);
+    text = contractions::apply_written_contractions(&text);
 
     if input.vocabulary_repair_enabled {
         text = vocabulary_repair::repair_vocabulary_default(&text, &input.steering_terms);
@@ -383,6 +385,14 @@ mod tests {
     #[test]
     fn default_expansions_normalize_spelled_out_ok() {
         assert_eq!(postprocess(&input("that sounds o k to me")), "that sounds OK to me");
+    }
+
+    #[test]
+    fn contracts_spoken_i_am_in_default_pipeline() {
+        assert_eq!(
+            postprocess(&input("I am heading out now.")),
+            "I'm heading out now."
+        );
     }
 
     #[test]

@@ -29,7 +29,7 @@ BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SO
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
-.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration test-steering-benchmark-scripts ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark eval-transcription-quality-matrix eval-transcription-quality-matrix-smoke eval-readaloud-steering eval-readaloud-steering-deep eval-readaloud-quality-matrix eval-readaloud-runtime-matrix replay-session-archive eval-lm-studio-vocabulary reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess benchmark-broad-steering-analysis
+.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration test-steering-benchmark-scripts ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark eval-transcription-quality-matrix eval-transcription-quality-matrix-smoke eval-readaloud-steering eval-readaloud-steering-deep eval-readaloud-quality-matrix eval-readaloud-runtime-matrix replay-session-archive eval-lm-studio-vocabulary build-apple-speech-benchmark eval-apple-speech-rerank reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess benchmark-broad-steering-analysis
 
 all: build
 
@@ -66,6 +66,7 @@ test-steering-benchmark-scripts:
 	python3 scripts/test_readaloud_corpus_lib.py
 	python3 scripts/test_eval_common_voice_steering.py
 	python3 scripts/test_eval_readaloud_and_lm_studio.py
+	python3 scripts/test_eval_apple_speech_rerank.py
 
 benchmark-broad-steering-analysis:
 	@echo "Writes JSON under benchmark-results/ (gitignored). Requires macOS, models, and local Session Archive WAVs — never commit outputs or audio." >&2
@@ -590,6 +591,15 @@ replay-session-archive:
 
 eval-lm-studio-vocabulary:
 	python3 scripts/eval_lm_studio_vocabulary.py $(ARGS)
+
+# Apple Speech offline transcription + rerank ceiling eval (macOS only).
+build-apple-speech-benchmark:
+	cd Benchmarks/AppleSpeech && swift build -c debug
+	@chmod +x scripts/bundle_apple_speech_benchmark.sh
+	@scripts/bundle_apple_speech_benchmark.sh
+
+eval-apple-speech-rerank:
+	python3 scripts/eval_apple_speech_rerank.py $(ARGS)
 
 # Stream debug logs (run in separate terminal)
 logs:

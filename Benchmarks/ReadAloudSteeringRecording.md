@@ -1,10 +1,25 @@
 # Read-aloud steering recording script (corpus v3)
 
-One **stop → wait for Dictation history → next line** per clip. Keep **the same Settings** for the whole session (glossary on is fine; replay harness injects glossary anyway).
+## Recording checklist (macOS)
 
-After recording, paste each utterance’s **8-character id** into [`readaloud_steering_corpus.json`](readaloud_steering_corpus.json) for lines `#18`–`#27` (`id_prefix` field). Lines `#1`–`#17` are already mapped from the 2026-06-02 session.
+Use this before running `make eval-readaloud-quality-matrix`.
 
-**Privacy:** only the manifest and these script lines are committed. Your WAV files stay under Session Archive on disk—see [`STEERING_LOCAL_BENCHMARK.md`](STEERING_LOCAL_BENCHMARK.md).
+- [ ] **Build:** `make build build-rust`
+- [ ] **Models:** Qwen 1.7b downloaded (`make benchmark-download-models`)
+- [ ] **Glossary:** paste the blended list below into Settings → Transcription (optional for live; replay injects it)
+- [ ] **Mic + Speech:** Voicey has microphone access; Terminal/Cursor has Speech Recognition if you use Apple Speech rerank
+- [ ] **Session Archive path exists:** `~/Library/Application Support/Voicey/SessionArchive/`
+- [ ] **Record:** one clip per script line (#1–#27) — stop, wait for history, next line ([table below](#what-to-read-in-order))
+- [ ] **Map ids:** each new utterance gets an 8-char id in Dictation history — paste into [`readaloud_steering_corpus.json`](readaloud_steering_corpus.json) `id_prefix` if re-recording
+- [ ] **Verify local WAVs:** `make eval-readaloud-steering` (fails fast if Session Archive clips are missing)
+- [ ] **Run evals:**
+  - Term recall: `make eval-readaloud-quality-matrix`
+  - Runtime (batch vs incremental): `make eval-readaloud-runtime-matrix`
+  - Broad analysis: `make benchmark-broad-steering-analysis`
+
+Corpus v3 already has `id_prefix` for #1–#27 from the 2026-06-02 session. Re-record only if you need fresh audio or changed Settings.
+
+---
 
 ## Manual glossary (paste into Settings → Transcription)
 
