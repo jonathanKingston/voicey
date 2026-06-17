@@ -17,7 +17,7 @@ MLX_METALLIB_RELEASE = $(BUILD_DIR)/release/mlx.metallib
 VOICEY_LOG_PREDICATE = subsystem == "work.voicey.Voicey" || subsystem == "work.voicey.VoiceyDirect"
 RUN_WITH_LOG_STREAM = LOG_PID=""; trap 'if [ -n "$$LOG_PID" ]; then kill $$LOG_PID 2>/dev/null || true; wait $$LOG_PID 2>/dev/null || true; fi' EXIT INT TERM; echo "Streaming Voicey logs. Press Ctrl-C to stop."; log stream --style compact --predicate '$(VOICEY_LOG_PREDICATE)' --level debug & LOG_PID=$$!; sleep 1; open -n $(APP_BUNDLE); wait $$LOG_PID
 BENCHMARK_COMMON_VOICE_SOURCE ?= mdc
-BENCHMARK_COMMON_VOICE_DATASET ?= cmn1pv5hi00uto1072y1074y7
+BENCHMARK_COMMON_VOICE_DATASET ?= cmkfm9fbl00nto0070sdcrak2
 BENCHMARK_COMMON_VOICE_HF_DATASET ?= mozilla-foundation/common_voice_13_0
 BENCHMARK_COMMON_VOICE_HF_CONFIG ?= en
 BENCHMARK_COMMON_VOICE_SPLIT ?= test

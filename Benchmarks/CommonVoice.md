@@ -84,47 +84,41 @@ warmup/CoreML compilation dominates local benchmark time. Add it explicitly with
 
 ## Dataset Download Notes
 
-The default dataset is Common Voice Spontaneous Speech 3.0 English:
+MDC dataset pages live at **`https://datacollective.mozillafoundation.org/datasets/{id}`**.
+Do **not** use `mozilladatacollective.com` — those links 404.
 
-```text
-cmn1pv5hi00uto1072y1074y7
+Mozilla has **not** publicly released full English Common Voice scripted/spontaneous
+25.x on MDC (quality holds). The old Makefile default IDs (`cmn1pv5…`, `cmndapwry…`)
+often fail with “dataset does not exist” or “access denied” even with a valid API key.
+
+**Working English options** (accept terms on each dataset page while logged in):
+
+| Dataset | ID | MDC page | Notes |
+|---------|-----|----------|-------|
+| Effect AI Scripted English (**default**) | `cmkfm9fbl00nto0070sdcrak2` | [open](https://datacollective.mozillafoundation.org/datasets/cmkfm9fbl00nto0070sdcrak2) | ~663 MB, CSV+MP3 |
+| CV v24 English en-AU subset | `cmko7havo02f5nw07rbwwhowe` | [open](https://datacollective.mozillafoundation.org/datasets/cmko7havo02f5nw07rbwwhowe) | ~1.9 GB |
+
+Put `MDC_API_KEY` in `.env.production`, `.env.local`, or `.env` at the repo root
+(gitignored). Accept terms on the **same MDC account** as the API key, then:
+
+```bash
+make benchmark-prepare-common-voice BENCHMARK_COMMON_VOICE_LIMIT=200 ARGS='--install-sdk'
 ```
 
-As of mid-2026 that ID is **no longer on MDC** (English spontaneous was pulled for QA).
-Use one of these instead after accepting terms on the dataset page:
-
-| Dataset | ID | Notes |
-|---------|-----|-------|
-| Effect AI Scripted English | `cmkfm9fbl00nto0070sdcrak2` | ~10 h, small full download |
-| CV Scripted Speech 25 English | `cmndapwry02jnmh07dyo46mot` | ~88 GB — use `mdc-stream` |
-
-Example (200 clips, scripted English, stream):
+Optional larger English sample (after accepting en-AU terms):
 
 ```bash
 make benchmark-prepare-common-voice \
-  BENCHMARK_COMMON_VOICE_SOURCE=mdc-stream \
-  BENCHMARK_COMMON_VOICE_DATASET=cmndapwry02jnmh07dyo46mot \
-  BENCHMARK_COMMON_VOICE_LIMIT=200
+  BENCHMARK_COMMON_VOICE_DATASET=cmko7havo02f5nw07rbwwhowe \
+  BENCHMARK_COMMON_VOICE_LIMIT=200 \
+  ARGS='--install-sdk --allow-large-download'
 ```
 
-Spontaneous English was closer to real dictation, but MDC no longer hosts that alpha
-release. Scripted/read speech is still useful for regression; prefer streaming for
-the 88 GB English archive. The prep script also supports Hugging Face streaming
+The prep script also supports Hugging Face streaming
 (`BENCHMARK_COMMON_VOICE_SOURCE=hf-stream`) when MDC access is unavailable.
 
-To try the scripted English archive without saving the whole archive,
-use streaming mode:
-
-```bash
-export MDC_API_KEY=...
-make benchmark-run-common-voice \
-  BENCHMARK_COMMON_VOICE_SOURCE=mdc-stream \
-  BENCHMARK_COMMON_VOICE_DATASET=cmndapwry02jnmh07dyo46mot \
-  BENCHMARK_VOICEY_MODELS='large-v3_turbo small.en base.en'
-```
-
-You must accept the dataset terms on Mozilla Data Collective before MDC allows
-download.
+Legacy note: CV Scripted Speech 25 English (`cmndapwry02jnmh07dyo46mot`) is often
+**restricted** on MDC; streaming it is not recommended until Mozilla re-lists it.
 
 ## Single-file wrapper check
 

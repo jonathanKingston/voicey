@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 from typing import Sequence
 
 
-DEFAULT_DATASET_ID = "cmn1pv5hi00uto1072y1074y7"
+DEFAULT_DATASET_ID = "cmkfm9fbl00nto0070sdcrak2"
 DEFAULT_SOURCE = "mdc"
 DEFAULT_HF_DATASET = "mozilla-foundation/common_voice_13_0"
 DEFAULT_HF_CONFIG = "en"
@@ -33,6 +33,7 @@ DEFAULT_MAX_ARCHIVE_GB = 2.0
 DEFAULT_MAX_STREAM_GB = 10.0
 DEFAULT_HF_SHUFFLE_BUFFER = 250
 LOCAL_ENV_FILES = (".env.production", ".env.local", ".env")
+MDC_DATASET_PAGE = "https://datacollective.mozillafoundation.org/datasets"
 TEXT_COLUMNS = ("text", "sentence", "transcription", "reference")
 PATH_COLUMNS = ("path", "audio_file", "audio")
 CANONICAL_PATH_COLUMN = "path"
@@ -44,15 +45,19 @@ KNOWN_DATASETS = {
     "size_gb": 0.449,
   },
   "cmkfm9fbl00nto0070sdcrak2": {
-    "name": "Effect AI Scripted Speech 1.0 - English",
-    "size_gb": 1.0,
+    "name": "Effect AI Scripted Speech 1.0 - English (recommended default)",
+    "size_gb": 0.66,
+  },
+  "cmko7havo02f5nw07rbwwhowe": {
+    "name": "Common Voice v24 English en-AU subset",
+    "size_gb": 1.92,
   },
   "cmn2cxzy701iumm077t5ayw0e": {
     "name": "Common Voice Scripted Speech 25.0 - Hindi",
     "size_gb": 0.532,
   },
   "cmndapwry02jnmh07dyo46mot": {
-    "name": "Common Voice Scripted Speech 25.0 - English",
+    "name": "Common Voice Scripted Speech 25.0 - English (often restricted on MDC)",
     "size_gb": 87.84,
   },
 }
@@ -79,6 +84,23 @@ def load_local_env_files(repo_root: Path | None = None) -> None:
         continue
       value = value.strip().strip('"').strip("'")
       os.environ.setdefault(key, value)
+
+
+def mdc_dataset_url(dataset_id: str) -> str:
+  return f"{MDC_DATASET_PAGE}/{dataset_id}"
+
+
+def mdc_access_error_message(dataset_id: str) -> str:
+  known = KNOWN_DATASETS.get(dataset_id, {})
+  note = ""
+  if "restricted" in str(known.get("name", "")).lower() or "deprecated" in str(known.get("name", "")).lower():
+    note = " This dataset may no longer be publicly downloadable on MDC."
+  return (
+    f"MDC denied dataset access for {dataset_id}.{note} "
+    f"Log in at {MDC_DATASET_PAGE}, open {mdc_dataset_url(dataset_id)}, "
+    "accept the dataset terms (same account as MDC_API_KEY), then retry. "
+    "See Benchmarks/CommonVoice.md for working English alternatives."
+  )
 
 
 @dataclass(frozen=True)
@@ -312,10 +334,7 @@ def download_dataset_archive(
       enable_logging=True,
     )
   except PermissionError as error:
-    raise CommonVoicePrepareError(
-      "MDC denied dataset access. Make sure MDC_API_KEY is set and that you "
-      f"accepted the dataset terms: https://mozilladatacollective.com/datasets/{dataset_id}"
-    ) from error
+    raise CommonVoicePrepareError(mdc_access_error_message(dataset_id)) from error
   except Exception as error:
     raise CommonVoicePrepareError(f"MDC dataset download failed: {error}") from error
   return Path(archive_path)
@@ -332,10 +351,7 @@ def mdc_download_plan(dataset_id: str, download_dir: Path, install_sdk: bool):
       download_source=DOWNLOAD_SOURCE_SAVE,
     )
   except PermissionError as error:
-    raise CommonVoicePrepareError(
-      "MDC denied dataset access. Make sure MDC_API_KEY is set and that you "
-      f"accepted the dataset terms: https://mozilladatacollective.com/datasets/{dataset_id}"
-    ) from error
+    raise CommonVoicePrepareError(mdc_access_error_message(dataset_id)) from error
   except Exception as error:
     raise CommonVoicePrepareError(f"Unable to create MDC download session: {error}") from error
 
@@ -394,7 +410,7 @@ def prepare_common_voice(args: argparse.Namespace) -> PreparedCommonVoiceDataset
   clips_dir.mkdir(parents=True, exist_ok=True)
 
   with tarfile.open(archive_path, mode="r:*") as archive:
-    split_member = split_tsv_member(archive, args.split)
+    split_member, delimiter = split_table_member(archive, args.split)
     rows, fieldnames = sample_rows(
       archive,
       split_member,
@@ -402,6 +418,7 @@ def prepare_common_voice(args: argparse.Namespace) -> PreparedCommonVoiceDataset
       args.limit,
       args.seed,
       args.sample_strategy,
+      delimiter=delimiter,
     )
     write_sample_tsv(tsv_path, rows, fieldnames)
     extract_sample_clips(archive, split_member, rows, clips_dir)
@@ -568,7 +585,7 @@ def remove_prepared_directory(path: Path) -> None:
   path.rmdir()
 
 
-def split_tsv_member(archive: tarfile.TarFile, split: str) -> tarfile.TarInfo:
+def split_table_member(archive: tarfile.TarFile, split: str) -> tuple[tarfile.TarInfo, str]:
   split_name = f"{split}.tsv"
   matches = [
     member
@@ -576,16 +593,32 @@ def split_tsv_member(archive: tarfile.TarFile, split: str) -> tarfile.TarInfo:
     if member.isfile() and PurePosixPath(member.name).name == split_name
   ]
   if matches:
-    return sorted(matches, key=lambda member: member.name)[0]
+    return sorted(matches, key=lambda member: member.name)[0], "\t"
 
   tsv_members = [
     member
     for member in archive.getmembers()
-    if member.isfile() and PurePosixPath(member.name).suffix == ".tsv"
+    if member.isfile() and PurePosixPath(member.name).suffix.lower() == ".tsv"
   ]
-  if not tsv_members:
-    raise CommonVoicePrepareError(f"Archive does not contain {split_name} or another TSV file")
-  return sorted(tsv_members, key=lambda member: member.name)[0]
+  if tsv_members:
+    return sorted(tsv_members, key=lambda member: member.name)[0], "\t"
+
+  csv_members = [
+    member
+    for member in archive.getmembers()
+    if member.isfile() and PurePosixPath(member.name).suffix.lower() == ".csv"
+  ]
+  if csv_members:
+    return sorted(csv_members, key=lambda member: member.name)[0], ","
+
+  raise CommonVoicePrepareError(
+    f"Archive does not contain {split_name}, another TSV, or a CSV metadata file"
+  )
+
+
+def split_tsv_member(archive: tarfile.TarFile, split: str) -> tarfile.TarInfo:
+  member, _delimiter = split_table_member(archive, split)
+  return member
 
 
 def sample_rows(
@@ -595,49 +628,21 @@ def sample_rows(
   limit: int,
   seed: int,
   sample_strategy: str,
+  *,
+  delimiter: str = "\t",
 ) -> tuple[list[dict[str, str]], list[str]]:
   extracted = archive.extractfile(member)
   if extracted is None:
     raise CommonVoicePrepareError(f"Unable to read {member.name}")
 
-  rng = random.Random(seed)
-  reservoir: list[dict[str, str]] = []
-  eligible_rows = 0
-
-  with io.TextIOWrapper(extracted, encoding="utf-8", newline="") as tsv_file:
-    reader = csv.DictReader(tsv_file, delimiter="\t")
-    fieldnames, path_column, text_column = resolve_fieldnames(reader.fieldnames)
-
-    for row in reader:
-      if (row.get("split") or split).strip() != split:
-        continue
-      if not (row.get(path_column) or "").strip():
-        continue
-      if not (row.get(text_column) or "").strip():
-        continue
-      row = canonicalize_row(row, path_column, text_column)
-
-      eligible_rows += 1
-      if sample_strategy == "first":
-        reservoir.append(row)
-        if len(reservoir) == limit:
-          break
-        continue
-
-      if len(reservoir) < limit:
-        reservoir.append(row)
-        continue
-
-      replacement_index = rng.randrange(eligible_rows)
-      if replacement_index < limit:
-        reservoir[replacement_index] = row
-
-  if eligible_rows < limit:
-    raise CommonVoicePrepareError(
-      f"Requested {limit} samples, but only found {eligible_rows} eligible rows"
-    )
-
-  return reservoir, fieldnames
+  return sample_rows_from_file(
+    extracted,
+    split,
+    limit,
+    seed,
+    sample_strategy,
+    delimiter=delimiter,
+  )
 
 
 def resolve_fieldnames(fieldnames: Sequence[str] | None) -> tuple[list[str], str, str]:
@@ -684,7 +689,12 @@ def extract_sample_clips(
   clips_dir: Path,
 ) -> None:
   split_parent = PurePosixPath(split_member.name).parent
-  archive_clips_prefixes = [split_parent / "clips", split_parent / "audio", split_parent / "audios"]
+  archive_clips_prefixes = [
+    split_parent / "clips",
+    split_parent / "audio",
+    split_parent / "audios",
+    split_parent,
+  ]
 
   for row in rows:
     relative_audio_path = (row.get(CANONICAL_PATH_COLUMN) or "").strip()
@@ -723,7 +733,7 @@ def stream_mdc_sample(
     response.raise_for_status()
     counting_stream = CountingReader(response.raw, max_bytes=max_stream_bytes)
     with tarfile.open(fileobj=counting_stream, mode="r|gz") as archive:
-      split_member = next_stream_member(archive, split)
+      split_member, delimiter = next_stream_table_member(archive, split)
       rows, fieldnames = sample_rows_from_stream(
         archive,
         split_member,
@@ -731,18 +741,29 @@ def stream_mdc_sample(
         limit,
         seed,
         sample_strategy,
+        delimiter=delimiter,
       )
       write_sample_tsv(tsv_path, rows, fieldnames)
       extract_streamed_clips(archive, split_member, rows, clips_dir)
     return counting_stream.bytes_read
 
 
-def next_stream_member(archive: tarfile.TarFile, split: str) -> tarfile.TarInfo:
+def next_stream_table_member(archive: tarfile.TarFile, split: str) -> tuple[tarfile.TarInfo, str]:
   split_name = f"{split}.tsv"
   for member in archive:
-    if member.isfile() and PurePosixPath(member.name).name == split_name:
-      return member
-  raise CommonVoicePrepareError(f"Archive stream does not contain {split_name}")
+    if not member.isfile():
+      continue
+    name = PurePosixPath(member.name).name
+    if name == split_name:
+      return member, "\t"
+    if name.endswith(".csv"):
+      return member, ","
+  raise CommonVoicePrepareError(f"Archive stream does not contain {split_name} or a CSV metadata file")
+
+
+def next_stream_member(archive: tarfile.TarFile, split: str) -> tarfile.TarInfo:
+  member, _delimiter = next_stream_table_member(archive, split)
+  return member
 
 
 def sample_rows_from_stream(
@@ -752,12 +773,21 @@ def sample_rows_from_stream(
   limit: int,
   seed: int,
   sample_strategy: str,
+  *,
+  delimiter: str = "\t",
 ) -> tuple[list[dict[str, str]], list[str]]:
   extracted = archive.extractfile(member)
   if extracted is None:
     raise CommonVoicePrepareError(f"Unable to read {member.name}")
 
-  return sample_rows_from_file(extracted, split, limit, seed, sample_strategy)
+  return sample_rows_from_file(
+    extracted,
+    split,
+    limit,
+    seed,
+    sample_strategy,
+    delimiter=delimiter,
+  )
 
 
 def sample_rows_from_file(
@@ -766,17 +796,20 @@ def sample_rows_from_file(
   limit: int,
   seed: int,
   sample_strategy: str,
+  *,
+  delimiter: str = "\t",
 ) -> tuple[list[dict[str, str]], list[str]]:
   rng = random.Random(seed)
   reservoir: list[dict[str, str]] = []
   eligible_rows = 0
 
-  tsv_file = codecs.getreader("utf-8")(fileobj)
-  reader = csv.DictReader(tsv_file, delimiter="\t")
+  table_file = codecs.getreader("utf-8")(fileobj)
+  reader = csv.DictReader(table_file, delimiter=delimiter)
   fieldnames, path_column, text_column = resolve_fieldnames(reader.fieldnames)
+  filter_by_split = "split" in fieldnames
 
   for row in reader:
-    if (row.get("split") or split).strip() != split:
+    if filter_by_split and (row.get("split") or split).strip() != split:
       continue
     if not (row.get(path_column) or "").strip():
       continue
@@ -814,7 +847,12 @@ def extract_streamed_clips(
   clips_dir: Path,
 ) -> None:
   split_parent = PurePosixPath(split_member.name).parent
-  archive_clips_prefixes = [split_parent / "clips", split_parent / "audio", split_parent / "audios"]
+  archive_clips_prefixes = [
+    split_parent / "clips",
+    split_parent / "audio",
+    split_parent / "audios",
+    split_parent,
+  ]
   wanted_paths = {(row.get(CANONICAL_PATH_COLUMN) or "").strip() for row in rows}
   wanted_members = {
     str(archive_clips_prefix / path): path
