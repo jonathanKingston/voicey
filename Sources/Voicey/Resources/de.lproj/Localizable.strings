@@ -39,7 +39,7 @@
 "settings.hotkey" = "Tastenkürzel";
 "settings.audio" = "Audio";
 "settings.model" = "Modell";
-"settings.transcription" = "Spelling & Context";
+"settings.transcription" = "Transkription";
 "settings.voiceCommands" = "Sprachbefehle";
 "settings.advanced" = "Erweitert";
 

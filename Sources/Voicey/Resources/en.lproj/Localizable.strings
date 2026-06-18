@@ -41,7 +41,7 @@
 "settings.hotkey" = "Hotkey";
 "settings.audio" = "Audio";
 "settings.model" = "Model";
-"settings.transcription" = "Spelling & Context";
+"settings.transcription" = "Transcription";
 "settings.voiceCommands" = "Voice Commands";
 "settings.advanced" = "Advanced";
 
@@ -147,6 +147,25 @@
 "transcription.screenContextOCRDescription" = "Some apps (for example Cursor or other Electron apps) expose little text via Accessibility. Voicey can capture that window and run Apple's on-device Vision OCR instead. Requires Screen Recording permission; nothing is sent to the cloud.";
 "transcription.screenContextOCRPermission" = "Screen Recording permission is required for OCR.";
 "transcription.openScreenCaptureSettings" = "Open Screen Recording Settings";
+
+/* Dictation history (local archive) */
+"dictationHistory.sectionTitle" = "Dictation history";
+"dictationHistory.enableToggle" = "Keep dictation history locally";
+"dictationHistory.enableDescription" = "Stores each recording and transcription on this Mac so you can review failures later. Audio and optional screen-context snapshots may contain sensitive information.";
+"dictationHistory.empty" = "No recordings yet. Dictate with this enabled to build history.";
+"dictationHistory.deleteAll" = "Delete all history";
+"dictationHistory.revealInFinder" = "Reveal in Finder";
+"dictationHistory.deleteFailed" = "Could not delete history";
+"dictationHistory.play" = "Play";
+"dictationHistory.stop" = "Stop";
+"dictationHistory.errorLabel" = "Error";
+"dictationHistory.processedText" = "Processed";
+"dictationHistory.rawText" = "Raw";
+"dictationHistory.partialText" = "Partial (streaming)";
+"dictationHistory.outcomeCompleted" = "OK";
+"dictationHistory.outcomeEmpty" = "Empty";
+"dictationHistory.outcomeError" = "Error";
+"dictationHistory.durationSeconds" = "%@ s";
 
 /* Voice Commands */
 "voiceCommands.enable" = "Enable Voice Commands";

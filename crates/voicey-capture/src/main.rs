@@ -48,6 +48,20 @@ enum CaptureRequest {
     },
     RecordFixture { id: String, duration_seconds: f64 },
     LoadWavFile { id: String, path: String },
+    ArchiveUtterance {
+        id: String,
+        archive_root: std::path::PathBuf,
+        #[serde(default = "default_max_archive_entries")]
+        max_entries: usize,
+        audio: voicey_archive::ArchiveAudioSource,
+        metadata: Box<voicey_archive::AppendUtteranceMetadata>,
+        #[serde(default)]
+        snapshot: Option<voicey_archive::UtteranceArchiveScreenSnapshot>,
+    },
+    DeleteArchive {
+        id: String,
+        archive_root: std::path::PathBuf,
+    },
     Shutdown { id: String },
 }
 
@@ -80,6 +94,18 @@ enum CaptureResponse {
         ok: bool,
         samples: Option<Vec<f32>>,
         sample_count: Option<usize>,
+        error: Option<String>,
+    },
+    ArchiveResult {
+        id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        record: Box<Option<voicey_archive::UtteranceArchiveRecord>>,
+        error: Option<String>,
+    },
+    DeleteArchiveResult {
+        id: String,
+        ok: bool,
         error: Option<String>,
     },
     Error {
@@ -201,6 +227,45 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
             Ok((shm_name, count, non_zero)) => capture_fixture_ok(id, shm_name, count, non_zero),
             Err(message) => capture_fixture_err(id, message),
         },
+        CaptureRequest::ArchiveUtterance {
+            id,
+            archive_root,
+            max_entries,
+            audio,
+            metadata,
+            snapshot,
+        } => {
+            let store = voicey_archive::SessionArchiveStore::new(archive_root);
+            match store.append_utterance(&audio, &metadata, snapshot.as_ref(), max_entries) {
+                Ok(record) => CaptureResponse::ArchiveResult {
+                    id,
+                    ok: true,
+                    record: Box::new(Some(record)),
+                    error: None,
+                },
+                Err(message) => CaptureResponse::ArchiveResult {
+                    id,
+                    ok: false,
+                    record: Box::new(None),
+                    error: Some(message),
+                },
+            }
+        }
+        CaptureRequest::DeleteArchive { id, archive_root } => {
+            let store = voicey_archive::SessionArchiveStore::new(archive_root);
+            match store.delete_all() {
+                Ok(()) => CaptureResponse::DeleteArchiveResult {
+                    id,
+                    ok: true,
+                    error: None,
+                },
+                Err(message) => CaptureResponse::DeleteArchiveResult {
+                    id,
+                    ok: false,
+                    error: Some(message),
+                },
+            }
+        }
         CaptureRequest::RecordFixture {
             id,
             duration_seconds,
@@ -219,6 +284,10 @@ fn handle_request(line: &str, warmed: &mut bool) -> CaptureResponse {
 
 fn default_apply_trailing_trim() -> bool {
     true
+}
+
+fn default_max_archive_entries() -> usize {
+    500
 }
 
 const NON_ZERO_SAMPLE_THRESHOLD: f32 = 0.0001;

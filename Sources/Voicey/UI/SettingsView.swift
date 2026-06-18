@@ -718,6 +718,8 @@ struct TranscriptionSteeringSettingsView: View {
           }
         }
       }
+
+      DictationHistorySettingsView()
     }
     .formStyle(.grouped)
     .padding()

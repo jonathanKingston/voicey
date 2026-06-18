@@ -1191,14 +1191,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       backgroundJobID: backgroundJobID
     )
     Task {
-      defer {
-        capturedAudio.removeSharedBufferIfNeeded()
-        appState.endHandsFreeIncrementalFlushBarrier()
-      }
+      defer { appState.endHandsFreeIncrementalFlushBarrier() }
       await processHandsFreeIncrementalUtterance(
         coordinator: incrementalTranscriptionCoordinator,
         request: request
       )
+      capturedAudio.removeSharedBufferIfNeeded()
     }
   }
 
@@ -1301,14 +1299,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       backgroundJobID: backgroundJobID
     )
     Task {
-      defer {
-        capturedAudio.removeSharedBufferIfNeeded()
-        appState.endHandsFreeIncrementalFlushBarrier()
-      }
+      defer { appState.endHandsFreeIncrementalFlushBarrier() }
       await processHandsFreeIncrementalUtterance(
         coordinator: incrementalTranscriptionCoordinator,
         request: request
       )
+      capturedAudio.removeSharedBufferIfNeeded()
     }
   }
 
@@ -1386,18 +1382,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       hideOverlay()
       appState.transcriptionState = .error(message: "Transcription pipeline unavailable")
       dependencies.notifications.showTranscriptionError("Transcription pipeline unavailable")
-      capturedAudio.removeSharedBufferIfNeeded()
+      Task {
+        await archiveUtteranceIfEnabled(
+          capturedAudio: capturedAudio,
+          errorMessage: "Transcription pipeline unavailable"
+        )
+        capturedAudio.removeSharedBufferIfNeeded()
+      }
       return
     }
 
     // Finish pause chunks (AVFoundation) or transcribe the Rust capture PCM handle directly.
     Task {
-      defer { capturedAudio.removeSharedBufferIfNeeded() }
       await processIncrementalTranscription(
         coordinator: incrementalTranscriptionCoordinator,
         capturedAudio: capturedAudio,
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic
       )
+      capturedAudio.removeSharedBufferIfNeeded()
     }
   }
 
@@ -1442,15 +1444,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   ) async {
     do {
       debugPrint("🔄 Finishing incremental transcription...", category: "TRANSCRIBE")
-      let result = try await finishUtteranceTranscription(
+      let outcome = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: capturedAudio,
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic,
         handsFreeUtterance: false
       )
-      await handleTranscriptionResult(result)
+      await handleTranscriptionResult(outcome.result, archiveAudio: outcome.archiveAudio)
     } catch {
-      await handleTranscriptionError(error)
+      await handleTranscriptionError(error, capturedAudio: capturedAudio)
     }
   }
 
@@ -1461,15 +1463,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     capturedAudio: CapturedAudio,
     applyTrailingTrimHeuristic: Bool,
     handsFreeUtterance: Bool
-  ) async throws -> TranscriptionResult {
+  ) async throws -> UtteranceTranscriptionFinishOutcome {
     if UtteranceTranscriptionFinish.shouldFinishViaIncrementalFlush(
       for: capturedAudio,
       hasBufferedIncrementalAudio: coordinator.hasBufferedIncrementalAudio,
       handsFreeUtterance: handsFreeUtterance) {
-      return try await coordinator.flushAndFinish(
+      let result = try await coordinator.flushAndFinish(
         applyTrailingTrimHeuristic: applyTrailingTrimHeuristic)
+      let archiveAudio = archiveAudioForIncrementalFinish(
+        coordinator: coordinator,
+        fallback: capturedAudio
+      )
+      return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: archiveAudio)
     }
-    return try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
+    let result = try await transcribeWithSelectedEngine(capturedAudio: capturedAudio)
+    return UtteranceTranscriptionFinishOutcome(result: result, archiveAudio: capturedAudio)
+  }
+
+  /// Uses coordinator chunk audio when incremental flush ran; otherwise the stop-capture buffer.
+  private func archiveAudioForIncrementalFinish(
+    coordinator: IncrementalTranscriptionCoordinator,
+    fallback: CapturedAudio
+  ) -> CapturedAudio {
+    let samples = coordinator.archivedAudioSamples()
+    guard !samples.isEmpty else { return fallback }
+    return .inMemory(samples)
   }
 
   private func processHandsFreeIncrementalUtterance(
@@ -1485,12 +1503,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     do {
       debugPrint("🔄 Finishing hands-free incremental transcription...", category: "TRANSCRIBE")
-      let result = try await finishUtteranceTranscription(
+      let outcome = try await finishUtteranceTranscription(
         coordinator: coordinator,
         capturedAudio: request.capturedAudio,
         applyTrailingTrimHeuristic: request.applyTrailingTrimHeuristic,
         handsFreeUtterance: true
       )
+      let result = outcome.result
       let processedText: String
       do {
         processedText = try await postProcessor?.processAsync(
@@ -1499,7 +1518,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           steeringTerms: lastUtteranceSteering?.steeringTerms ?? []
         ) ?? result.text
       } catch {
-        await handleTranscriptionError(error)
+        await handleTranscriptionError(
+          error,
+          capturedAudio: request.capturedAudio,
+          rawText: result.text
+        )
         return
       }
       debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
@@ -1508,6 +1531,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       )
       let hasDeliverableText =
         processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
+
+      await archiveUtteranceIfEnabled(
+        capturedAudio: outcome.archiveAudio,
+        rawText: result.text,
+        processedText: processedText,
+        errorMessage: nil
+      )
 
       if utteranceModel.isQwenModel {
         await MainActor.run {
@@ -1527,6 +1557,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } catch {
       debugPrint("❌ Transcription error: \(error)", category: "ERROR")
       AppLogger.transcription.error("Hands-free incremental transcription error: \(error)")
+      await archiveUtteranceIfEnabled(
+        capturedAudio: request.capturedAudio,
+        errorMessage: error.localizedDescription
+      )
       await MainActor.run { [weak self] in
         guard let self else { return }
         if request.continueHandsFreeSession, self.appState.handsFreeSessionActive {
@@ -1687,7 +1721,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return qwenResult
   }
 
-  private func handleTranscriptionResult(_ result: TranscriptionResult) async {
+  private func handleTranscriptionResult(
+    _ result: TranscriptionResult,
+    archiveAudio: CapturedAudio
+  ) async {
     debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
     AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
 
@@ -1700,7 +1737,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         steeringTerms: lastUtteranceSteering?.steeringTerms ?? []
       ) ?? result.text
     } catch {
-      await handleTranscriptionError(error)
+      await handleTranscriptionError(
+        error,
+        capturedAudio: archiveAudio,
+        rawText: result.text
+      )
       return
     }
     debugPrint("✨ Processed text: \"\(processedText)\"", category: "TRANSCRIBE")
@@ -1709,6 +1750,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     let hasDeliverableText =
       processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
+
+    await archiveUtteranceIfEnabled(
+      capturedAudio: archiveAudio,
+      rawText: result.text,
+      processedText: processedText,
+      errorMessage: nil
+    )
 
     let utteranceModel = transcriptionModelForSession()
     if utteranceModel.isQwenModel {
@@ -1753,7 +1801,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     AppLogger.audio.error("Capture error: \(error.localizedDescription, privacy: .public)")
     // Best-effort teardown when Rust capture IPC failed mid-session (stop may fail again).
     if let capturedAudio = try? audioCaptureManager?.stopCapture(applyTrailingTrimHeuristic: false) {
-      capturedAudio.removeSharedBufferIfNeeded()
+      Task {
+        await archiveUtteranceIfEnabled(
+          capturedAudio: capturedAudio,
+          errorMessage: error.localizedDescription
+        )
+        capturedAudio.removeSharedBufferIfNeeded()
+      }
     } else if VoiceyRuntimeConfiguration.useRustCaptureHotPath {
       VoiceyCaptureWorkerSession.shared.stop()
     }
@@ -1784,9 +1838,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func handleTranscriptionError(_ error: Error) async {
+  private func handleTranscriptionError(
+    _ error: Error,
+    capturedAudio: CapturedAudio? = nil,
+    rawText: String = ""
+  ) async {
     debugPrint("❌ Transcription error: \(error)", category: "ERROR")
     AppLogger.transcription.error("Transcription error: \(error)")
+    if let capturedAudio {
+      await archiveUtteranceIfEnabled(
+        capturedAudio: capturedAudio,
+        rawText: rawText,
+        errorMessage: error.localizedDescription
+      )
+    }
     await MainActor.run { [weak self] in
       self?.hideOverlay()
       self?.appState.partialTranscription = ""
@@ -1817,6 +1882,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.cancelTranscription()
       }
     }
+  }
+
+  private func archiveUtteranceIfEnabled(
+    capturedAudio: CapturedAudio,
+    rawText: String = "",
+    processedText: String = "",
+    errorMessage: String?
+  ) async {
+    let trimmedPartial = appState.partialTranscription.trimmingCharacters(in: .whitespacesAndNewlines)
+    let partialTranscription = trimmedPartial.isEmpty ? nil : appState.partialTranscription
+    let hasDeliverable = processedText.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil
+    let outcome = UtteranceArchiveCoordinator.outcome(
+      errorMessage: errorMessage,
+      hasDeliverableText: hasDeliverable
+    )
+    let bundleID = recordingTargetPID.flatMap { pid in
+      NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+    }
+    await UtteranceArchiveCoordinator.archiveUtterance(
+      UtteranceArchiveRequest(
+        capturedAudio: capturedAudio,
+        outcome: outcome,
+        rawText: rawText,
+        processedText: processedText,
+        errorMessage: errorMessage,
+        partialTranscription: partialTranscription,
+        model: transcriptionModelForSession(),
+        steering: lastUtteranceSteering,
+        screenSnapshot: ScreenContextStore.shared.currentSnapshot(),
+        targetAppBundleID: bundleID
+      ),
+      settings: dependencies.settings
+    )
   }
 
   private func registerHandsFreeBackgroundTranscriptionJobIfNeeded(
