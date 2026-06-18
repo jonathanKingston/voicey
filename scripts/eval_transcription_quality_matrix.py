@@ -24,6 +24,7 @@ DEFAULT_TSV = (
 )
 DEFAULT_CLIPS = DEFAULT_TSV.parent / "clips"
 DEFAULT_GLOSSARY = DEFAULT_TSV.parent / "eval_proper_noun_glossary.txt"
+REPO_GLOSSARY = REPO_ROOT / "Benchmarks/eval_proper_noun_glossary.txt"
 DEFAULT_BINARY = REPO_ROOT / ".build/debug/Voicey"
 DEFAULT_OUTPUT = REPO_ROOT / "benchmark-results/quality-matrix"
 
@@ -325,6 +326,17 @@ def format_rate(value: Any) -> str:
   return f"{float(value):.4f}"
 
 
+def resolve_glossary_file(explicit: Path, tsv_path: Path) -> Path:
+  if explicit.is_file():
+    return explicit
+  beside_tsv = tsv_path.parent / "eval_proper_noun_glossary.txt"
+  if beside_tsv.is_file():
+    return beside_tsv
+  if REPO_GLOSSARY.is_file():
+    return REPO_GLOSSARY
+  return explicit
+
+
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--tsv", type=Path, default=DEFAULT_TSV)
@@ -351,7 +363,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("error: missing prepared TSV/clips — run prepare_librispeech_sample.py first", file=sys.stderr)
     return 1
 
-  variants = default_variants(args.glossary_file)
+  glossary_file = resolve_glossary_file(args.glossary_file, args.tsv)
+  if not glossary_file.is_file():
+    print(
+      f"error: missing glossary file at {glossary_file} "
+      f"(expected beside TSV or {REPO_GLOSSARY})",
+      file=sys.stderr,
+    )
+    return 1
+
+  variants = default_variants(glossary_file)
   if args.variants:
     wanted = set(args.variants)
     variants = [variant for variant in variants if variant.id in wanted]

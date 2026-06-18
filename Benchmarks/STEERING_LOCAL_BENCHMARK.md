@@ -8,7 +8,8 @@ These scripts measure **on-device** Qwen steering (glossary + optional screen sn
 
 - Session Archive **WAV** (or PCM) from dictation
 - Full **transcripts** or post-process output from your machine
-- Exports under `~/Library/Application Support/Voicey/SessionArchive/`
+- Session Archive under `~/Library/Application Support/Voicey/SessionArchive/`
+- Curated read-aloud bundles under `~/Library/Application Support/Voicey/Artifacts/` (`make export-readaloud-artifact`; zip `readaloud-corpus-v3/` for backup)
 - Anything under `benchmark-data/` or `benchmark-results/` (already in `.gitignore`)
 
 What **is** safe to commit:
@@ -40,7 +41,9 @@ python3 scripts/eval_readaloud_artificial_steering.py --help
 python3 scripts/broad_steering_analysis.py --help
 ```
 
-Common Voice steering eval needs prepared clips under `benchmark-data/common-voice/` (`make benchmark-prepare-common-voice`).
+Common Voice steering eval needs prepared clips under `benchmark-data/common-voice/` (`make benchmark-prepare-common-voice`). **ffmpeg** is required on macOS to convert MDC MP3 clips (`brew install ffmpeg`; `afconvert` alone cannot decode them).
+
+LibriSpeech quality-matrix corpus: `make benchmark-prepare-librispeech-sample` (downloads dev-clean once). Resume CV/Libri steps into the latest full-eval folder: `make continue-full-model-evals` or `VOICEY_FULL_EVAL_OUT=benchmark-results/full-eval-… make continue-full-model-evals`.
 
 ## Cap overrides (harness IPC)
 

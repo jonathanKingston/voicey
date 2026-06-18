@@ -26,10 +26,15 @@ BENCHMARK_COMMON_VOICE_SEED ?= 20260506
 BENCHMARK_COMMON_VOICE_HF_DIR = benchmark-data/common-voice/prepared/$(subst /,__,$(BENCHMARK_COMMON_VOICE_HF_DATASET))/$(BENCHMARK_COMMON_VOICE_HF_CONFIG)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
 BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMARK_COMMON_VOICE_DATASET)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
+BENCHMARK_LIBRISPEECH_ARCHIVE ?= benchmark-data/downloads/dev-clean.tar.gz
+BENCHMARK_LIBRISPEECH_LIMIT ?= 200
+BENCHMARK_LIBRISPEECH_SEED ?= 20260506
+BENCHMARK_LIBRISPEECH_SPLIT ?= test
+BENCHMARK_LIBRISPEECH_PREPARED_DIR = benchmark-data/common-voice/prepared/librispeech_clean/$(BENCHMARK_LIBRISPEECH_SPLIT)-limit$(BENCHMARK_LIBRISPEECH_LIMIT)-seed$(BENCHMARK_LIBRISPEECH_SEED)
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
 QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
-.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration test-steering-benchmark-scripts ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark eval-transcription-quality-matrix eval-transcription-quality-matrix-smoke eval-readaloud-steering eval-readaloud-steering-deep eval-readaloud-quality-matrix eval-readaloud-runtime-matrix replay-session-archive eval-lm-studio-vocabulary build-apple-speech-benchmark eval-apple-speech-rerank reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess benchmark-broad-steering-analysis
+.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration test-steering-benchmark-scripts ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-librispeech-dev-clean benchmark-prepare-librispeech-sample benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark eval-transcription-quality-matrix eval-transcription-quality-matrix-smoke eval-readaloud-steering eval-readaloud-steering-deep eval-readaloud-quality-matrix eval-readaloud-runtime-matrix eval-readaloud-delivery-matrix export-readaloud-artifact replay-session-archive eval-lm-studio-vocabulary build-apple-speech-benchmark eval-apple-speech-rerank reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess benchmark-broad-steering-analysis
 
 all: build
 
@@ -544,6 +549,22 @@ benchmark-prepare-common-voice:
 		--seed "$(BENCHMARK_COMMON_VOICE_SEED)" \
 		$(ARGS)
 
+# LibriSpeech dev-clean stand-in for quality-matrix when MDC CV is unavailable.
+benchmark-download-librispeech-dev-clean:
+	@mkdir -p benchmark-data/downloads
+	@test -f "$(BENCHMARK_LIBRISPEECH_ARCHIVE)" || \
+		curl -fL -o "$(BENCHMARK_LIBRISPEECH_ARCHIVE)" \
+		"https://openslr.trmal.net/resources/12/dev-clean.tar.gz"
+
+benchmark-prepare-librispeech-sample: benchmark-download-librispeech-dev-clean
+	@command -v ffmpeg >/dev/null 2>&1 || (echo "Install ffmpeg (brew install ffmpeg) for LibriSpeech FLAC conversion" >&2 && exit 1)
+	python3 scripts/prepare_librispeech_sample.py \
+		--archive "$(BENCHMARK_LIBRISPEECH_ARCHIVE)" \
+		--split "$(BENCHMARK_LIBRISPEECH_SPLIT)" \
+		--limit "$(BENCHMARK_LIBRISPEECH_LIMIT)" \
+		--seed "$(BENCHMARK_LIBRISPEECH_SEED)" \
+		$(ARGS)
+
 # Download the Voicey models used by the benchmark.
 benchmark-download-models: build build-rust
 	.build/debug/Voicey benchmark-download-models $(BENCHMARK_VOICEY_MODELS)
@@ -585,6 +606,24 @@ eval-readaloud-quality-matrix:
 
 eval-readaloud-runtime-matrix:
 	python3 scripts/eval_readaloud_runtime_matrix.py $(ARGS)
+
+eval-readaloud-delivery-matrix:
+	python3 scripts/eval_readaloud_delivery_matrix.py $(ARGS)
+
+eval-readaloud-quiet-gain:
+	python3 scripts/eval_readaloud_quiet_gain.py $(ARGS)
+
+export-readaloud-artifact:
+	python3 scripts/export_readaloud_artifact.py $(ARGS)
+
+# Read-aloud + steering permutations (both Qwen models); optional CV/Libri if data prepared.
+run-full-model-evals:
+	chmod +x scripts/run_full_model_evals.sh
+	scripts/run_full_model_evals.sh
+
+continue-full-model-evals:
+	chmod +x scripts/continue_full_model_evals.sh
+	scripts/continue_full_model_evals.sh
 
 replay-session-archive:
 	python3 scripts/replay_session_archive.py $(ARGS)

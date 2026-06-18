@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -49,6 +51,13 @@ GOLDEN_CASES: tuple[GoldenCase, ...] = (
         must_not_contain=("met form in",),
     ),
     GoldenCase(
+        id="readaloud-clip5-filename-sentence",
+        transcript="This file is IncrementalTranscriptionCoordinator dot Swift.",
+        vocabulary=DEFAULT_GLOSSARY,
+        must_contain=("This file is", "IncrementalTranscriptionCoordinator"),
+        must_not_contain=(),
+    ),
+    GoldenCase(
         id="no-rewrite",
         transcript="please ship the patch today",
         vocabulary=DEFAULT_GLOSSARY,
@@ -58,9 +67,17 @@ GOLDEN_CASES: tuple[GoldenCase, ...] = (
 )
 
 
+def lm_studio_request_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    token = (os.environ.get("LM_API_TOKEN") or os.environ.get("LM_STUDIO_API_KEY") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 def server_available(base_url: str, timeout_seconds: float) -> bool:
     models_url = base_url.rstrip("/") + "/models"
-    request = urllib.request.Request(models_url, method="GET")
+    request = urllib.request.Request(models_url, method="GET", headers=lm_studio_request_headers())
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             return 200 <= response.status < 300
@@ -102,7 +119,7 @@ def refine_transcript(
         endpoint,
         data=data,
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers=lm_studio_request_headers(),
     )
     with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         body = json.loads(response.read().decode("utf-8"))
@@ -190,7 +207,9 @@ def main(argv: list[str] | None = None) -> int:
 
     model = args.model.strip() or None
     rows: list[dict] = []
+    latency_seconds: list[float] = []
     for case in GOLDEN_CASES:
+        started = time.perf_counter()
         refined = refine_transcript(
             base_url=args.base_url,
             model=model,
@@ -198,17 +217,31 @@ def main(argv: list[str] | None = None) -> int:
             vocabulary=case.vocabulary,
             timeout_seconds=args.timeout_seconds,
         )
+        elapsed = time.perf_counter() - started
+        latency_seconds.append(elapsed)
         row = score_case(case, refined)
+        row["latency_seconds"] = round(elapsed, 3)
+        row["input_chars"] = len(case.transcript)
+        row["output_chars"] = len(refined)
         rows.append(row)
-        print(f"{case.id}: {'pass' if row['passed'] else 'fail'} -> {refined!r}", file=sys.stderr)
+        print(
+            f"{case.id}: {'pass' if row['passed'] else 'fail'} "
+            f"latency={elapsed:.2f}s -> {refined!r}",
+            file=sys.stderr,
+        )
 
     passed = sum(1 for row in rows if row["passed"])
+    total_latency = sum(latency_seconds)
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "base_url": args.base_url,
         "model": model,
         "passed": passed,
         "total": len(rows),
+        "latency_seconds_total": round(total_latency, 3),
+        "latency_seconds_mean": round(total_latency / len(latency_seconds), 3)
+        if latency_seconds
+        else None,
         "cases": rows,
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)

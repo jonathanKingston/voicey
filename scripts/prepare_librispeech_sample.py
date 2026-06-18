@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import random
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -18,6 +19,17 @@ DEFAULT_PREPARED_ROOT = Path("benchmark-data/common-voice/prepared/librispeech_c
 DEFAULT_LIMIT = 200
 DEFAULT_SEED = 20260506
 DEFAULT_SPLIT = "test"
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+EVAL_PROPER_NOUN_GLOSSARY = REPO_ROOT / "Benchmarks/eval_proper_noun_glossary.txt"
+
+
+def copy_eval_glossary(prepared_dir: Path) -> None:
+  if not EVAL_PROPER_NOUN_GLOSSARY.is_file():
+    return
+  destination = prepared_dir / "eval_proper_noun_glossary.txt"
+  if not destination.is_file():
+    shutil.copyfile(EVAL_PROPER_NOUN_GLOSSARY, destination)
 
 
 class PrepareError(RuntimeError):
@@ -68,23 +80,12 @@ def reservoir_sample(items: list[tuple[str, str, str]], limit: int, seed: int) -
 
 
 def convert_to_wav(source_flac: Path, destination_wav: Path) -> None:
-  destination_wav.parent.mkdir(parents=True, exist_ok=True)
-  command = [
-    "ffmpeg",
-    "-nostdin",
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-y",
-    "-i",
-    str(source_flac),
-    "-ac",
-    "1",
-    "-ar",
-    "16000",
-    str(destination_wav),
-  ]
-  subprocess.run(command, check=True)
+  from benchmark_wav_convert import BenchmarkWavConvertError, convert_to_16k_mono_wav
+
+  try:
+    convert_to_16k_mono_wav(source_flac, destination_wav)
+  except BenchmarkWavConvertError as error:
+    raise PrepareError(str(error)) from error
 
 
 def prepare(args: argparse.Namespace) -> Path:
@@ -180,6 +181,7 @@ def prepare(args: argparse.Namespace) -> Path:
     + "\n",
     encoding="utf-8",
   )
+  copy_eval_glossary(prepared_dir)
   return prepared_dir
 
 

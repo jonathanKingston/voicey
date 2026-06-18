@@ -45,7 +45,7 @@ read-aloud steering — not aggregate LibriSpeech WER alone.
 | B4 | **Language: English hint** | ✅ tried | Smoke: 1.94% vs 1.75% auto (25 clips) |
 | B5 | Incremental vs full-buffer | 🔧 impl | Matrix variant `incremental-1.7b-raw`; read-aloud runtime matrix for filename clips |
 | B6 | Qwen long-audio chunk merge | ⬜ planned | Seam errors at chunk boundaries |
-| B7 | Quiet-audio gain (Granite-style) | ⬜ planned | Port `conditionAudioForInference` to Qwen/infer path |
+| B7 | Quiet-audio gain (Granite-style) | 🔧 impl | `InferenceAudioConditioning` on Qwen + `make eval-readaloud-quiet-gain` |
 | B8 | Trailing low-energy trim tuning | ⬜ planned | `AudioCaptureManager` — hands-free vs hotkey |
 | B9 | Hands-free VAD vs push-to-talk | ⬜ planned | Needs read-aloud + same mic |
 | B10 | Audio stress: quiet (−12 dB) | 🔧 impl | Matrix variant `audio-quiet` |

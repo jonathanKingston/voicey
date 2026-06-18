@@ -180,57 +180,12 @@ def load_clips_from_tsv(tsv_path: Path, clips_dir: Path) -> list[CVClip]:
 
 
 def convert_to_16k_mono_wav(source: Path, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if sys.platform == "darwin":
-        afconvert = shutil.which("afconvert")
-        if afconvert:
-            completed = subprocess.run(
-                [
-                    afconvert,
-                    "-f",
-                    "WAVE",
-                    "-d",
-                    "LEI16@16000",
-                    "-c",
-                    "1",
-                    str(source),
-                    str(dest),
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if completed.returncode == 0 and dest.is_file():
-                return
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise SystemExit(
-            "Need afconvert (macOS) or ffmpeg on PATH to convert Common Voice clips to 16 kHz WAV"
-        )
-    completed = subprocess.run(
-        [
-            ffmpeg,
-            "-nostdin",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            str(source),
-            "-ar",
-            "16000",
-            "-ac",
-            "1",
-            "-c:a",
-            "pcm_s16le",
-            str(dest),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise SystemExit(f"ffmpeg failed for {source}:\n{completed.stderr.strip()}")
+    from benchmark_wav_convert import BenchmarkWavConvertError, convert_to_16k_mono_wav as convert_wav
+
+    try:
+        convert_wav(source, dest)
+    except BenchmarkWavConvertError as error:
+        raise SystemExit(str(error)) from error
 
 
 def ensure_16k_mono_wav(source: Path, cache_dir: Path) -> Path:

@@ -701,59 +701,12 @@ def update_rows_to_prepared_wav(rows: list[dict[str, str]]) -> None:
 
 
 def convert_to_16k_mono_wav(source: Path, dest: Path) -> None:
-  dest.parent.mkdir(parents=True, exist_ok=True)
-  if sys.platform == "darwin":
-    afconvert = shutil.which("afconvert")
-    if afconvert:
-      completed = subprocess.run(
-        [
-          afconvert,
-          "-f",
-          "WAVE",
-          "-d",
-          "LEI16@16000",
-          "-c",
-          "1",
-          str(source),
-          str(dest),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-      )
-      if completed.returncode == 0 and dest.is_file():
-        return
-  ffmpeg = shutil.which("ffmpeg")
-  if not ffmpeg:
-    raise CommonVoicePrepareError(
-      "Need afconvert (macOS) or ffmpeg on PATH to convert clips to 16 kHz mono WAV"
-    )
-  completed = subprocess.run(
-    [
-      ffmpeg,
-      "-nostdin",
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-y",
-      "-i",
-      str(source),
-      "-ar",
-      "16000",
-      "-ac",
-      "1",
-      "-c:a",
-      "pcm_s16le",
-      str(dest),
-    ],
-    capture_output=True,
-    text=True,
-    check=False,
-  )
-  if completed.returncode != 0:
-    raise CommonVoicePrepareError(
-      f"ffmpeg failed for {source}:\n{completed.stderr.strip()}"
-    )
+  from benchmark_wav_convert import BenchmarkWavConvertError, convert_to_16k_mono_wav as convert_wav
+
+  try:
+    convert_wav(source, dest)
+  except BenchmarkWavConvertError as error:
+    raise CommonVoicePrepareError(str(error)) from error
 
 
 def archive_clip_member_names(split_parent: PurePosixPath, relative_audio_path: str) -> list[str]:

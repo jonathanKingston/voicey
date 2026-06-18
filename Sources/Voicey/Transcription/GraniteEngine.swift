@@ -1,6 +1,7 @@
 import Foundation
 import os
 import Darwin
+import VoiceyCore
 
 /// Engine for IBM Granite Speech models using Python mlx-audio for inference on Apple Silicon.
 ///
@@ -21,11 +22,6 @@ final class GraniteEngine: @unchecked Sendable {
   private let maxRTFHistory = 5
   private var dependenciesReady = false
   private let worker = GranitePythonWorker()
-  // Conservative low-audio conditioning: only act on near-silence/very quiet input.
-  private let lowAudioRMSFloor: Float = 0.0008
-  private let lowAudioBoostThresholdRMS: Float = 0.012
-  private let targetInputRMS: Float = 0.03
-  private let maxInputGain: Float = 4.0
   private static let requiredPythonModules = [
     ("mlx_audio", "mlx-audio"),
     ("huggingface_hub", "huggingface_hub"),
@@ -253,27 +249,12 @@ final class GraniteEngine: @unchecked Sendable {
   }
 
   private func conditionAudioForInference(_ samples: [Float]) -> (samples: [Float], rms: Float, gain: Float) {
-    let rms = calculateRMS(samples)
-    guard rms > lowAudioRMSFloor else {
-      return ([], rms, 1)
-    }
-
-    guard rms < lowAudioBoostThresholdRMS else {
-      return (samples, rms, 1)
-    }
-
-    let gain = min(targetInputRMS / max(rms, Float.leastNonzeroMagnitude), maxInputGain)
-    let boosted = samples.map { min(max($0 * gain, -1), 1) }
-    return (boosted, rms, gain)
+    let result = InferenceAudioConditioning.conditionForInference(samples)
+    return (result.samples, result.inputRMS, result.appliedGain)
   }
 
   private func calculateRMS(_ samples: [Float]) -> Float {
-    guard !samples.isEmpty else { return 0 }
-    var sumSquares: Float = 0
-    for sample in samples {
-      sumSquares += sample * sample
-    }
-    return sqrt(sumSquares / Float(samples.count))
+    InferenceAudioConditioning.calculateRMS(samples)
   }
 
   /// Reset performance tracking

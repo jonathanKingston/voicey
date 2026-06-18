@@ -123,7 +123,7 @@ def evaluate_clip(
         model=model,
         tsv=tsv,
         clips_dir=clips_dir,
-        extra_args=steer_args,
+        extra_args=(),
     )
 
     return {

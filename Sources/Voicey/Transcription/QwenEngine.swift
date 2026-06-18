@@ -169,11 +169,38 @@ final class QwenEngine: @unchecked Sendable {
       )
     }
 
+    let conditioned = InferenceAudioConditioning.conditionForInference(audioBuffer)
+    if conditioned.isBelowInferenceFloor {
+      AppLogger.transcription.info(
+        "QwenEngine: Input RMS \(String(format: "%.5f", conditioned.inputRMS)) below floor; returning empty transcription"
+      )
+      return TranscriptionResult(
+        text: "",
+        segments: [],
+        language: qwenLanguage ?? "auto",
+        processingTime: 0,
+        performanceMetrics: PerformanceMetrics(
+          realTimeFactor: 0,
+          audioDuration: audioDuration,
+          processingTime: 0,
+          thermalState: thermalStateBefore
+        )
+      )
+    }
+
+    if conditioned.appliedGain > 1 {
+      AppLogger.transcription.info(
+        "QwenEngine: Applied quiet-input gain \(String(format: "%.2f", conditioned.appliedGain))x (RMS \(String(format: "%.5f", conditioned.inputRMS)))"
+      )
+    }
+
+    let inferenceAudio = conditioned.samples
+
     let transcribedText: String
     if audioDuration <= maxSinglePassAudioSeconds {
       transcribedText = transcribeSinglePass(
         qwenModel: qwenModel,
-        audioBuffer: audioBuffer,
+        audioBuffer: inferenceAudio,
         decoderContext: decoderContext,
         language: qwenLanguage
       )
@@ -186,9 +213,9 @@ final class QwenEngine: @unchecked Sendable {
       AppLogger.transcription.info(
         "QwenEngine: Long clip (\(String(format: "%.1f", audioDuration))s); transcribing in \(chunkCount) × \(chunkSeconds)s segments"
       )
-      while offset < audioBuffer.count {
-        let end = min(offset + chunkSampleCount, audioBuffer.count)
-        let chunk = Array(audioBuffer[offset..<end])
+      while offset < inferenceAudio.count {
+        let end = min(offset + chunkSampleCount, inferenceAudio.count)
+        let chunk = Array(inferenceAudio[offset..<end])
         let chunkText = transcribeSinglePass(
           qwenModel: qwenModel,
           audioBuffer: chunk,
