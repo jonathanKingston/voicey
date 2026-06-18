@@ -6,18 +6,61 @@ Use this before running `make eval-readaloud-quality-matrix`.
 
 - [ ] **Build:** `make build build-rust`
 - [ ] **Models:** Qwen 1.7b downloaded (`make benchmark-download-models`)
+- [ ] **Dictation history:** Settings → enable **Keep dictation history locally** (or `VOICEY_SESSION_ARCHIVE=1`)
 - [ ] **Glossary:** paste the blended list below into Settings → Transcription (optional for live; replay injects it)
 - [ ] **Mic + Speech:** Voicey has microphone access; Terminal/Cursor has Speech Recognition if you use Apple Speech rerank
 - [ ] **Session Archive path exists:** `~/Library/Application Support/Voicey/SessionArchive/`
 - [ ] **Record:** one clip per script line (#1–#27) — stop, wait for history, next line ([table below](#what-to-read-in-order))
-- [ ] **Map ids:** each new utterance gets an 8-char id in Dictation history — paste into [`readaloud_steering_corpus.json`](readaloud_steering_corpus.json) `id_prefix` if re-recording
-- [ ] **Verify local WAVs:** `make eval-readaloud-steering` (fails fast if Session Archive clips are missing)
+- [ ] **Map ids:** `python3 scripts/map_readaloud_archive_ids.py --write-corpus` (or paste `id_prefix` by hand)
+- [ ] **Export backup bundle:** `make export-readaloud-artifact`
 - [ ] **Run evals:**
-  - Term recall: `make eval-readaloud-quality-matrix`
-  - Runtime (batch vs incremental): `make eval-readaloud-runtime-matrix`
-  - Broad analysis: `make benchmark-broad-steering-analysis`
+  - ASR + steering replay: `make eval-readaloud-steering`
+  - Delivery / sanitizer: `make eval-readaloud-delivery-matrix`
+  - Term recall summary: `make eval-readaloud-quality-matrix`
 
-Corpus v3 already has `id_prefix` for #1–#27 from the 2026-06-02 session. Re-record only if you need fresh audio or changed Settings.
+---
+
+## What eval needs (live paste optional)
+
+| For scoring | Source |
+|-------------|--------|
+| **Audio** | Session Archive `audio/*.wav` (via `id_prefix`) |
+| **Expected words** | [`readaloud_steering_corpus.json`](readaloud_steering_corpus.json) `reference` per line |
+
+**Live `processed_text` and clipboard paste are not used for ASR eval.** The harness re-transcribes each WAV and compares to `reference`.
+
+Archive metadata (`raw_text`, `outcome`, `empty_delivery`) is useful for the **delivery matrix** (`make eval-readaloud-delivery-matrix`), which replays post-process with the archived steering snapshot and checks whether anything would be deliverable.
+
+---
+
+## Backup bundle (zip this; not in git)
+
+```bash
+make export-readaloud-artifact
+# optional dated copy:
+make export-readaloud-artifact ARGS="--tag 2026-06-18"
+```
+
+**Directory to zip:**
+
+`~/Library/Application Support/Voicey/Artifacts/readaloud-corpus-v3/`
+
+Contains:
+
+- `audio/` — WAV per line  
+- `snapshots/` — screen context JSON (when recorded)  
+- `index.jsonl` — archive rows for those clips  
+- `corpus_manifest.json` — copy of this corpus (`reference` = ground truth)  
+- `ARTIFACT.json` — export metadata and replay commands  
+
+Override install location with `VOICEY_ARTIFACTS_ROOT`.
+
+Replay from the bundle on another machine:
+
+```bash
+make eval-readaloud-steering ARGS='--archive-root "$HOME/Library/Application Support/Voicey/Artifacts/readaloud-corpus-v3"'
+make eval-readaloud-delivery-matrix ARGS='--archive-root "$HOME/Library/Application Support/Voicey/Artifacts/readaloud-corpus-v3"'
+```
 
 ---
 
@@ -65,17 +108,14 @@ Screen context: **your choice** (off = simpler live vs replay; on = extra soup f
 
 ## After recording
 
-1. Update `id_prefix` in `Benchmarks/readaloud_steering_corpus.json` for new rows.
-2. Broad analysis (read-aloud + Common Voice, same blended glossary):
+1. Update `id_prefix` in the corpus JSON if needed (`map_readaloud_archive_ids.py --write-corpus`).
+2. `make export-readaloud-artifact` then zip `~/Library/Application Support/Voicey/Artifacts/readaloud-corpus-v3/`.
+3. Run evals (results under `benchmark-results/`, gitignored):
 
    ```bash
-   make benchmark-broad-steering-analysis
+   make eval-readaloud-steering
+   make eval-readaloud-delivery-matrix
+   make eval-readaloud-quality-matrix
    ```
 
-   Or read-aloud only:
-
-   ```bash
-   python3 scripts/eval_readaloud_artificial_steering.py
-   ```
-
-Results live under `benchmark-results/` (gitignored). Do not commit Session Archive audio or result JSON.
+Do not commit Session Archive audio, artifact bundles, or result JSON.

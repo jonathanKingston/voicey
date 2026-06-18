@@ -15,7 +15,7 @@ Sanitization runs in **`voicey-text` `postprocess`** (mandatory worker — no Sw
 1. **Prefix / exact substring** of `decoder_context`
 2. **Comma-list filter** — long comma-separated segments that are steering-only (typical screen dump without the vocabulary prefix)
 3. **Embedded `Vocabulary:` / legacy `Glossary:` run** removal between speech
-4. **Soup** — ≥80% steering tokens clears the utterance
+4. **Soup** — ≥80% steering tokens clears the utterance unless raw word spans include non-steering speech (stopwords/chrome are excluded from the overlap ratio but still anchor real sentences)
 5. **Polish** — seam punctuation cleanup
 
 Host passes per-utterance `decoder_context` + `steering_terms` from `TranscriptionSteeringContext` into `PostProcessor.processAsync`. Golden fixtures: `Benchmarks/Golden/postprocess/steering_echo_*.json` (`cargo test -p voicey-text --test golden_postprocess`).

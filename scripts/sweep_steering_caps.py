@@ -46,6 +46,15 @@ def default_archive_root() -> Path:
 
 
 def resolve_worker(name: str) -> Path:
+    suffix = name.removeprefix("voicey-").replace("-", "_").upper()
+    env_key = f"VOICEY_{suffix}_WORKER"
+    override = os.environ.get(env_key)
+    if override:
+        candidate = Path(override)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+        raise SystemExit(f"{env_key} is not an executable file: {candidate}")
+
     for base in (
         REPO_ROOT / "Voicey.app/Contents/MacOS",
         REPO_ROOT / ".build/debug",

@@ -6,182 +6,185 @@
     {
       "script": "#1",
       "reference": "Hello.",
-      "id_prefix": "59240a31",
+      "id_prefix": "cb89d7b5",
       "category": "warmup",
       "expect_coordinator_swift": false
     },
     {
       "script": "#2",
       "reference": "Beep. Boop.",
-      "id_prefix": "e1b82a06",
+      "id_prefix": "7c47a41a",
       "category": "warmup",
       "expect_coordinator_swift": false
     },
     {
       "script": "#3",
       "reference": "The quick brown fox jumps over the lazy dog.",
-      "id_prefix": "a56c2cf2",
+      "id_prefix": "1140f54a",
       "category": "warmup",
       "expect_coordinator_swift": false
     },
     {
       "script": "#4",
       "reference": "Incremental Transcription Coordinator dot swift.",
-      "id_prefix": "3872a7fd",
+      "id_prefix": "ae1943cb",
       "category": "filename_bare",
       "expect_coordinator_swift": true
     },
     {
       "script": "#5",
       "reference": "This file is Incremental Transcription Coordinator dot swift.",
-      "id_prefix": "cf05401f",
+      "id_prefix": "da6e693c",
       "category": "filename_sentence",
-      "expect_coordinator_swift": true
+      "expect_coordinator_swift": true,
+      "expect_live_delivery": true,
+      "recording_note": "2026-06-18 redo; sanitizer must keep filename sentence with glossary+screen context."
     },
     {
       "script": "#6",
       "reference": "The coordinator lives in Incremental Transcription Coordinator dot swift.",
-      "id_prefix": "e8ea4b27",
+      "id_prefix": "17e284e4",
       "category": "filename_sentence",
       "expect_coordinator_swift": true
     },
     {
       "script": "#7",
       "reference": "Open Incremental Transcription Coordinator dot swift in the editor.",
-      "id_prefix": "acd51212",
+      "id_prefix": "c17aa4a0",
       "category": "filename_sentence",
       "expect_coordinator_swift": false
     },
     {
       "script": "#8",
       "reference": "Open Utterance Transcription Finish dot swift.",
-      "id_prefix": "1fd4b19b",
+      "id_prefix": "02924e2b",
       "category": "filename_alt_symbol",
       "expect_coordinator_swift": false
     },
     {
       "script": "#9",
       "reference": "The worker is voicey-text.",
-      "id_prefix": "37d2ad89",
+      "id_prefix": "703e2e2c",
       "category": "crate_name",
       "expect_coordinator_swift": false
     },
     {
       "script": "#10",
       "reference": "Voicey uses Qwen and the voicey-text worker.",
-      "id_prefix": "636963d1",
+      "id_prefix": "3e2ea601",
       "category": "brand_homophone",
       "expect_coordinator_swift": false
     },
     {
       "script": "#11",
       "reference": "What more can we do here that improves the quality?",
-      "id_prefix": "532f2114",
+      "id_prefix": "b3f3ce21",
       "category": "natural",
       "expect_coordinator_swift": false
     },
     {
       "script": "#12",
       "reference": "Check out the existing data and translations, then run it against the benchmarking code.",
-      "id_prefix": "05cc069d",
+      "id_prefix": "1a463606",
       "category": "natural",
       "expect_coordinator_swift": false
     },
     {
       "script": "#13",
       "reference": "Ship the pull request when CI is green.",
-      "id_prefix": "538b1515",
+      "id_prefix": "89c5c3f2",
       "category": "natural",
       "expect_coordinator_swift": false
     },
     {
       "script": "#14",
       "reference": "I like incremental progress on this project.",
-      "id_prefix": "18b1e9dc",
+      "id_prefix": "e9e4e82a",
       "category": "false_positive",
       "expect_coordinator_swift": false
     },
     {
       "script": "#15",
       "reference": "The coordinator team met yesterday.",
-      "id_prefix": "8a10ddcf",
+      "id_prefix": "3eeba48d",
       "category": "false_positive",
       "expect_coordinator_swift": false
     },
     {
       "script": "#16",
       "reference": "This function is process hands free incremental utterance.",
-      "id_prefix": "3500664e",
+      "id_prefix": "fba85e3c",
       "category": "code_phrase",
       "expect_coordinator_swift": false
     },
     {
       "script": "#17",
       "reference": "Refactor incremental transcription coordinator.",
-      "id_prefix": "dce21c55",
+      "id_prefix": "9b36bb89",
       "category": "code_phrase",
       "expect_coordinator_swift": false
     },
     {
       "script": "#18",
       "reference": "The service is named Klorp nine dash alpha.",
-      "id_prefix": "d4e300c2",
+      "id_prefix": "b7f649c7",
       "category": "oov_sentence",
       "expect_glossary_token": "Klorp-9-alpha"
     },
     {
       "script": "#19",
       "reference": "Klorp nine dash alpha.",
-      "id_prefix": "2fc61f47",
+      "id_prefix": "05f72743",
       "category": "oov_bare",
       "expect_glossary_token": "Klorp-9-alpha"
     },
     {
       "script": "#20",
       "reference": "We run ZorbnaxWorker next to the xyzzy-protocol crate.",
-      "id_prefix": "50b4f82b",
+      "id_prefix": "95523814",
       "category": "oov_sentence",
       "expect_glossary_token": "ZorbnaxWorker"
     },
     {
       "script": "#21",
       "reference": "Open Utterance Transcription Finish dot swift in Xcode.",
-      "id_prefix": "2a4848ff",
+      "id_prefix": "496d40d2",
       "category": "filename_alt_sentence",
       "expect_glossary_token": "UtteranceTranscriptionFinish.swift"
     },
     {
       "script": "#22",
       "reference": "The patient metformin dose increased and HbA1c improved.",
-      "id_prefix": "f6d9d720",
+      "id_prefix": "6eb0fef2",
       "category": "domain_vocab",
       "expect_glossary_token": "metformin"
     },
     {
       "script": "#23",
       "reference": "My ideal vacation is Kuala Lumpur because it is warm every day.",
-      "id_prefix": "7208e138",
+      "id_prefix": "559d7ab6",
       "category": "proper_noun",
       "expect_glossary_token": null
     },
     {
       "script": "#24",
       "reference": "Refactor the Zorbnax worker module before release.",
-      "id_prefix": "364a1e02",
+      "id_prefix": "a9e8ec61",
       "category": "oov_partial",
       "expect_glossary_token": "ZorbnaxWorker"
     },
     {
       "script": "#25",
       "reference": "The qwen three ASR one point seven b model loads locally.",
-      "id_prefix": "52124c2a",
+      "id_prefix": "897dad02",
       "category": "model_spoken",
-      "expect_glossary_token": "Qwen"
+      "expect_glossary_token": "Qwen",
+      "recording_note": "Second take at end of session (replaces 5fdaaf4a)."
     },
     {
       "script": "#26",
       "reference": "Paste into voicey text pre post process without screen content.",
-      "id_prefix": "069bdc1d",
+      "id_prefix": "5f0a1680",
       "category": "crate_phrase",
       "expect_glossary_token": "voicey-text",
       "recording_note": "As read: pre/post process, screen content (not postprocess/screen context)."
@@ -189,7 +192,7 @@
     {
       "script": "#27",
       "reference": "Tell me about your favorite food and how often you cook at home.",
-      "id_prefix": "e22d4072",
+      "id_prefix": "d0c2472d",
       "category": "natural_control",
       "expect_glossary_token": null
     }

@@ -492,6 +492,23 @@ fn is_steering_token(lower: &str, steering: &HashSet<String>) -> bool {
         || steering.contains(lower)
 }
 
+/// True when the utterance includes at least one word that is not steering vocabulary.
+/// Soup detection uses [`screen_term_filter::tokenize`], which drops stopwords and UI
+/// chrome, so short filename dictation ("This file is FooBar dot swift") can look like
+/// pure steering overlap; raw word spans rescue that case without weakening comma-list
+/// or verbatim steering dumps (no ordinary words).
+fn has_non_steering_speech_anchor(text: &str, steering: &HashSet<String>) -> bool {
+    WORD_SPAN_PATTERN.find_iter(text).any(|m| {
+        let word = m.as_str();
+        if word.len() < screen_term_filter::MIN_TOKEN_LENGTH
+            || word.len() > screen_term_filter::MAX_TOKEN_LENGTH
+        {
+            return false;
+        }
+        !is_steering_token(&word.to_lowercase(), steering)
+    })
+}
+
 fn trim_join_boundary_tail(text: &str) -> String {
     let mut t = text.trim_end().to_string();
     while t.ends_with(',') || t.ends_with(';') || t.ends_with(':') {
@@ -563,6 +580,10 @@ fn is_steering_soup(
         .map(|token| token.to_lowercase())
         .collect();
     if tokens.len() < MINIMUM_OVERLAP_TOKEN_COUNT {
+        return false;
+    }
+
+    if has_non_steering_speech_anchor(text, &steering_tokens) {
         return false;
     }
 
@@ -802,6 +823,41 @@ mod tests {
     fn sanitize_without_context_keeps_text() {
         let result = sanitize_steering_echo("metformin Cursor HbA1c Voicey", None, &[]);
         assert_eq!(result.text, "metformin Cursor HbA1c Voicey");
+        assert!(!result.cleared);
+    }
+
+    fn readaloud_clip5_terms() -> Vec<String> {
+        vec![
+            "IncrementalTranscriptionCoordinator.swift".to_string(),
+            "Voicey".to_string(),
+            "Qwen".to_string(),
+            "voicey-text".to_string(),
+            "UtteranceTranscriptionFinish.swift".to_string(),
+            "Klorp-9-alpha".to_string(),
+            "ZorbnaxWorker".to_string(),
+            "xyzzy-protocol".to_string(),
+            "metformin".to_string(),
+            "HbA1c".to_string(),
+            "coordinator".to_string(),
+            "Incremental".to_string(),
+            "dot".to_string(),
+            "Transcription".to_string(),
+            "Agents".to_string(),
+        ]
+    }
+
+    #[test]
+    fn sanitize_readaloud_clip5_filename_sentence_not_cleared() {
+        let terms = readaloud_clip5_terms();
+        let context = decoding_context(&terms).expect("context");
+        let input = "This file is IncrementalTranscriptionCoordinator dot Swift.";
+        let result = sanitize_steering_echo(&input, Some(context.as_str()), &terms);
+        assert!(
+            !result.text.trim().is_empty(),
+            "expected deliverable text, got cleared={} text={:?}",
+            result.cleared,
+            result.text
+        );
         assert!(!result.cleared);
     }
 

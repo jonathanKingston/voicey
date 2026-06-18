@@ -1,0 +1,26 @@
+{
+  "description": "Read-aloud #5: real filename sentence with glossary+screen overlap must not be cleared as soup",
+  "text": "This file is IncrementalTranscriptionCoordinator dot Swift.",
+  "segments": [],
+  "voice_commands_enabled": false,
+  "voice_commands": [],
+  "decoder_context": "Vocabulary: Voicey, IncrementalTranscriptionCoordinator.swift, Qwen, voicey-text, UtteranceTranscriptionFinish.swift, Klorp-9-alpha, ZorbnaxWorker, xyzzy-protocol, metformin, HbA1c, coordinator, Incremental, dot, Transcription, Agents",
+  "steering_terms": [
+    "IncrementalTranscriptionCoordinator.swift",
+    "Voicey",
+    "Qwen",
+    "voicey-text",
+    "UtteranceTranscriptionFinish.swift",
+    "Klorp-9-alpha",
+    "ZorbnaxWorker",
+    "xyzzy-protocol",
+    "metformin",
+    "HbA1c",
+    "coordinator",
+    "Incremental",
+    "dot",
+    "Transcription",
+    "Agents"
+  ],
+  "expected": "This file is IncrementalTranscriptionCoordinator dot Swift."
+}
