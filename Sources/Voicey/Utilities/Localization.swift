@@ -352,6 +352,30 @@ enum L10n {
         }
     }
 
+    // MARK: - Dictation history (local archive)
+
+    enum DictationHistory {
+        static var sectionTitle: String { L10n.string("dictationHistory.sectionTitle") }
+        static var enableToggle: String { L10n.string("dictationHistory.enableToggle") }
+        static var enableDescription: String { L10n.string("dictationHistory.enableDescription") }
+        static var empty: String { L10n.string("dictationHistory.empty") }
+        static var deleteAll: String { L10n.string("dictationHistory.deleteAll") }
+        static var revealInFinder: String { L10n.string("dictationHistory.revealInFinder") }
+        static var deleteFailed: String { L10n.string("dictationHistory.deleteFailed") }
+        static var play: String { L10n.string("dictationHistory.play") }
+        static var stop: String { L10n.string("dictationHistory.stop") }
+        static var errorLabel: String { L10n.string("dictationHistory.errorLabel") }
+        static var processedText: String { L10n.string("dictationHistory.processedText") }
+        static var rawText: String { L10n.string("dictationHistory.rawText") }
+        static var partialText: String { L10n.string("dictationHistory.partialText") }
+        static var outcomeCompleted: String { L10n.string("dictationHistory.outcomeCompleted") }
+        static var outcomeEmpty: String { L10n.string("dictationHistory.outcomeEmpty") }
+        static var outcomeError: String { L10n.string("dictationHistory.outcomeError") }
+        static func durationSeconds(_ seconds: Double) -> String {
+            L10n.string("dictationHistory.durationSeconds", String(format: "%.1f", seconds))
+        }
+    }
+
     // MARK: - Voice Commands
 
     enum VoiceCommands {

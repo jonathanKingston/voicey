@@ -231,6 +231,20 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     XCTAssertEqual(called.value, 0)
   }
 
+  func testArchivedAudioSamplesMatchTranscribedChunks() async throws {
+    let coordinator = IncrementalTranscriptionCoordinator(
+      configuration: makeConfiguration(),
+      transcribe: { _ in self.result("hello") },
+      onUpdate: { _ in }
+    )
+    let utterance = speech(800)
+    coordinator.append(samples: utterance)
+    _ = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
+    let archived = coordinator.archivedAudioSamples()
+    XCTAssertEqual(archived.count, utterance.count)
+    XCTAssertEqual(archived, utterance)
+  }
+
   /// `hasBufferedIncrementalAudio` gates the `voicey-capture` finish path: it must be
   /// false on a fresh coordinator, true once streamed samples are buffered, and false
   /// again after reset. (`append` is dispatched onto the coordinator's serial queue, so a

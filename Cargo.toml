@@ -7,6 +7,7 @@ members = [
   "crates/voicey-fetch",
   "crates/voicey-capture",
   "crates/voicey-text",
+  "crates/voicey-archive",
   "crates/voicey-worker-stubs",
 ]
 
