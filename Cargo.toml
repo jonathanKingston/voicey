@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
   "crates/voicey-protocol",
   "crates/voicey-pcm",
@@ -14,6 +14,9 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+# Matches `rust-toolchain.toml`. Declaring it turns on Cargo's MSRV-aware resolver so
+# `cargo update` (and Dependabot) cannot pick crates that need a newer rustc than CI pins.
+rust-version = "1.86.0"
 
 # Bundled workers ship via `make build-rust-release` / `bundle-direct`.
 # `strip` drops debug symbols from release artifacts (codesign/notarization unchanged).

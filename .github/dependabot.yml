@@ -1,7 +1,47 @@
 version: 2
+
+# Three ecosystems are in this repo and all three need coverage:
+#   swift          -> Package.swift (app + VoiceyCore)
+#   cargo          -> Cargo.toml workspace + crates/* (Rust workers)
+#   github-actions -> .github/workflows/*.yml
+#
+# Swift version updates additionally require `Package.resolved` to be committed
+# (it was previously in .gitignore, which left Dependabot with nothing to resolve
+# against). Regenerate it with `swift package resolve` when bumping a dependency.
 updates:
   - package-ecosystem: swift
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - swift
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - rust
+    groups:
+      # Transitive/patch churn lands as one PR; direct majors still get their own.
+      cargo-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions-all:
+        patterns:
+          - "*"

@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Rust toolchain (protocol fixture generation)
         uses: dtolnay/rust-toolchain@1.86.0
@@ -26,6 +26,11 @@ jobs:
       - name: Generate protocol fixtures
         run: cargo run -p voicey-protocol --bin gen-fixtures
 
+      # Held at v2: v3 installs via Swiftly and verifies its download with gpg, which
+      # fails on the runner with "Can't check signature: No public key". The only escape
+      # hatch v3 offers is `skip-verify-signature: true`, and skipping signature
+      # verification on a toolchain download is not a trade worth making. v3 also still
+      # targets Node 20, so the bump buys nothing here.
       - name: Swift toolchain
         uses: swift-actions/setup-swift@v2
         with:
