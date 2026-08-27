@@ -2,6 +2,7 @@
 name = "voicey-worker-stubs"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "Test-only JSONL worker stubs for Linux supervisor integration tests"
 publish = false
 

@@ -21,7 +21,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Swift toolchain
         run: swift --version
@@ -34,7 +34,7 @@ jobs:
 
       - name: Upload VoiceyTests log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: voiceytests-log
           path: voiceytests.log

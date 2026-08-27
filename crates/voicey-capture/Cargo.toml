@@ -2,6 +2,7 @@
 name = "voicey-capture"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "voicey-capture"
