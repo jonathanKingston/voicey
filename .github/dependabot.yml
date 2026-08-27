@@ -41,6 +41,21 @@ updates:
     labels:
       - dependencies
       - github-actions
+    ignore:
+      # dtolnay/rust-toolchain selects the toolchain BY REF: `@1.86.0` installs Rust
+      # 1.86.0. Dependabot reads that ref as an action version and bumps it to the
+      # highest-sorting branch in the action repo (249 of them: 1.100.0, nightly,
+      # stable, ...). It proposed `@1.100.0` in #228; Rust 1.100.0 does not exist,
+      # so `rustup toolchain install` 404s and every Linux job dies in seconds.
+      # The toolchain is pinned in `rust-toolchain.toml` — bump it there.
+      - dependency-name: dtolnay/rust-toolchain
+      # v3 installs via Swiftly and gpg-verifies the download, which fails on the
+      # runner with "Can't check signature: No public key" (#227, #228). Its only
+      # workaround is `skip-verify-signature: true`. Revisit when v3 fixes the
+      # keyring or v4 drops the Swiftly path.
+      - dependency-name: swift-actions/setup-swift
+        versions:
+          - ">=3.0.0"
     groups:
       actions-all:
         patterns:
