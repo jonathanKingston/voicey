@@ -231,6 +231,19 @@ final class IncrementalTranscriptionCoordinatorTests: XCTestCase {
     XCTAssertEqual(called.value, 0)
   }
 
+  /// flushAndFinish releases buffered PCM once the combined result is built.
+  func testFlushAndFinishReleasesBufferedAudio() async throws {
+    let coordinator = IncrementalTranscriptionCoordinator(
+      configuration: makeConfiguration(),
+      transcribe: { _ in self.result("single") },
+      onUpdate: { _ in }
+    )
+
+    coordinator.append(samples: speech(300))
+    _ = try await coordinator.flushAndFinish(applyTrailingTrimHeuristic: false)
+    XCTAssertFalse(coordinator.hasBufferedIncrementalAudio)
+  }
+
   /// `hasBufferedIncrementalAudio` gates the `voicey-capture` finish path: it must be
   /// false on a fresh coordinator, true once streamed samples are buffered, and false
   /// again after reset. (`append` is dispatched onto the coordinator's serial queue, so a
