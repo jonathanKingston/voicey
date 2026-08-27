@@ -16,7 +16,8 @@ xcuserdata/
 # Swift Package Manager
 .build/
 .swiftpm/
-Package.resolved
+# Package.resolved IS tracked: it pins exact dependency versions for reproducible
+# app builds and is what Dependabot resolves Swift updates against.
 /target/
 
 # Generated from voicey-protocol types (see: make protocol-fixtures)
