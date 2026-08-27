@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Rust toolchain (protocol fixture generation)
-        uses: dtolnay/rust-toolchain@1.86.0
+        uses: dtolnay/rust-toolchain@1.100.0
 
       - name: Generate protocol fixtures
         run: cargo run -p voicey-protocol --bin gen-fixtures
@@ -32,7 +32,7 @@ jobs:
       # verification on a toolchain download is not a trade worth making. v3 also still
       # targets Node 20, so the bump buys nothing here.
       - name: Swift toolchain
-        uses: swift-actions/setup-swift@v2
+        uses: swift-actions/setup-swift@v3
         with:
           swift-version: "5.10"
 
