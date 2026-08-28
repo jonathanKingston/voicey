@@ -27,9 +27,14 @@ BENCHMARK_COMMON_VOICE_HF_DIR = benchmark-data/common-voice/prepared/$(subst /,_
 BENCHMARK_COMMON_VOICE_MDC_DIR = benchmark-data/common-voice/prepared/$(BENCHMARK_COMMON_VOICE_DATASET)/$(BENCHMARK_COMMON_VOICE_SPLIT)-limit$(BENCHMARK_COMMON_VOICE_LIMIT)-seed$(BENCHMARK_COMMON_VOICE_SEED)
 BENCHMARK_COMMON_VOICE_DIR = $(if $(filter hf-stream,$(BENCHMARK_COMMON_VOICE_SOURCE)),$(BENCHMARK_COMMON_VOICE_HF_DIR),$(BENCHMARK_COMMON_VOICE_MDC_DIR))
 BENCHMARK_VOICEY_MODELS ?= qwen3-asr-0.6b-6bit qwen3-asr-1.7b-bf16 granite-4.0-1b-speech small.en base.en
+APPLE_SPEECH_BENCHMARK_DIR = Benchmarks/AppleSpeech
+APPLE_SPEECH_BENCHMARK_BIN = $(APPLE_SPEECH_BENCHMARK_DIR)/.build/debug/voicey-apple-speech-benchmark
+BENCHMARK_APPLE_SPEECH_LOCALE ?= en-US
+BENCHMARK_APPLE_SPEECH_PRESET ?= offline
+BENCHMARK_APPLE_SPEECH_WARMUP ?= 1
 QWEN_CACHE_DIR = $(HOME)/Library/Caches/qwen3-speech
 
-.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
+.PHONY: all build build-release release release-direct build-rust build-rust-release protocol-fixtures test-protocol test-text test-supervisor-unit test-supervisor-integration ship-release clean run run-binary run-appstore run-appstore-binary install logs logs-direct benchmark-common-voice benchmark-prepare-common-voice benchmark-download-models benchmark-run-common-voice build-apple-speech-benchmark probe-apple-speech-assets benchmark-run-apple-speech-common-voice benchmark-run-apple-speech-vs-qwen-common-voice test-common-voice-benchmark reset-permissions reset-permissions-direct reset-permissions-direct-relaunch voicey-quit dev-restart benchmark-golden-fixtures benchmark-compare-runtime benchmark-runtime-parity-common-voice benchmark-measure-runtime-memory run-multiprocess
 
 all: build
 
@@ -517,6 +522,13 @@ xcode-package:
 format:
 	swift-format -i -r Sources/
 
+# Build the standalone Apple SpeechAnalyzer eval CLI (macOS 26+ SDK required).
+build-apple-speech-benchmark:
+	cd "$(APPLE_SPEECH_BENCHMARK_DIR)" && swift build
+
+probe-apple-speech-assets: build-apple-speech-benchmark
+	"$(APPLE_SPEECH_BENCHMARK_BIN)" --probe-assets --locale "$(BENCHMARK_APPLE_SPEECH_LOCALE)" --json
+
 # Run the Common Voice benchmark harness.
 benchmark-common-voice:
 	python3 scripts/benchmark_common_voice.py $(ARGS)
@@ -545,6 +557,33 @@ benchmark-run-common-voice: build build-rust benchmark-prepare-common-voice benc
 		--limit "$(BENCHMARK_COMMON_VOICE_LIMIT)" \
 		--seed "$(BENCHMARK_COMMON_VOICE_SEED)" \
 		$(foreach model,$(BENCHMARK_VOICEY_MODELS),--voicey-model "$(model)") \
+		--measure-duration
+
+# Apple SpeechAnalyzer only (macOS 26+).
+benchmark-run-apple-speech-common-voice: build-apple-speech-benchmark benchmark-prepare-common-voice
+	python3 scripts/benchmark_common_voice.py \
+		--tsv "$(BENCHMARK_COMMON_VOICE_DIR)/$(BENCHMARK_COMMON_VOICE_SPLIT).tsv" \
+		--clips-dir "$(BENCHMARK_COMMON_VOICE_DIR)/clips" \
+		--limit "$(BENCHMARK_COMMON_VOICE_LIMIT)" \
+		--seed "$(BENCHMARK_COMMON_VOICE_SEED)" \
+		--apple-speech \
+		--apple-speech-locale "$(BENCHMARK_APPLE_SPEECH_LOCALE)" \
+		--apple-speech-preset "$(BENCHMARK_APPLE_SPEECH_PRESET)" \
+		--apple-speech-warmup "$(BENCHMARK_APPLE_SPEECH_WARMUP)" \
+		--measure-duration
+
+# Side-by-side Apple Speech vs Qwen on the default Common Voice slice (macOS 26+).
+benchmark-run-apple-speech-vs-qwen-common-voice: build build-rust build-apple-speech-benchmark benchmark-prepare-common-voice benchmark-download-models
+	python3 scripts/benchmark_common_voice.py \
+		--tsv "$(BENCHMARK_COMMON_VOICE_DIR)/$(BENCHMARK_COMMON_VOICE_SPLIT).tsv" \
+		--clips-dir "$(BENCHMARK_COMMON_VOICE_DIR)/clips" \
+		--limit "$(BENCHMARK_COMMON_VOICE_LIMIT)" \
+		--seed "$(BENCHMARK_COMMON_VOICE_SEED)" \
+		--voicey-model qwen3-asr-1.7b-bf16 \
+		--apple-speech \
+		--apple-speech-locale "$(BENCHMARK_APPLE_SPEECH_LOCALE)" \
+		--apple-speech-preset "$(BENCHMARK_APPLE_SPEECH_PRESET)" \
+		--apple-speech-warmup "$(BENCHMARK_APPLE_SPEECH_WARMUP)" \
 		--measure-duration
 
 # Validate the benchmark harness without requiring a real Common Voice download.
@@ -750,6 +789,10 @@ help:
 	@echo "Testing:"
 	@echo "  test-sparkle-linking - Verify Sparkle is only linked in direct builds"
 	@echo "  benchmark-common-voice - Run Common Voice benchmark harness (pass ARGS='...')"
+	@echo "  build-apple-speech-benchmark - Build SpeechAnalyzer eval CLI (macOS 26+ SDK)"
+	@echo "  probe-apple-speech-assets - Print installed Speech asset status (macOS 26+)"
+	@echo "  benchmark-run-apple-speech-common-voice - Common Voice WER for Apple Speech only"
+	@echo "  benchmark-run-apple-speech-vs-qwen-common-voice - Apple Speech vs Qwen 1.7B"
 	@echo "  test-common-voice-benchmark - Test benchmark harness fixtures"
 
 # Full release process

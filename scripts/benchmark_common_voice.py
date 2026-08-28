@@ -162,6 +162,45 @@ def build_parser() -> argparse.ArgumentParser:
     help="Voicey binary used by --voicey-model. Defaults to .build/debug/Voicey.",
   )
   parser.add_argument(
+    "--apple-speech",
+    action="store_true",
+    help=(
+      "Benchmark Apple's SpeechAnalyzer via the standalone "
+      "`voicey-apple-speech-benchmark` CLI (macOS 26+)."
+    ),
+  )
+  parser.add_argument(
+    "--apple-speech-binary",
+    type=Path,
+    default=Path("Benchmarks/AppleSpeech/.build/debug/voicey-apple-speech-benchmark"),
+    help=(
+      "Apple Speech benchmark executable used with --apple-speech. "
+      "Build with `make build-apple-speech-benchmark`."
+    ),
+  )
+  parser.add_argument(
+    "--apple-speech-locale",
+    default="en-US",
+    help="BCP-47 locale passed to --apple-speech runs. Defaults to en-US.",
+  )
+  parser.add_argument(
+    "--apple-speech-preset",
+    choices=("offline", "live", "transcription", "progressiveTranscription", "progressiveLiveTranscription"),
+    default="offline",
+    help="Apple SpeechTranscriber preset. offline/transcription (default) or live/progressiveTranscription.",
+  )
+  parser.add_argument(
+    "--apple-speech-context",
+    default="",
+    help="Comma-separated contextual strings for Apple AnalysisContext steering eval.",
+  )
+  parser.add_argument(
+    "--apple-speech-warmup",
+    type=int,
+    default=1,
+    help="Untimed Apple transcribes before each measured clip. Defaults to 1.",
+  )
+  parser.add_argument(
     "--limit",
     type=positive_int,
     default=DEFAULT_LIMIT,
@@ -325,6 +364,46 @@ def render_command(runner: Runner, sample: Sample) -> str:
   )
 
 
+def extract_transcript(stdout: str, transcript_regex: str | None) -> str:
+  stripped = stdout.strip()
+  if transcript_regex is None and stripped.startswith("{"):
+    try:
+      payload = json.loads(stripped)
+    except json.JSONDecodeError:
+      payload = None
+    if isinstance(payload, dict) and isinstance(payload.get("text"), str):
+      return payload["text"].strip()
+
+  if transcript_regex is None:
+    return stripped
+
+  match = re.search(transcript_regex, stdout, flags=re.MULTILINE)
+  if match is None:
+    raise BenchmarkError("transcript regex did not match command stdout")
+
+  if "text" in match.groupdict():
+    return match.group("text").strip()
+  if match.lastindex:
+    return match.group(1).strip()
+  return match.group(0).strip()
+
+
+def processing_seconds_from_stdout(stdout: str, elapsed_seconds: float) -> float:
+  stripped = stdout.strip()
+  if not stripped.startswith("{"):
+    return elapsed_seconds
+  try:
+    payload = json.loads(stripped)
+  except json.JSONDecodeError:
+    return elapsed_seconds
+  if not isinstance(payload, dict):
+    return elapsed_seconds
+  processing_seconds = payload.get("processingSeconds")
+  if isinstance(processing_seconds, (int, float)):
+    return float(processing_seconds)
+  return elapsed_seconds
+
+
 def run_transcription_command(
   runner: Runner,
   sample: Sample,
@@ -364,22 +443,8 @@ def run_transcription_command(
       f"{runner.name} produced an empty transcript on {sample.relative_audio_path}"
     )
 
-  return prediction, stdout, stderr, elapsed_seconds
-
-
-def extract_transcript(stdout: str, transcript_regex: str | None) -> str:
-  if transcript_regex is None:
-    return stdout.strip()
-
-  match = re.search(transcript_regex, stdout, flags=re.MULTILINE)
-  if match is None:
-    raise BenchmarkError("transcript regex did not match command stdout")
-
-  if "text" in match.groupdict():
-    return match.group("text").strip()
-  if match.lastindex:
-    return match.group(1).strip()
-  return match.group(0).strip()
+  processing_seconds = processing_seconds_from_stdout(stdout, elapsed_seconds)
+  return prediction, stdout, stderr, processing_seconds
 
 
 def normalize_text(text: str, case_sensitive: bool, keep_punctuation: bool) -> str:
@@ -639,8 +704,14 @@ def format_optional_rate(value: float | None) -> str:
 
 
 def benchmark(args: argparse.Namespace) -> int:
-  if (args.voicey_model or args.voicey_incremental_model) and not args.model_command:
+  use_voicey_batch = (
+    (args.voicey_model or args.voicey_incremental_model)
+    and not args.model_command
+  )
+  if use_voicey_batch and not args.apple_speech:
     return benchmark_voicey_batch(args)
+  if use_voicey_batch and args.apple_speech and not args.voicey_incremental_model:
+    return benchmark_voicey_batch_with_apple(args)
   if args.voicey_incremental_model:
     raise BenchmarkError(
       "--voicey-incremental-model uses the optimized batch runner and cannot be "
@@ -649,10 +720,21 @@ def benchmark(args: argparse.Namespace) -> int:
 
   runners: list[Runner] = list(args.model_command)
   runners.extend(voicey_runners(args.voicey_model, args.voicey_binary))
+  if args.apple_speech:
+    runners.extend(
+      apple_speech_runners(
+        binary=args.apple_speech_binary,
+        locale=args.apple_speech_locale,
+        preset=args.apple_speech_preset,
+        context=args.apple_speech_context,
+        warmup=args.apple_speech_warmup,
+      )
+    )
   runner_names = [runner.name for runner in runners]
   if not runners:
     raise BenchmarkError(
-      "provide at least one --model-command, --voicey-model, or --voicey-incremental-model"
+      "provide at least one --model-command, --voicey-model, --voicey-incremental-model, "
+      "or --apple-speech"
     )
   if len(set(runner_names)) != len(runner_names):
     raise BenchmarkError("model command names must be unique")
@@ -867,6 +949,172 @@ def benchmark_voicey_batch(args: argparse.Namespace) -> int:
   return 0
 
 
+def benchmark_voicey_batch_with_apple(args: argparse.Namespace) -> int:
+  validate_paths(args.tsv, args.clips_dir)
+  if args.measure_duration:
+    ensure_ffprobe(args.ffprobe)
+
+  samples, eligible_rows = sample_common_voice_rows(
+    tsv_path=args.tsv,
+    clips_dir=args.clips_dir,
+    limit=args.limit,
+    seed=args.seed,
+    skip_missing=args.skip_missing,
+  )
+  apple_runners = apple_speech_runners(
+    binary=args.apple_speech_binary,
+    locale=args.apple_speech_locale,
+    preset=args.apple_speech_preset,
+    context=args.apple_speech_context,
+    warmup=args.apple_speech_warmup,
+  )
+
+  args.output_dir.mkdir(parents=True, exist_ok=True)
+  timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+  sample_tsv_path = args.output_dir / f"{args.suite_name}_{timestamp}_sample.tsv"
+  results_path = args.output_dir / f"{args.suite_name}_{timestamp}.jsonl"
+  summary_path = args.output_dir / f"{args.suite_name}_{timestamp}_summary.json"
+  examples_path = args.output_dir / f"{args.suite_name}_{timestamp}_examples.md"
+
+  write_batch_sample_tsv(sample_tsv_path, samples)
+  batch_runs = voicey_batch_runs(args.voicey_model, [], [])
+
+  print(
+    f"Benchmarking {len(batch_runs)} Voicey batch run(s) and {len(apple_runners)} "
+    f"Apple Speech run(s) on {len(samples)} of {eligible_rows} eligible Common Voice rows"
+  )
+  print(f"Results: {results_path}")
+
+  samples_by_audio = {sample.relative_audio_path: sample for sample in samples}
+  records: list[dict[str, Any]] = []
+  with results_path.open("w", encoding="utf-8") as results_file:
+    for run in batch_runs:
+      print(f"[batch] {run.label}", flush=True)
+      predictions = run_voicey_batch(
+        binary=args.voicey_binary,
+        command_name=run.command_name,
+        model=run.model,
+        extra_args=run.extra_args,
+        tsv_path=sample_tsv_path,
+        clips_dir=args.clips_dir,
+        timeout_seconds=args.timeout * len(samples),
+      )
+      for prediction in predictions:
+        sample = samples_by_audio[prediction["audio"]]
+        metrics = compute_text_metrics(
+          reference=sample.reference,
+          prediction=prediction["text"],
+          case_sensitive=args.case_sensitive,
+          keep_punctuation=args.keep_punctuation,
+        )
+        record = {
+          "model": run.label,
+          "source_row": sample.source_row,
+          "client_id": sample.client_id,
+          "audio": sample.relative_audio_path,
+          "reference": sample.reference,
+          "prediction": prediction["text"],
+          "normalized_reference": metrics.normalized_reference,
+          "normalized_prediction": metrics.normalized_prediction,
+          "reference_words": metrics.reference_words,
+          "word_errors": metrics.word_errors,
+          "wer": metrics.wer,
+          "reference_chars": metrics.reference_chars,
+          "char_errors": metrics.char_errors,
+          "cer": metrics.cer,
+          "processing_seconds": prediction.get("processingSeconds", 0.0),
+          "audio_seconds": prediction.get("audioSeconds"),
+          "real_time_factor": prediction.get("realTimeFactor"),
+          "stdout": "",
+          "stderr": "",
+        }
+        records.append(record)
+        results_file.write(json.dumps(record, sort_keys=True) + "\n")
+        results_file.flush()
+
+    for sample_index, sample in enumerate(samples, start=1):
+      audio_seconds = (
+        audio_duration_seconds(sample.audio_path, args.ffprobe) if args.measure_duration else None
+      )
+      for runner in apple_runners:
+        print(
+          f"[{sample_index}/{len(samples)}] {runner.name}: {sample.relative_audio_path}",
+          flush=True,
+        )
+        try:
+          prediction, stdout, stderr, processing_seconds = run_transcription_command(
+            runner=runner,
+            sample=sample,
+            timeout_seconds=args.timeout,
+            transcript_regex=args.transcript_regex,
+          )
+          metrics = compute_text_metrics(
+            reference=sample.reference,
+            prediction=prediction,
+            case_sensitive=args.case_sensitive,
+            keep_punctuation=args.keep_punctuation,
+          )
+          record = {
+            "model": runner.name,
+            "source_row": sample.source_row,
+            "client_id": sample.client_id,
+            "audio": sample.relative_audio_path,
+            "reference": sample.reference,
+            "prediction": prediction,
+            "normalized_reference": metrics.normalized_reference,
+            "normalized_prediction": metrics.normalized_prediction,
+            "reference_words": metrics.reference_words,
+            "word_errors": metrics.word_errors,
+            "wer": metrics.wer,
+            "reference_chars": metrics.reference_chars,
+            "char_errors": metrics.char_errors,
+            "cer": metrics.cer,
+            "processing_seconds": processing_seconds,
+            "audio_seconds": audio_seconds,
+            "real_time_factor": (
+              processing_seconds / audio_seconds if audio_seconds is not None else None
+            ),
+            "stdout": stdout,
+            "stderr": stderr,
+          }
+        except BenchmarkError as error:
+          if not args.keep_going:
+            raise
+          record = {
+            "model": runner.name,
+            "source_row": sample.source_row,
+            "client_id": sample.client_id,
+            "audio": sample.relative_audio_path,
+            "reference": sample.reference,
+            "error": str(error),
+          }
+
+        records.append(record)
+        results_file.write(json.dumps(record, sort_keys=True) + "\n")
+        results_file.flush()
+
+  summaries = summarize_results(records)
+  write_examples(examples_path, records, summaries)
+  write_json(
+    summary_path,
+    {
+      "created_at": timestamp,
+      "tsv": str(args.tsv),
+      "clips_dir": str(args.clips_dir),
+      "limit": args.limit,
+      "seed": args.seed,
+      "models": [run.label for run in batch_runs] + [runner.name for runner in apple_runners],
+      "results_path": str(results_path),
+      "examples_path": str(examples_path),
+      "summaries": summaries,
+    },
+  )
+  print_summary(summaries)
+  print(f"Summary: {summary_path}")
+  print(f"Examples: {examples_path}")
+  return 0
+
+
 @dataclass(frozen=True)
 class VoiceyBatchRun:
   label: str
@@ -954,6 +1202,36 @@ def voicey_transcribe_cli_flags(model: str) -> str:
   if model.startswith("qwen3-asr"):
     return "--runtime multiprocess --post-process "
   return ""
+
+
+def apple_speech_runners(
+  binary: Path,
+  locale: str,
+  preset: str,
+  context: str,
+  warmup: int,
+) -> list[Runner]:
+  label = f"apple-speech:{locale}:{preset}"
+  if context.strip():
+    label = f"{label}:context"
+
+  binary_command = shlex.quote(str(binary))
+  command_parts = [
+    binary_command,
+    f"--locale {shlex.quote(locale)}",
+    f"--preset {shlex.quote(preset)}",
+    f"--warmup {warmup}",
+    "--json",
+  ]
+  if context.strip():
+    command_parts.append(f"--context {shlex.quote(context)}")
+  command_parts.append(f"--audio {MODEL_COMMAND_PLACEHOLDER}")
+  return [
+    Runner(
+      name=label,
+      command_template=" ".join(command_parts),
+    )
+  ]
 
 
 def voicey_runners(models: Sequence[str], binary: Path) -> list[Runner]:
