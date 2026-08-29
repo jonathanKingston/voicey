@@ -42,7 +42,9 @@ final class OutputManager: @unchecked Sendable {
     }
 
     AppLogger.output.info("Deliver: TextLength=\(text.count)")
-    AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
+    if settings.enableDetailedLogging {
+      AppLogger.output.debug("Deliver: Full text: \(text, privacy: .private)")
+    }
 
     // Save original clipboard if user wants it restored after paste.
     // Keep the snapshot local so overlapping deliver flows cannot clobber each other.
