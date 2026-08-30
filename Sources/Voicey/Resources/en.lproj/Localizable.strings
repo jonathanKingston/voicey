@@ -140,6 +140,15 @@
 "transcription.screenContextOCRDescription" = "Some apps (for example Cursor or other Electron apps) expose little text via Accessibility. Voicey can capture that window and run Apple's on-device Vision OCR instead. Requires Screen Recording permission; nothing is sent to the cloud.";
 "transcription.screenContextOCRPermission" = "Screen Recording permission is required for OCR.";
 "transcription.openScreenCaptureSettings" = "Open Screen Recording Settings";
+"transcription.localLM" = "Local language model";
+"transcription.localLMEnable" = "Refine transcription with a local language model";
+"transcription.localLMDescription" = "When enabled, Voicey sends raw speech-to-text output to a localhost OpenAI-compatible server (for example LM Studio or Ollama) for spelling cleanup. Custom vocabulary and on-screen text are passed to the local model instead of Qwen3 ASR steering.";
+"transcription.localLMBaseURL" = "API base URL";
+"transcription.localLMBaseURLDescription" = "OpenAI-compatible base URL on this Mac only (for example http://127.0.0.1:1234/v1 for LM Studio or http://127.0.0.1:11434/v1 for Ollama).";
+"transcription.localLMModelName" = "Model name";
+"transcription.localLMModelNameDescription" = "Model identifier sent in chat completion requests. Use the model name shown in LM Studio or Ollama.";
+"transcription.glossaryDescriptionLocalLM" = "Terms you list here are sent to the local language model after transcription to improve spelling (along with Voicey). Separate entries with commas or new lines.";
+"transcription.screenContextDescriptionLocalLM" = "When you start recording, Voicey reads the focused field and nearby UI text in the front app and sends it to the local language model for spelling fixes. Requires Accessibility permission (same as auto-insert).";
 
 /* Voice Commands */
 "voiceCommands.enable" = "Enable Voice Commands";
