@@ -319,14 +319,14 @@ fn capture_live_samples(duration_seconds: f64) -> std::io::Result<Vec<f32>> {
     let config = device
         .default_input_config()
         .map_err(std::io::Error::other)?;
-    let sample_rate = config.sample_rate().0 as f64;
+    let sample_rate = config.sample_rate() as f64;
     let channels = config.channels() as usize;
 
     let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
     let writer = buffer.clone();
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => device.build_input_stream(
-            &config.into(),
+            config.into(),
             move |data: &[f32], _| {
                 let mut guard = writer.lock().expect("lock");
                 for frame in data.chunks(channels) {

@@ -145,14 +145,14 @@ fn record_until_stop(
     let config = device
         .default_input_config()
         .map_err(|error| error.to_string())?;
-    let sample_rate = config.sample_rate().0 as f64;
+    let sample_rate = config.sample_rate() as f64;
     let channels = config.channels() as usize;
 
     let writer = samples.clone();
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => device
             .build_input_stream(
-                &config.into(),
+                config.into(),
                 move |data: &[f32], _| {
                     let mut mono_chunk = Vec::with_capacity(data.len() / channels + 1);
                     for frame in data.chunks(channels) {
