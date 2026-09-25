@@ -161,6 +161,44 @@ fn load_wav_file_rejects_missing_path() {
     assert!(response["error"].as_str().is_some());
 }
 
+#[test]
+fn archive_utterance_from_pcm_shm_writes_session_archive() {
+    let samples = vec![0.125_f32; 400];
+    let shm_name = voicey_pcm::write_f32_samples(&samples).expect("write pcm");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let archive_root = dir.path().to_string_lossy();
+
+    let request = serde_json::json!({
+        "type": "archive_utterance",
+        "id": "arch-1",
+        "archive_root": archive_root,
+        "audio": {
+            "source": "pcm_shm",
+            "shm_name": shm_name,
+            "sample_count": samples.len()
+        },
+        "metadata": {
+            "outcome": "completed",
+            "model_id": "qwen",
+            "language_id": "en",
+            "raw_text": "a",
+            "processed_text": "A",
+            "glossary_enabled": false,
+            "screen_context_enabled": false
+        }
+    });
+
+    let mut session = CaptureSession::spawn();
+    let response = session.request_json(&request.to_string());
+    assert_eq!(response["type"], "archive_result");
+    assert_eq!(response["ok"], true);
+
+    let _ = voicey_pcm::remove(&shm_name);
+
+    let index = std::fs::read_to_string(dir.path().join("index.jsonl")).expect("index");
+    assert!(index.contains("A"));
+}
+
 fn write_test_wav(samples: &[f32], sample_rate: u32, channels: u16) -> PathBuf {
     use hound::{SampleFormat, WavSpec, WavWriter};
 

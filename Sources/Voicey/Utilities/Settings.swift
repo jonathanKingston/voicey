@@ -49,7 +49,8 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.transcriptionScreenContextOCREnabled: false,
       Keys.transcriptionLanguageID: TranscriptionQwenLanguage.autoOption.id,
       Keys.enableDetailedLogging: false,
-      Keys.hasCompletedOnboarding: false
+      Keys.hasCompletedOnboarding: false,
+      Keys.keepDictationHistoryLocally: false
     ])
   }
 
@@ -74,6 +75,7 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let transcriptionLanguageID = "transcriptionLanguageID"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
+    static let keepDictationHistoryLocally = "keepDictationHistoryLocally"
   }
 
   // MARK: - Model
@@ -236,6 +238,12 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
   var enableDetailedLogging: Bool {
     get { defaults.bool(forKey: Keys.enableDetailedLogging) }
     set { defaults.set(newValue, forKey: Keys.enableDetailedLogging) }
+  }
+
+  /// When enabled, every utterance is stored under Application Support for local review.
+  var keepDictationHistoryLocally: Bool {
+    get { defaults.bool(forKey: Keys.keepDictationHistoryLocally) }
+    set { defaults.set(newValue, forKey: Keys.keepDictationHistoryLocally) }
   }
 
   // MARK: - Onboarding

@@ -39,7 +39,7 @@
 "settings.hotkey" = "快捷键";
 "settings.audio" = "音频";
 "settings.model" = "模型";
-"settings.transcription" = "Spelling & Context";
+"settings.transcription" = "转录";
 "settings.voiceCommands" = "语音命令";
 "settings.advanced" = "高级";
 

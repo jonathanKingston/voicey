@@ -39,7 +39,7 @@
 "settings.hotkey" = "ホットキー";
 "settings.audio" = "オーディオ";
 "settings.model" = "モデル";
-"settings.transcription" = "Spelling & Context";
+"settings.transcription" = "文字起こし";
 "settings.voiceCommands" = "音声コマンド";
 "settings.advanced" = "詳細";
 

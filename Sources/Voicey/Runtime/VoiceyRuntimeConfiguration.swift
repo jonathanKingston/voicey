@@ -140,6 +140,10 @@ enum VoiceyRuntimeConfiguration {
     workerBinary(named: "voicey-text")
   }
 
+  static var archiveWorkerPath: String? {
+    workerBinary(named: "voicey-archive")
+  }
+
   static var rustSupervisorPath: String? {
     workerBinary(named: "voicey-supervisor")
   }

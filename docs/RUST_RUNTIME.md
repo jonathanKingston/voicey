@@ -64,6 +64,7 @@ Multi-process core for Voicey on macOS:
 | Capture | `voicey-capture` | Hotkey microphone recording |
 | Fetch | `voicey-fetch` | Qwen model file downloads |
 | Text post-process | `voicey-text` | Expansions, voice commands after infer; Whisper noise filter only with segments (benchmark) |
+| Dictation history (opt-in) | `voicey-archive` | WAV + `index.jsonl` under Application Support; Swift UI reads index, writes via JSONL worker |
 
 Mic capture, UI, and paste remain in the main app process unless noted above.
 

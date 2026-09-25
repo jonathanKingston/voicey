@@ -112,6 +112,15 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
     }
   }
 
+  /// Concatenates chunk samples that were transcribed for this utterance (call after `flushAndFinish`).
+  func archivedAudioSamples() -> [Float] {
+    stateQueue.sync {
+      completedChunks
+        .sorted { $0.chunk.id < $1.chunk.id }
+        .flatMap { $0.chunk.samples }
+    }
+  }
+
   private var isProcessing: Bool {
     stateQueue.sync {
       processingTask != nil || isProcessingChunk || !pendingChunks.isEmpty
