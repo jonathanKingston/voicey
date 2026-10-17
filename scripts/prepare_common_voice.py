@@ -56,6 +56,13 @@ class CommonVoicePrepareError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class MDCDownloadPlan:
+  download_url: str
+  filename: str
+  size_bytes: int
+
+
+@dataclass(frozen=True)
 class PreparedCommonVoiceDataset:
   archive_path: Path
   prepared_dir: Path
@@ -265,6 +272,19 @@ def guard_known_dataset_size(
   )
 
 
+def mdc_client(install_sdk: bool):
+  ensure_datacollective_sdk(install_sdk)
+  from datacollective import DataCollective  # type: ignore
+
+  try:
+    return DataCollective()
+  except ValueError as error:
+    raise CommonVoicePrepareError(
+      "MDC denied dataset access. Make sure MDC_API_KEY is set and that you "
+      "accepted the dataset terms on Mozilla Data Collective."
+    ) from error
+
+
 def download_dataset_archive(
   dataset_id: str,
   download_dir: Path,
@@ -273,17 +293,13 @@ def download_dataset_archive(
   allow_large_download: bool,
 ) -> Path:
   guard_known_dataset_size(dataset_id, max_archive_gb, allow_large_download)
-  ensure_datacollective_sdk(install_sdk)
-  from datacollective import download_dataset  # type: ignore
-
   download_dir.mkdir(parents=True, exist_ok=True)
   try:
-    archive_path = download_dataset(
+    client = mdc_client(install_sdk)
+    archive_path = client.get_dataset(
       dataset_id,
-      download_directory=str(download_dir),
+      download_path=str(download_dir),
       show_progress=True,
-      overwrite_existing=False,
-      enable_logging=True,
     )
   except PermissionError as error:
     raise CommonVoicePrepareError(
@@ -292,26 +308,53 @@ def download_dataset_archive(
     ) from error
   except Exception as error:
     raise CommonVoicePrepareError(f"MDC dataset download failed: {error}") from error
+  if not archive_path:
+    raise CommonVoicePrepareError(f"MDC dataset download failed for {dataset_id}")
   return Path(archive_path)
 
 
-def mdc_download_plan(dataset_id: str, download_dir: Path, install_sdk: bool):
-  ensure_datacollective_sdk(install_sdk)
-  from datacollective.download import DOWNLOAD_SOURCE_SAVE, _get_download_plan  # type: ignore
+def mdc_download_plan(dataset_id: str, download_dir: Path, install_sdk: bool) -> MDCDownloadPlan:
+  import requests
 
+  download_dir.mkdir(parents=True, exist_ok=True)
   try:
-    return _get_download_plan(
-      dataset_id,
-      str(download_dir),
-      download_source=DOWNLOAD_SOURCE_SAVE,
-    )
+    client = mdc_client(install_sdk)
+    download_session_url = client.api_url + "datasets/" + dataset_id + "/download"
+    headers = {"Authorization": "Bearer " + client.api_key}
+    response = requests.post(download_session_url, headers=headers, timeout=60)
+    response.raise_for_status()
+    payload = response.json()
   except PermissionError as error:
     raise CommonVoicePrepareError(
       "MDC denied dataset access. Make sure MDC_API_KEY is set and that you "
       f"accepted the dataset terms: https://mozilladatacollective.com/datasets/{dataset_id}"
     ) from error
+  except requests.HTTPError as error:
+    if error.response is not None and error.response.status_code in {401, 403}:
+      raise CommonVoicePrepareError(
+        "MDC denied dataset access. Make sure MDC_API_KEY is set and that you "
+        f"accepted the dataset terms: https://mozilladatacollective.com/datasets/{dataset_id}"
+      ) from error
+    raise CommonVoicePrepareError(f"Unable to create MDC download session: {error}") from error
   except Exception as error:
     raise CommonVoicePrepareError(f"Unable to create MDC download session: {error}") from error
+
+  if "error" in payload:
+    raise CommonVoicePrepareError(f"MDC API error: {payload['error']}")
+
+  download_url = payload.get("downloadUrl")
+  filename = payload.get("filename")
+  if not download_url or not filename:
+    raise CommonVoicePrepareError(f"Unexpected MDC download response: {payload}")
+
+  size_bytes = int(
+    payload.get("sizeBytes") or payload.get("size_bytes") or payload.get("size") or 0
+  )
+  return MDCDownloadPlan(
+    download_url=str(download_url),
+    filename=str(filename),
+    size_bytes=size_bytes,
+  )
 
 
 def prepared_directory(prepared_root: Path, dataset_id: str, split: str, limit: int, seed: int) -> Path:
@@ -475,7 +518,6 @@ def prepare_huggingface_stream(args: argparse.Namespace) -> PreparedCommonVoiceD
     args.hf_config,
     split=args.split,
     streaming=True,
-    trust_remote_code=True,
   )
   dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
   dataset = dataset.shuffle(seed=args.seed, buffer_size=args.hf_shuffle_buffer)

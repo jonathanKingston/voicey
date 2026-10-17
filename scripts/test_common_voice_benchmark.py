@@ -67,6 +67,35 @@ class CommonVoiceBenchmarkTests(unittest.TestCase):
     self.assertIn("--runtime multiprocess", runners[0].command_template)
     self.assertIn("--post-process", runners[0].command_template)
 
+  def test_apple_speech_runner_uses_json_and_locale(self) -> None:
+    runners = benchmark.apple_speech_runners(
+      binary=Path("Benchmarks/AppleSpeech/.build/debug/voicey-apple-speech-benchmark"),
+      locale="en-US",
+      preset="offline",
+      context="",
+      warmup=1,
+    )
+
+    self.assertEqual(len(runners), 1)
+    self.assertEqual(runners[0].name, "apple-speech:en-US:offline")
+    self.assertIn("--json", runners[0].command_template)
+    self.assertIn("--locale en-US", runners[0].command_template)
+    self.assertIn("{audio}", runners[0].command_template)
+
+  def test_extract_transcript_parses_json_stdout(self) -> None:
+    transcript = benchmark.extract_transcript(
+      '{"backend":"apple-speech-analyzer","text":"hello world"}',
+      None,
+    )
+    self.assertEqual(transcript, "hello world")
+
+  def test_processing_seconds_from_json_stdout(self) -> None:
+    seconds = benchmark.processing_seconds_from_stdout(
+      '{"processingSeconds": 0.42}',
+      elapsed_seconds=9.0,
+    )
+    self.assertEqual(seconds, 0.42)
+
   def test_voicey_batch_runs_distinguish_incremental_mode(self) -> None:
     runs = benchmark.voicey_batch_runs(
       ["small.en"],
