@@ -46,6 +46,14 @@ From [`model-session-lifecycle-races.md`](explorations/model-session-lifecycle-r
 - [ ] Start recording, trigger a model change from Settings — clear user feedback (no silent reset).
 - [ ] Pending model upgrade cannot overlap rapid hotkey start/stop.
 
+## Model prewarming after download
+
+- [ ] From fresh setup with no model downloaded, download the default model. Without pressing the hotkey or reopening Settings, verify model status changes to loading, then ready.
+- [ ] Press the hotkey while prewarming is in progress: loading feedback appears without restarting the worker. Once ready, pressing the hotkey starts recording.
+- [ ] Once ready, the first hotkey recording starts without a model-loading overlay.
+- [ ] Download another model while the selected model is available: the active selection and recording remain unchanged. Selecting the new model prewarms it.
+- [ ] Cancel or fail a download: no prewarm starts; retrying successfully starts prewarming.
+
 ## Screen context incremental reuse
 
 From [`screen-context-incremental-reuse.md`](explorations/screen-context-incremental-reuse.md) (implemented on `main`).

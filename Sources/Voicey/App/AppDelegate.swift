@@ -56,7 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // ESC key monitors
   private var localEscKeyMonitor: Any?
   private var selectedModelObserver: Any?
+  private var modelDownloadObserver: Any?
   private var workspaceWakeObserver: Any?
+  @MainActor private var modelPreload: (model: SpeechModel, task: Task<Bool, Never>)?
 
   // Model engine switch lock — held during upgrades and settings-driven model loads.
   private var isModelEngineSwitchInProgress = false
@@ -131,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Keep runtime state in sync when the user changes models from settings.
     setupSelectedModelObserver()
+    setupModelDownloadObserver()
 
     // Setup ESC key monitor
     setupEscapeKeyMonitor()
@@ -206,6 +209,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       NotificationCenter.default.removeObserver(observer)
     }
 
+    if let observer = modelDownloadObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
+
     let shutdownSemaphore = DispatchSemaphore(value: 0)
     Task {
       await VoiceyRuntimeSupervisor.shared.shutdownGracefully()
@@ -272,6 +279,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @MainActor
   private func preloadQwen(selectedModel: SpeechModel) async -> Bool {
+    if let preload = modelPreload {
+      let succeeded = await preload.task.value
+      if preload.model == selectedModel { return succeeded }
+      // A different model must finish loading before replacing the active engine.
+      return await preloadQwen(selectedModel: selectedModel)
+    }
+
+    let task = Task { @MainActor in
+      let succeeded = await self.performQwenPreload(selectedModel: selectedModel)
+      self.modelPreload = nil
+      return succeeded
+    }
+    modelPreload = (selectedModel, task)
+    return await task.value
+  }
+
+  @MainActor
+  private func performQwenPreload(selectedModel: SpeechModel) async -> Bool {
     guard VoiceyRuntimeConfiguration.usesInferWorker(for: selectedModel) else {
       await qwenEngine?.preloadModel()
       return qwenEngine?.isModelLoaded == true
@@ -373,6 +398,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) { [weak self] notification in
       guard let self, let model = notification.object as? SpeechModel else { return }
       Task { @MainActor in
+        await self.handleSelectedModelChange(model)
+      }
+    }
+  }
+
+  private func setupModelDownloadObserver() {
+    modelDownloadObserver = NotificationCenter.default.addObserver(
+      forName: .voiceyModelDownloadDidComplete,
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      guard let self, let model = notification.object as? SpeechModel else { return }
+      Task { @MainActor in
+        guard model.isUserFacing, ModelManager.shared.isDownloaded(model) else { return }
+        let selectedModel = self.userFacingSelectedModel()
+        // Downloading another model must not replace an available selection.
+        guard model == selectedModel || !ModelManager.shared.isDownloaded(selectedModel) else {
+          return
+        }
+        guard !self.appState.modelStatus.isReady || !self.isActiveEngineLoaded else { return }
+        SettingsManager.shared.selectedModel = model
         await self.handleSelectedModelChange(model)
       }
     }
@@ -631,10 +677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appState.modelStatus = .notDownloaded
       debugPrint("⏳ Model download in progress...", category: "MODEL")
 
-      // Wait for download to complete, then preload
-      Task {
-        await waitForDownloadAndPreload(showUI: showUI)
-      }
+      // The download completion observer starts preloading as soon as verification succeeds.
     } else {
       // No model and no download - route users to settings instead of a separate modal.
       appState.modelStatus = .notDownloaded
@@ -811,45 +854,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func hideLoadingWindow() {
     loadingWindow?.close()
     loadingWindow = nil
-  }
-
-  /// Wait for an in-progress download to complete, then preload the model
-  private func waitForDownloadAndPreload(showUI: Bool) async {
-    // Poll until download completes
-    while ModelManager.shared.isDownloading.values.contains(true) {
-      try? await Task.sleep(nanoseconds: 500_000_000)  // Check every 0.5s
-    }
-
-    // Refresh and check if we now have a model
-    await MainActor.run {
-      ModelManager.shared.loadDownloadedModels()
-    }
-
-    if ModelManager.shared.hasDownloadedModel {
-      debugPrint("📦 Download complete, preloading model...", category: "MODEL")
-      await MainActor.run {
-        appState.modelStatus = .loading
-        if showUI {
-          showLoadingWindow()
-        }
-      }
-
-      let success = await preloadSelectedModelWithFallback()
-
-      await MainActor.run {
-        if showUI {
-          hideLoadingWindow()
-        }
-
-        if success && self.isActiveEngineLoaded {
-          appState.modelStatus = .ready
-          debugPrint("✅ Model ready!", category: "MODEL")
-        } else {
-          let model = SettingsManager.shared.selectedModel
-          appState.modelStatus = .failed(modelLoadFailureMessage(for: model))
-        }
-      }
-    }
   }
 
   // MARK: - Transcription Control

@@ -800,6 +800,7 @@ final class ModelManager: ObservableObject, @unchecked Sendable {
           isDownloading[model] = false
           downloadTasks[model] = nil
           NotificationManager.shared.showModelDownloadComplete(model: model)
+          NotificationCenter.default.post(name: .voiceyModelDownloadDidComplete, object: model)
         }
         await recordDownloadedRevisionIfAvailable(for: model)
       } catch is CancellationError {
