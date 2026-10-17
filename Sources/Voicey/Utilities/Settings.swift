@@ -48,6 +48,9 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
       Keys.transcriptionScreenContextEnabled: true,
       Keys.transcriptionScreenContextOCREnabled: false,
       Keys.transcriptionLanguageID: TranscriptionQwenLanguage.autoOption.id,
+      Keys.localLMRefinementEnabled: false,
+      Keys.localLMBaseURL: LocalLMRefinementDefaults.baseURL,
+      Keys.localLMModelName: LocalLMRefinementDefaults.modelName,
       Keys.enableDetailedLogging: false,
       Keys.hasCompletedOnboarding: false
     ])
@@ -72,6 +75,9 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     static let transcriptionScreenContextEnabled = "transcriptionScreenContextEnabled"
     static let transcriptionScreenContextOCREnabled = "transcriptionScreenContextOCREnabled"
     static let transcriptionLanguageID = "transcriptionLanguageID"
+    static let localLMRefinementEnabled = "localLMRefinementEnabled"
+    static let localLMBaseURL = "localLMBaseURL"
+    static let localLMModelName = "localLMModelName"
     static let enableDetailedLogging = "enableDetailedLogging"
     static let hasCompletedOnboarding = "hasCompletedOnboarding"
   }
@@ -193,10 +199,34 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
     set { defaults.set(newValue, forKey: Keys.transcriptionScreenContextOCREnabled) }
   }
 
+  /// When enabled, glossary and screen-context steering are sent to a localhost OpenAI-compatible
+  /// language model after transcription instead of Qwen3 ASR decoder steering.
+  var localLMRefinementEnabled: Bool {
+    get { defaults.bool(forKey: Keys.localLMRefinementEnabled) }
+    set { defaults.set(newValue, forKey: Keys.localLMRefinementEnabled) }
+  }
+
+  /// OpenAI-compatible API base URL for local LM refinement (LM Studio default port 1234).
+  var localLMBaseURL: String {
+    get {
+      defaults.string(forKey: Keys.localLMBaseURL) ?? LocalLMRefinementDefaults.baseURL
+    }
+    set { defaults.set(newValue, forKey: Keys.localLMBaseURL) }
+  }
+
+  /// Model name passed to the local LM chat completions API.
+  var localLMModelName: String {
+    get {
+      defaults.string(forKey: Keys.localLMModelName) ?? LocalLMRefinementDefaults.modelName
+    }
+    set { defaults.set(newValue, forKey: Keys.localLMModelName) }
+  }
+
   /// Qwen3-ASR spoken-language hint (`language` parameter). `auto` lets the model detect language.
   var transcriptionLanguageID: String {
     get {
-      let raw = defaults.string(forKey: Keys.transcriptionLanguageID)
+      let raw =
+        defaults.string(forKey: Keys.transcriptionLanguageID)
         ?? TranscriptionQwenLanguage.autoOption.id
       return TranscriptionQwenLanguage.normalizedStoredID(raw)
     }

@@ -45,7 +45,32 @@ final class PostProcessor {
     decoderContext: String? = nil,
     steeringTerms: [String] = []
   ) async throws -> String {
-    try await processViaRustWorker(result, decoderContext: decoderContext, steeringTerms: steeringTerms)
+    let settings = SettingsManager.shared
+    if settings.localLMRefinementEnabled {
+      let refinedText = try await LocalLMTextRefiner.refine(
+        transcript: result.text,
+        steeringTerms: steeringTerms,
+        decoderContext: decoderContext
+      )
+      let refinedResult = TranscriptionResult(
+        text: refinedText,
+        segments: result.segments,
+        language: result.language,
+        processingTime: result.processingTime,
+        performanceMetrics: result.performanceMetrics
+      )
+      return try await processViaRustWorker(
+        refinedResult,
+        decoderContext: nil,
+        steeringTerms: []
+      )
+    }
+
+    return try await processViaRustWorker(
+      result,
+      decoderContext: decoderContext,
+      steeringTerms: steeringTerms
+    )
   }
 
   private func processViaRustWorker(

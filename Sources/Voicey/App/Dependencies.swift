@@ -21,6 +21,9 @@ protocol SettingsProviding: AnyObject {
   var transcriptionScreenContextEnabled: Bool { get set }
   var transcriptionScreenContextOCREnabled: Bool { get set }
   var transcriptionLanguageID: String { get set }
+  var localLMRefinementEnabled: Bool { get set }
+  var localLMBaseURL: String { get set }
+  var localLMModelName: String { get set }
   var enableDetailedLogging: Bool { get set }
 
   func configureLaunchAtLogin(enabled: Bool)
