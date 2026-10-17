@@ -2,190 +2,105 @@ import AppKit
 import Foundation
 import os
 
-/// Manages delivering transcribed text to the user via clipboard
+/// Serializes clipboard ownership, target activation, paste dispatch and restoration.
 final class OutputManager: @unchecked Sendable {
-  private let clipboardManager = ClipboardManager.shared
+  private let clipboardManager: ClipboardManager
+  private let autoPaste: AutoPasteDelivering
   private let notifications: NotificationProviding
   private let settings: SettingsProviding
   private let permissions: PermissionsProviding
-  private var autoPasteTask: Task<Void, Never>?
-  private static let directInsertionRestoreDelayNanoseconds: UInt64 = 200_000_000
-  private static let clipboardPasteRestoreDelayNanoseconds: UInt64 = 1_000_000_000
-  private static let terminalBundleIdentifiers: Set<String> = [
-    "com.apple.Terminal",
-    "com.googlecode.iterm2",
-    "dev.warp.Warp-Stable",
-    "dev.warp.Warp",
-    "co.zeit.hyper",
-    "net.kovidgoyal.kitty",
-    "org.alacritty",
-    "com.github.wez.wezterm"
-  ]
+  @MainActor private var autoPasteTask: Task<Void, Never>?
 
   init(
     notifications: NotificationProviding = NotificationManager.shared,
     settings: SettingsProviding = SettingsManager.shared,
-    permissions: PermissionsProviding = PermissionsManager.shared
+    permissions: PermissionsProviding = PermissionsManager.shared,
+    clipboard: ClipboardManager = .shared,
+    autoPaste: AutoPasteDelivering = SystemAutoPasteDelivery()
   ) {
     self.notifications = notifications
     self.settings = settings
     self.permissions = permissions
+    self.clipboardManager = clipboard
+    self.autoPaste = autoPaste
   }
 
-  /// Deliver transcribed text by copying to clipboard and showing notification
-  func deliver(text: String, targetPID: pid_t? = nil, completion: (@Sendable () -> Void)? = nil) {
+  @discardableResult
+  func deliver(
+    text: String, targetPID: pid_t? = nil, completion: (@Sendable () -> Void)? = nil
+  ) -> Task<Void, Never> {
+    Task { @MainActor in
+      let previousTask = self.autoPasteTask
+      self.autoPasteTask = Task { @MainActor in
+        if let previousTask { await previousTask.value }
+        await self.performDelivery(text: text, targetPID: targetPID, completion: completion)
+      }
+      await self.autoPasteTask?.value
+    }
+  }
+
+  @MainActor
+  private func performDelivery(
+    text: String, targetPID: pid_t?, completion: (@Sendable () -> Void)?
+  ) async {
     guard text.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil else {
-      AppLogger.output.warning(
-        "Deliver: Skipping clipboard/auto-paste because text is empty or whitespace")
+      AppLogger.output.warning("Deliver: skipping empty transcription")
       completion?()
       return
     }
 
-    AppLogger.output.info("Deliver: TextLength=\(text.count)")
-    AppLogger.output.debug("Deliver: Full text: \"\(text)\"")
-
-    // Save original clipboard if user wants it restored after paste.
-    // Keep the snapshot local so overlapping deliver flows cannot clobber each other.
-    let restoreClipboardEnabled = settings.autoPasteEnabled && settings.restoreClipboardAfterPaste
-    let savedClipboard = restoreClipboardEnabled ? clipboardManager.captureContents() : nil
-
-    // Copy transcribed text to clipboard
+    // Snapshot and copy inside the serialized transaction. Later dictations must not
+    // overwrite this clipboard while the target is still consuming it.
+    let autoPasteEnabled = settings.autoPasteEnabled
+    let restoreEnabled = autoPasteEnabled && settings.restoreClipboardAfterPaste
+    let savedClipboard = restoreEnabled ? clipboardManager.captureContents() : nil
     clipboardManager.copy(text)
-    AppLogger.output.info("Deliver: Text copied to clipboard")
+    completion?() // Hide the recording overlay before restoring target activation.
 
-    // Verify clipboard
-    if let clipboardText = clipboardManager.currentText() {
-      if clipboardText == text {
-        AppLogger.output.info("Deliver: Clipboard verified - text matches")
-      } else {
-        AppLogger.output.warning(
-          "Deliver: Clipboard mismatch! Expected \(text.count) chars, got \(clipboardText.count)")
-      }
-    } else {
-      AppLogger.output.error("Deliver: Clipboard is empty after copy!")
+    guard autoPasteEnabled else {
+      notifications.showTranscriptionCopied()
+      return
+    }
+    guard permissions.checkAccessibilityPermission() else {
+      permissions.promptForAccessibilityPermission()
+      notifications.showTranscriptionCopied()
+      return
+    }
+    guard let targetPID, await autoPaste.activateTarget(pid: targetPID) else {
+      AppLogger.output.warning("Auto-paste: target activation failed; transcription remains on clipboard")
+      notifications.showTranscriptionCopied()
+      return
     }
 
-    // Optional auto-paste (requires Accessibility)
-    if settings.autoPasteEnabled {
-      guard permissions.checkAccessibilityPermission() else {
-        AppLogger.output.error("Auto-paste enabled but Accessibility permission is not granted")
-        permissions.promptForAccessibilityPermission()
-        completion?()
-        notifications.showTranscriptionCopied()
+    // A user copy during activation takes precedence. Do not paste unrelated clipboard data.
+    guard clipboardManager.currentText() == text else {
+      AppLogger.output.warning("Auto-paste: clipboard changed during activation; nothing dispatched")
+      return
+    }
+    let clipboardChangeCount = clipboardManager.changeCount
+    let outcome = await autoPaste.paste(text, targetPID: targetPID)
+    guard outcome == .confirmed else {
+      AppLogger.output.warning(
+        "Auto-paste: \(outcome.rawValue); retaining clipboard, no automatic retry"
+      )
+      notifications.showTranscriptionCopied()
+      return
+    }
+
+    // Confirmation is an exact AX value/selection transition, not proof of renderer send state.
+    // Leave time for the target to finish clipboard handling, then restore only our own copy.
+    if let savedClipboard {
+      do {
+        try await Task.sleep(nanoseconds: 200_000_000)
+      } catch {
+        AppLogger.output.debug("Auto-paste: cancelled before clipboard restoration")
         return
       }
-
-      AppLogger.output.info("Auto-paste enabled - attempting to insert text")
-      debugPrint("🔌 Auto-paste: Starting insert flow, targetPID=\(targetPID?.description ?? "nil")", category: "OUTPUT")
-
-      let previousTask = autoPasteTask
-      autoPasteTask = Task { @MainActor in
-        if let previousTask {
-          await previousTask.value
-        }
-
-        // Let caller clean up UI first (hide overlay, etc.)
-        completion?()
-
-        // Activate target app and wait for focus
-        await self.activateTargetApp(pid: targetPID)
-
-        let targetApp = self.resolvedTargetApplication(pid: targetPID)
-        let preferKeyboardPaste = self.shouldPreferKeyboardPaste(for: targetApp)
-        if preferKeyboardPaste {
-          AppLogger.output.info(
-            "Auto-paste: Terminal/TUI target detected (\(targetApp?.bundleIdentifier ?? "unknown")), preferring keyboard paste simulation"
-          )
-        }
-
-        // Re-copy right before paste so the target reads the transcription even if
-        // activation took a while or another deliver flow touched the pasteboard.
-        self.clipboardManager.copy(text)
-
-        // Attempt to paste via accessibility
-        let pasteResult = AccessibilityPaster.paste(text, preferKeyboardPaste: preferKeyboardPaste)
-
-        if pasteResult.succeeded {
-          AppLogger.output.info(
-            "Deliver: Auto-paste succeeded via \(pasteResult.method == .directInsertion ? "direct insertion" : "clipboard paste")"
-          )
-          debugPrint("✅ Auto-paste: Successfully inserted via Accessibility API!", category: "OUTPUT")
-
-          // Keep transcription on clipboard for terminal/TUI targets so manual retry remains possible.
-          let shouldRestoreClipboard = restoreClipboardEnabled && !preferKeyboardPaste
-          if shouldRestoreClipboard, let savedClipboard {
-            let restoreDelay = pasteResult.method.usesClipboard
-              ? Self.clipboardPasteRestoreDelayNanoseconds
-              : Self.directInsertionRestoreDelayNanoseconds
-            AppLogger.output.info(
-              "Auto-paste: Waiting \(restoreDelay / 1_000_000)ms before restoring clipboard (\(savedClipboard.count) saved item(s))"
-            )
-            try? await Task.sleep(nanoseconds: restoreDelay)
-            self.clipboardManager.restoreContents(savedClipboard)
-          } else if restoreClipboardEnabled && preferKeyboardPaste {
-            AppLogger.output.info(
-              "Auto-paste: Preserving transcription on clipboard for terminal/TUI target"
-            )
-          }
-        } else {
-          AppLogger.output.warning("Deliver: Auto-paste failed, text remains on clipboard")
-          debugPrint("❌ Auto-paste: All methods failed - text remains on clipboard", category: "OUTPUT")
-          self.notifications.showTranscriptionCopied()
-        }
+      guard clipboardManager.changeCount == clipboardChangeCount else {
+        AppLogger.output.info("Auto-paste: skipping restoration because another app changed the clipboard")
+        return
       }
-      return
+      clipboardManager.restoreContents(savedClipboard)
     }
-
-    // Show notification that text is ready to paste
-    notifications.showTranscriptionCopied()
-    AppLogger.output.info("Deliver: Notification shown - user can now press ⌘V to paste")
-
-    completion?()
-  }
-
-  /// Activate the target app and wait for it to become active
-  private func activateTargetApp(pid: pid_t?) async {
-    guard let pid = pid,
-          let targetApp = NSRunningApplication(processIdentifier: pid),
-          targetApp.bundleIdentifier != Bundle.main.bundleIdentifier
-    else {
-      debugPrint("⚠️ Auto-paste: No valid target app - pid=\(pid?.description ?? "nil")", category: "OUTPUT")
-      AppLogger.output.warning("Auto-paste: No valid target app PID captured; pasting into current focus")
-      return
-    }
-
-    debugPrint("🎯 Auto-paste: Activating target app '\(targetApp.localizedName ?? "unknown")' (pid: \(pid), bundle: \(targetApp.bundleIdentifier ?? "none"))", category: "OUTPUT")
-    let activated = targetApp.activate()
-    debugPrint("🎯 Auto-paste: activate() returned \(activated)", category: "OUTPUT")
-
-    // Wait for app to become active (up to 500ms)
-    for attempt in 1...50 {
-      if targetApp.isActive {
-        debugPrint("✅ Auto-paste: Target app became active after \(attempt * 10)ms", category: "OUTPUT")
-        break
-      }
-      try? await Task.sleep(nanoseconds: 10_000_000)  // 10ms
-    }
-
-    if !targetApp.isActive {
-      debugPrint("⚠️ Auto-paste: Target app still not active after 500ms", category: "OUTPUT")
-    }
-
-    // Extra delay for focus to settle on the text field
-    try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms more
-  }
-
-  private func resolvedTargetApplication(pid: pid_t?) -> NSRunningApplication? {
-    if let pid {
-      return NSRunningApplication(processIdentifier: pid)
-    }
-    return NSWorkspace.shared.frontmostApplication
-  }
-
-  private func shouldPreferKeyboardPaste(for app: NSRunningApplication?) -> Bool {
-    guard let bundleIdentifier = app?.bundleIdentifier else {
-      return false
-    }
-    return Self.terminalBundleIdentifiers.contains(bundleIdentifier)
   }
 }

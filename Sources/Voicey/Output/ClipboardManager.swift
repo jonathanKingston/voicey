@@ -5,7 +5,9 @@ import os
 final class ClipboardManager: @unchecked Sendable {
   static let shared = ClipboardManager()
 
-  private let pasteboard = NSPasteboard.general
+  private let pasteboard: NSPasteboard
+
+  var changeCount: Int { pasteboard.changeCount }
 
   /// Stored clipboard data for restore (legacy single-flight save)
   private var savedItems: SavedClipboardSnapshot?
@@ -15,7 +17,9 @@ final class ClipboardManager: @unchecked Sendable {
   /// Full pasteboard snapshot preserving per-item structure for multi-item clipboards.
   typealias SavedClipboardSnapshot = [SavedClipboardItem]
 
-  private init() {}
+  init(pasteboard: NSPasteboard = .general) {
+    self.pasteboard = pasteboard
+  }
 
   // MARK: - Basic Operations
 
