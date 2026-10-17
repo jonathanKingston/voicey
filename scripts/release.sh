@@ -73,7 +73,7 @@ eval $CODESIGN "$SPARKLE_FW/Autoupdate"
 eval $CODESIGN "$SPARKLE_FW/Updater.app"
 eval $CODESIGN "Voicey.app/Contents/Frameworks/Sparkle.framework"
 eval $CODESIGN "$CODESIGN_TARGET_METALLIB"
-for worker in voicey-capture voicey-fetch voicey-supervisor; do
+for worker in voicey-capture voicey-fetch voicey-supervisor voicey-text; do
   eval $CODESIGN "Voicey.app/Contents/MacOS/$worker"
 done
 eval $CODESIGN --entitlements VoiceyDirect.entitlements Voicey.app
