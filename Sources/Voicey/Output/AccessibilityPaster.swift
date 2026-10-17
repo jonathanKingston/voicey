@@ -1,510 +1,100 @@
 import ApplicationServices
 import AppKit
-import Carbon.HIToolbox
 import Foundation
+import VoiceyCore
 
-/// Pastes text using Accessibility API instead of CGEvents.
-/// This approach works in sandboxed apps since it uses AXPasteAction
-/// which is like the user pressing ⌘V through the accessibility framework.
+/// Uses the editor's normal clipboard path so selections, rich content and input events survive.
+/// AX is read only: an AX setter's success does not prove the application's draft changed.
 enum AccessibilityPaster {
-
-  enum PasteMethod: Sendable {
-    case directInsertion
-    case clipboardPaste
-    case none
-
-    var usesClipboard: Bool {
-      self == .clipboardPaste
-    }
-  }
-
-  struct PasteResult: Sendable {
-    let succeeded: Bool
-    let method: PasteMethod
-  }
-
-  /// Attempts to paste text into the currently focused text field using Accessibility API.
-  /// NOTE: Clipboard-based methods assume text is already on the general pasteboard.
-  /// - Parameter text: The text to insert (used for direct value manipulation)
-  /// - Returns: Whether paste succeeded and which strategy was used
-  @discardableResult
-  static func paste(_ text: String, preferKeyboardPaste: Bool = false) -> PasteResult {
-    debugPrint("🔌 AccessibilityPaster: Attempting to paste \(text.count) characters", category: "AX")
-
-    guard AXIsProcessTrusted() else {
-      debugPrint("❌ AccessibilityPaster: Accessibility permission not granted", category: "AX")
-      AppLogger.output.error("AccessibilityPaster: Accessibility permission not granted")
-      return PasteResult(succeeded: false, method: .none)
-    }
-    debugPrint("✅ AccessibilityPaster: AXIsProcessTrusted() = true", category: "AX")
-
-    // Get frontmost app for fallback attempts
-    guard let frontApp = NSWorkspace.shared.frontmostApplication else {
-      debugPrint("❌ AccessibilityPaster: No frontmost application", category: "AX")
-      return PasteResult(succeeded: false, method: .none)
-    }
-    let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
-
-    if preferKeyboardPaste {
-      debugPrint("⌨️ AccessibilityPaster: Terminal/TUI target detected, trying keyboard paste first", category: "AX")
-      if performKeyboardPaste(frontAppPid: frontApp.processIdentifier) {
-        return PasteResult(succeeded: true, method: .clipboardPaste)
-      }
-      debugPrint("⚠️ AccessibilityPaster: Keyboard paste failed, trying AX fallbacks", category: "AX")
+  @MainActor
+  static func paste(_ text: String, targetPID: pid_t) async -> PasteAttemptOutcome {
+    guard AXIsProcessTrusted(), NSPasteboard.general.string(forType: .string) == text else {
+      AppLogger.output.warning("Auto-paste: not attempted; AX permission or clipboard unavailable")
+      return .notAttempted
     }
 
-    // Try to get focused element
-    let focusedElement = getFocusedElement()
-
-    if let element = focusedElement {
-      // Log info about the focused element for debugging
-      logElementInfo(element)
-
-      // Prefer direct insertion first so paste does not depend on clipboard timing.
-      if insertViaSelectedText(element: element, text: text) {
-        return PasteResult(succeeded: true, method: .directInsertion)
-      }
-
-      if let insertResult = insertAtCursor(element: element, text: text), insertResult {
-        return PasteResult(succeeded: true, method: .directInsertion)
-      }
-
-      if replaceValue(element: element, text: text) {
-        return PasteResult(succeeded: true, method: .directInsertion)
-      }
-
-      // Clipboard-based fallback for focused element
-      if performPasteAction(on: element) {
-        return PasteResult(succeeded: true, method: .clipboardPaste)
-      }
-    } else {
-      debugPrint("⚠️ AccessibilityPaster: Could not get focused element", category: "AX")
-    }
-
-    // METHOD: AXPasteAction on app element
-    // Some apps (especially Electron) respond to paste on the app element even when
-    // we can't get the focused element, or when the focused element doesn't support paste
-    debugPrint("🔧 AccessibilityPaster: Trying AXPasteAction on app element", category: "AX")
-    if performPasteAction(on: appElement) {
-      return PasteResult(succeeded: true, method: .clipboardPaste)
-    }
-
-    // CGEventPost - Last resort fallback
-    // This simulates the keyboard shortcut directly rather than using accessibility actions.
-    debugPrint("🔧 AccessibilityPaster: Trying CGEventPost as final fallback", category: "AX")
-    if performKeyboardPaste(frontAppPid: frontApp.processIdentifier) {
-      return PasteResult(succeeded: true, method: .clipboardPaste)
-    }
-
-    // All methods failed - text is already on clipboard, user can paste manually
-    debugPrint("❌ AccessibilityPaster: All methods failed (including CGEventPost)", category: "AX")
-    AppLogger.output.warning("AccessibilityPaster: All paste methods failed - user should paste manually with ⌘V")
-    return PasteResult(succeeded: false, method: .none)
-  }
-
-  /// Perform Cmd+V simulation via CGEvent posting.
-  private static func performKeyboardPaste(frontAppPid: pid_t) -> Bool {
-    AppLogger.output.info("AccessibilityPaster: Trying CGEventPost (Cmd+V simulation)")
-
-    // Small delay before posting to ensure target app has focus.
-    Thread.sleep(forTimeInterval: 0.05)
-
-    // Try system-wide post first.
-    if KeyboardSimulator.postPasteCommand() {
-      debugPrint("✅ AccessibilityPaster: Posted Cmd+V via CGEventPost - paste should occur", category: "AX")
-      AppLogger.output.info("AccessibilityPaster: CGEventPost succeeded - Cmd+V posted")
-      Thread.sleep(forTimeInterval: 0.1)
-      return true
-    }
-
-    // Fallback: try posting directly to the target process.
-    if KeyboardSimulator.postPasteCommandToPid(frontAppPid) {
-      debugPrint("✅ AccessibilityPaster: Posted Cmd+V via postToPid - paste should occur", category: "AX")
-      AppLogger.output.info("AccessibilityPaster: CGEventPostToPid succeeded")
-      Thread.sleep(forTimeInterval: 0.1)
-      return true
-    }
-
-    return false
-  }
-
-  /// Performs the AXPaste action on an element (like pressing ⌘V)
-  /// This is the most reliable method for sandboxed apps
-  private static func performPasteAction(on element: AXUIElement) -> Bool {
-    debugPrint("🔧 AccessibilityPaster: Trying AXPasteAction", category: "AX")
-
-    let pasteActionName = "AXPaste"
-
-    // Try the paste action directly first - some apps (especially Electron) don't
-    // properly report their supported actions but still respond to them
-    let result = AXUIElementPerformAction(element, pasteActionName as CFString)
-    if result == .success {
-      debugPrint("✅ AccessibilityPaster: AXPasteAction succeeded!", category: "AX")
-      AppLogger.output.info("AccessibilityPaster: AXPasteAction succeeded")
-      return true
-    }
-
-    // Log why it failed for debugging
-    debugPrint("❌ AccessibilityPaster: AXPasteAction failed with: \(result.rawValue)", category: "AX")
-
-    // Log available actions for debugging (don't gate on this)
-    var actions: CFTypeRef?
-    let actionsResult = AXUIElementCopyAttributeValue(
-      element,
-      "AXActions" as CFString,
-      &actions
+    let environment = ClipboardPasteEnvironment(targetPID: targetPID)
+    AppLogger.output.info(
+      "Auto-paste: method=keyboardClipboard targetPID=\(targetPID) role=\(environment.focusedRole)"
     )
+    let outcome = await PasteAttempt.perform(text: text, environment: environment)
+    AppLogger.output.info(
+      "Auto-paste: method=keyboardClipboard outcome=\(outcome.rawValue); AX observation only, no retry"
+    )
+    return outcome
+  }
+}
 
-    if actionsResult == .success, let actionList = actions as? [String] {
-      debugPrint("📋 AccessibilityPaster: Element's reported actions: \(actionList)", category: "AX")
-      if !actionList.contains(pasteActionName) {
-        debugPrint("⚠️ AccessibilityPaster: Note - AXPaste not in reported actions", category: "AX")
-      }
-    } else {
-      debugPrint("⚠️ AccessibilityPaster: Could not get actions list (error: \(actionsResult.rawValue))", category: "AX")
-    }
+@MainActor
+private final class ClipboardPasteEnvironment: PasteAttemptEnvironment {
+  let targetPID: pid_t
+  private let element: AXUIElement?
+  let focusedRole: String
 
-    return false
+  init(targetPID: pid_t) {
+    self.targetPID = targetPID
+    let app = AXUIElementCreateApplication(targetPID)
+    // Limit a hung application's AX queries.
+    AXUIElementSetMessagingTimeout(app, 0.1)
+    element = Self.focusedTextInput(in: app)
+    focusedRole = element.flatMap { Self.attribute($0, kAXRoleAttribute) as? String } ?? "unavailable"
   }
 
-  /// Try to get the focused element using multiple approaches
-  private static func getFocusedElement() -> AXUIElement? {
-    // Approach 1: System-wide focused element
-    let systemWide = AXUIElementCreateSystemWide()
-    var focusedElement: CFTypeRef?
-    let focusResult = AXUIElementCopyAttributeValue(
-      systemWide,
-      kAXFocusedUIElementAttribute as CFString,
-      &focusedElement
-    )
+  var targetIsActive: Bool {
+    NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID
+  }
 
-    if focusResult == .success,
-       let focused = focusedElement,
+  func postPaste() -> Bool {
+    guard targetIsActive else { return false }
+    // PID routing avoids a global shortcut reaching another app if activation changes.
+    return KeyboardSimulator.postPasteCommandToPid(targetPID)
+  }
+
+  func waitForObservation() async {
+    do {
+      try await Task.sleep(nanoseconds: 20_000_000)
+    } catch {
+      // Cancellation leaves delivery ambiguous; the caller must retain the clipboard.
+      AppLogger.output.debug("Auto-paste: observation sleep cancelled")
+    }
+  }
+
+  func snapshot() -> PasteTextSnapshot? {
+    guard let element, Self.attribute(element, kAXFocusedAttribute) as? Bool == true,
+          let value = Self.attribute(element, kAXValueAttribute) as? String,
+          let rangeValue = Self.attribute(element, kAXSelectedTextRangeAttribute),
+          CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
+    var range = CFRange()
+    // swiftlint:disable:next force_cast
+    guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else { return nil }
+    return PasteTextSnapshot(value: value, selection: NSRange(location: range.location, length: range.length))
+  }
+
+  private static func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
+    return value
+  }
+
+  private static func focusedTextInput(in app: AXUIElement) -> AXUIElement? {
+    if let focused = attribute(app, kAXFocusedUIElementAttribute),
        CFGetTypeID(focused) == AXUIElementGetTypeID() {
-      debugPrint("✅ AccessibilityPaster: Got focused element via system-wide", category: "AX")
       // swiftlint:disable:next force_cast
-      return (focused as! AXUIElement)
+      let root = focused as! AXUIElement
+      if let input = findFocusedInput(root) { return input }
     }
-    debugPrint("⚠️ AccessibilityPaster: System-wide focused element failed (error: \(focusResult.rawValue))", category: "AX")
-
-    // Approach 2: Get frontmost app, then its focused element
-    guard let frontApp = NSWorkspace.shared.frontmostApplication else {
-      debugPrint("❌ AccessibilityPaster: No frontmost application", category: "AX")
-      return nil
-    }
-
-    debugPrint("🔍 AccessibilityPaster: Trying via frontmost app: \(frontApp.localizedName ?? "unknown") (pid: \(frontApp.processIdentifier))", category: "AX")
-
-    let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
-
-    // Try to get focused UI element from the app
-    var appFocused: CFTypeRef?
-    let appFocusResult = AXUIElementCopyAttributeValue(
-      appElement,
-      kAXFocusedUIElementAttribute as CFString,
-      &appFocused
-    )
-
-    if appFocusResult == .success,
-       let focused = appFocused,
-       CFGetTypeID(focused) == AXUIElementGetTypeID() {
-      debugPrint("✅ AccessibilityPaster: Got focused element via app element", category: "AX")
-      // swiftlint:disable:next force_cast
-      return (focused as! AXUIElement)
-    }
-    debugPrint("⚠️ AccessibilityPaster: App focused element failed (error: \(appFocusResult.rawValue))", category: "AX")
-
-    // Approach 3: Get focused window, then try to find a text field
-    var focusedWindow: CFTypeRef?
-    let windowResult = AXUIElementCopyAttributeValue(
-      appElement,
-      kAXFocusedWindowAttribute as CFString,
-      &focusedWindow
-    )
-
-    if windowResult == .success,
-       let window = focusedWindow,
-       CFGetTypeID(window) == AXUIElementGetTypeID() {
-      debugPrint("🔍 AccessibilityPaster: Got focused window, searching for text field...", category: "AX")
-      // swiftlint:disable:next force_cast
-      let windowElement = window as! AXUIElement
-
-      // Try to get focused element from window
-      var windowFocused: CFTypeRef?
-      let windowFocusResult = AXUIElementCopyAttributeValue(
-        windowElement,
-        kAXFocusedUIElementAttribute as CFString,
-        &windowFocused
-      )
-
-      if windowFocusResult == .success,
-         let focused = windowFocused,
-         CFGetTypeID(focused) == AXUIElementGetTypeID() {
-        debugPrint("✅ AccessibilityPaster: Got focused element via window", category: "AX")
-        // swiftlint:disable:next force_cast
-        return (focused as! AXUIElement)
-      }
-      debugPrint("⚠️ AccessibilityPaster: Window focused element failed (error: \(windowFocusResult.rawValue))", category: "AX")
-
-      // Approach 4: Search window's children for text input elements
-      // This can help with Electron apps that don't properly report focused elements
-      // Use maxDepth 10 since Electron apps can have deep accessibility trees
-      if let textElement = findTextInputElement(in: windowElement, depth: 0, maxDepth: 10) {
-        debugPrint("✅ AccessibilityPaster: Found text input element via tree search", category: "AX")
-        return textElement
-      }
-    } else {
-      debugPrint("⚠️ AccessibilityPaster: Could not get focused window (error: \(windowResult.rawValue))", category: "AX")
-    }
-
-    return nil
+    guard let window = attribute(app, kAXFocusedWindowAttribute),
+          CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+    // swiftlint:disable:next force_cast
+    return findFocusedInput(window as! AXUIElement)
   }
 
-  /// Recursively search for a text input element in the accessibility tree
-  /// This helps find text fields in Electron apps that don't properly report focused elements
-  private static func findTextInputElement(in element: AXUIElement, depth: Int, maxDepth: Int) -> AXUIElement? {
-    guard depth < maxDepth else {
-      if depth == maxDepth {
-        debugPrint("🌳 AccessibilityPaster: Max depth \(maxDepth) reached", category: "AX")
-      }
-      return nil
-    }
-
-    // Check if this element is a text input type
-    var role: CFTypeRef?
-    _ = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
-    let roleString = (role as? String) ?? "unknown"
-
-    // Log all roles at shallow depths so we can see the tree structure
-    if depth <= 2 {
-      debugPrint("🌳 AccessibilityPaster: [depth \(depth)] role=\(roleString)", category: "AX")
-    }
-
-    // Text input roles we're looking for
-    let textInputRoles = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea", "AXGroup"]
-    if textInputRoles.contains(roleString) {
-      // Check if this element has focus
-      var focused: CFTypeRef?
-      _ = AXUIElementCopyAttributeValue(element, "AXFocused" as CFString, &focused)
-      let isFocused = (focused as? Bool) ?? false
-      debugPrint("🌳 AccessibilityPaster: Found \(roleString) at depth \(depth), focused=\(isFocused)", category: "AX")
-
-      if isFocused {
-        debugPrint("✅ AccessibilityPaster: Found focused \(roleString) at depth \(depth)", category: "AX")
-        return element
-      }
-
-      // For AXWebArea (Electron's main content), return it as a target for paste
-      if roleString == "AXWebArea" {
-        debugPrint("🌳 AccessibilityPaster: Returning AXWebArea as potential target", category: "AX")
-        return element
-      }
-    }
-
-    // Get children and search recursively
-    var children: CFTypeRef?
-    let childrenResult = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
-
-    guard childrenResult == .success, let childArray = children as? [AXUIElement] else {
-      return nil
-    }
-
-    if depth == 0 {
-      debugPrint("🌳 AccessibilityPaster: Starting tree search from \(roleString), \(childArray.count) children", category: "AX")
-    }
-
-    // Limit breadth search to avoid performance issues
-    let maxChildren = min(childArray.count, 50)
-    for idx in 0..<maxChildren {
-      if let found = findTextInputElement(in: childArray[idx], depth: depth + 1, maxDepth: maxDepth) {
-        return found
-      }
-    }
-
-    return nil
-  }
-
-  /// Log information about an AXUIElement for debugging
-  private static func logElementInfo(_ element: AXUIElement) {
-    var role: CFTypeRef?
-    var roleDesc: CFTypeRef?
-    var title: CFTypeRef?
-
-    AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
-    AXUIElementCopyAttributeValue(element, kAXRoleDescriptionAttribute as CFString, &roleDesc)
-    AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &title)
-
-    let roleStr = (role as? String) ?? "unknown"
-    let roleDescStr = (roleDesc as? String) ?? "unknown"
-    let titleStr = (title as? String) ?? "none"
-
-    debugPrint("📍 AccessibilityPaster: Focused element - role: \(roleStr), roleDesc: \(roleDescStr), title: \(titleStr)", category: "AX")
-    AppLogger.output.info("AccessibilityPaster: Focused element - role: \(roleStr), roleDesc: \(roleDescStr)")
-  }
-
-  /// Insert text at the current cursor position by manipulating selection
-  private static func insertAtCursor(element: AXUIElement, text: String) -> Bool? {
-    debugPrint("🔧 AccessibilityPaster: Trying insertAtCursor", category: "AX")
-
-    // Get current value
-    var currentValue: CFTypeRef?
-    let valueResult = AXUIElementCopyAttributeValue(
-      element,
-      kAXValueAttribute as CFString,
-      &currentValue
+  private static func findFocusedInput(_ element: AXUIElement) -> AXUIElement? {
+    FocusedTextInputSearch.find(
+      in: element,
+      role: { attribute($0, kAXRoleAttribute) as? String },
+      isFocused: { attribute($0, kAXFocusedAttribute) as? Bool == true },
+      children: { attribute($0, kAXChildrenAttribute) as? [AXUIElement] ?? [] }
     )
-
-    guard valueResult == .success, let currentString = currentValue as? String else {
-      debugPrint("⚠️ AccessibilityPaster: Could not get current value (error: \(valueResult.rawValue))", category: "AX")
-      return nil
-    }
-
-    // Get selected text range
-    var selectedRange: CFTypeRef?
-    let rangeResult = AXUIElementCopyAttributeValue(
-      element,
-      kAXSelectedTextRangeAttribute as CFString,
-      &selectedRange
-    )
-
-    guard rangeResult == .success, let rangeValue = selectedRange else {
-      debugPrint("⚠️ AccessibilityPaster: Could not get selected range (error: \(rangeResult.rawValue))", category: "AX")
-      return nil
-    }
-
-    // Extract the range
-    var range = CFRange(location: 0, length: 0)
-    guard CFGetTypeID(rangeValue) == AXValueGetTypeID(),
-          // swiftlint:disable:next force_cast
-          AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
-      debugPrint("⚠️ AccessibilityPaster: Could not extract CFRange from AXValue", category: "AX")
-      return nil
-    }
-
-    debugPrint("📝 AccessibilityPaster: Current value length: \(currentString.count), selection at: \(range.location), length: \(range.length)", category: "AX")
-    AppLogger.output.info("AccessibilityPaster: Current value length: \(currentString.count), selection at: \(range.location), length: \(range.length)")
-
-    // Build the new string with text inserted at cursor position
-    let nsString = currentString as NSString
-    let insertLocation = min(range.location, nsString.length)
-    let replaceLength = min(range.length, nsString.length - insertLocation)
-    let replaceRange = NSRange(location: insertLocation, length: replaceLength)
-    let newString = nsString.replacingCharacters(in: replaceRange, with: text)
-
-    debugPrint("📝 AccessibilityPaster: Setting new value with \(newString.count) characters", category: "AX")
-
-    // Set the new value
-    let setResult = AXUIElementSetAttributeValue(
-      element,
-      kAXValueAttribute as CFString,
-      newString as CFTypeRef
-    )
-
-    guard setResult == .success else {
-      debugPrint("❌ AccessibilityPaster: Failed to set value (error: \(setResult.rawValue))", category: "AX")
-      AppLogger.output.error("AccessibilityPaster: Failed to set value (error: \(setResult.rawValue))")
-      return false
-    }
-
-    // Move cursor to end of inserted text
-    let newCursorPosition = insertLocation + text.count
-    var newRange = CFRange(location: newCursorPosition, length: 0)
-    if let newRangeValue = AXValueCreate(.cfRange, &newRange) {
-      AXUIElementSetAttributeValue(
-        element,
-        kAXSelectedTextRangeAttribute as CFString,
-        newRangeValue
-      )
-    }
-
-    debugPrint("✅ AccessibilityPaster: Successfully inserted text at cursor!", category: "AX")
-    AppLogger.output.info("AccessibilityPaster: Successfully inserted text at cursor")
-    return true
-  }
-
-  /// Insert text by setting the selected text attribute (works in some apps)
-  private static func insertViaSelectedText(element: AXUIElement, text: String) -> Bool {
-    debugPrint("🔧 AccessibilityPaster: Trying insertViaSelectedText", category: "AX")
-
-    // Check if selected text attribute is settable
-    var isSettable: DarwinBoolean = false
-    let settableResult = AXUIElementIsAttributeSettable(
-      element,
-      kAXSelectedTextAttribute as CFString,
-      &isSettable
-    )
-
-    debugPrint("🔍 AccessibilityPaster: kAXSelectedTextAttribute settable check: result=\(settableResult.rawValue), isSettable=\(isSettable.boolValue)", category: "AX")
-
-    guard settableResult == .success, isSettable.boolValue else {
-      debugPrint("❌ AccessibilityPaster: Selected text attribute not settable", category: "AX")
-      AppLogger.output.warning("AccessibilityPaster: Selected text attribute not settable")
-      return false
-    }
-
-    // Set the selected text (replaces current selection with our text)
-    let setResult = AXUIElementSetAttributeValue(
-      element,
-      kAXSelectedTextAttribute as CFString,
-      text as CFTypeRef
-    )
-
-    if setResult == .success {
-      debugPrint("✅ AccessibilityPaster: Successfully set selected text!", category: "AX")
-      AppLogger.output.info("AccessibilityPaster: Successfully set selected text")
-      return true
-    } else {
-      debugPrint("❌ AccessibilityPaster: Failed to set selected text (error: \(setResult.rawValue))", category: "AX")
-      AppLogger.output.error("AccessibilityPaster: Failed to set selected text (error: \(setResult.rawValue))")
-      return false
-    }
-  }
-
-  /// Replace the entire value of the text field (fallback)
-  private static func replaceValue(element: AXUIElement, text: String) -> Bool {
-    debugPrint("🔧 AccessibilityPaster: Trying replaceValue (append mode)", category: "AX")
-
-    // Check if this element has a settable value attribute
-    var isSettable: DarwinBoolean = false
-    let settableResult = AXUIElementIsAttributeSettable(
-      element,
-      kAXValueAttribute as CFString,
-      &isSettable
-    )
-
-    guard settableResult == .success, isSettable.boolValue else {
-      debugPrint("⚠️ AccessibilityPaster: kAXValueAttribute is not settable", category: "AX")
-      return false
-    }
-
-    // Get current value to append to (if desired) or just set
-    var currentValue: CFTypeRef?
-    _ = AXUIElementCopyAttributeValue(
-      element,
-      kAXValueAttribute as CFString,
-      &currentValue
-    )
-
-    // For now, just append to existing text
-    let existingText = (currentValue as? String) ?? ""
-    let newText = existingText + text
-
-    debugPrint("📝 AccessibilityPaster: Appending to existing text (\(existingText.count) chars + \(text.count) chars)", category: "AX")
-
-    let setResult = AXUIElementSetAttributeValue(
-      element,
-      kAXValueAttribute as CFString,
-      newText as CFTypeRef
-    )
-
-    if setResult == .success {
-      debugPrint("✅ AccessibilityPaster: Successfully replaced value (appended text)!", category: "AX")
-      AppLogger.output.info("AccessibilityPaster: Successfully replaced value (appended text)")
-      return true
-    } else {
-      debugPrint("❌ AccessibilityPaster: Failed to set value (error: \(setResult.rawValue))", category: "AX")
-      AppLogger.output.error("AccessibilityPaster: Failed to set value (error: \(setResult.rawValue))")
-      return false
-    }
   }
 }
