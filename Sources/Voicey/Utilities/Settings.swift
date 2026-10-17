@@ -262,4 +262,5 @@ final class SettingsManager: SettingsProviding, @unchecked Sendable {
 
 extension Notification.Name {
   static let voiceySelectedModelDidChange = Notification.Name("voiceySelectedModelDidChange")
+  static let voiceyModelDownloadDidComplete = Notification.Name("voiceyModelDownloadDidComplete")
 }
