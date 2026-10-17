@@ -14,7 +14,9 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
   }
 
   private struct CompletedChunk {
-    let chunk: AudioChunk
+    let id: Int
+    let startSampleIndex: Int
+    let sampleCount: Int
     let result: TranscriptionResult
   }
 
@@ -104,11 +106,16 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
     }
 
     if let error = stateQueue.sync(execute: { firstError }) {
+      stateQueue.sync {
+        releaseTranscriptionAudioBuffersLocked()
+      }
       throw error
     }
 
     return stateQueue.sync {
-      combinedResultLocked()
+      let result = combinedResultLocked()
+      releaseTranscriptionAudioBuffersLocked()
+      return result
     }
   }
 
@@ -266,8 +273,15 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
         }
 
         if self.generation == taskGeneration {
-          self.completedChunks.append(CompletedChunk(chunk: chunk, result: result))
-          self.completedChunks.sort { $0.chunk.id < $1.chunk.id }
+          self.completedChunks.append(
+            CompletedChunk(
+              id: chunk.id,
+              startSampleIndex: chunk.startSampleIndex,
+              sampleCount: chunk.samples.count,
+              result: result
+            )
+          )
+          self.completedChunks.sort { $0.id < $1.id }
           self.isProcessingChunk = false
           self.publishSnapshotLocked()
         }
@@ -318,6 +332,17 @@ final class IncrementalTranscriptionCoordinator: @unchecked Sendable {
 }
 
 private extension IncrementalTranscriptionCoordinator {
+  /// Drops retained PCM after chunks are transcribed; keeps generation and in-flight tasks intact.
+  private func releaseTranscriptionAudioBuffersLocked() {
+    bufferedSamples.removeAll()
+    bufferStartSampleIndex = 0
+    nextChunkID = 0
+    hasDetectedSpeech = false
+    silenceSampleCount = 0
+    pendingChunks.removeAll()
+    completedChunks.removeAll()
+  }
+
   private func publishSnapshotLocked() {
     let snapshot = IncrementalTranscriptionSnapshot(
       partialText: combinedTextLocked(),
@@ -345,7 +370,7 @@ private extension IncrementalTranscriptionCoordinator {
     }
     let processingTime = completedChunks.reduce(0) { $0 + $1.result.processingTime }
     let audioDuration = completedChunks.reduce(0) {
-      $0 + Double($1.chunk.samples.count) / configuration.sampleRate
+      $0 + Double($1.sampleCount) / configuration.sampleRate
     }
     let realTimeFactor = audioDuration > 0 ? processingTime / audioDuration : 0
     let language = completedChunks.first?.result.language ?? "auto"
@@ -366,7 +391,7 @@ private extension IncrementalTranscriptionCoordinator {
   }
 
   private func adjustedSegments(for completedChunk: CompletedChunk) -> [TranscriptionSegment] {
-    let offset = Double(completedChunk.chunk.startSampleIndex) / configuration.sampleRate
+    let offset = Double(completedChunk.startSampleIndex) / configuration.sampleRate
     return completedChunk.result.segments.map { segment in
       TranscriptionSegment(
         text: segment.text,

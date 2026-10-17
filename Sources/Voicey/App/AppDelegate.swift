@@ -1361,6 +1361,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "⚠️ Audio too short (\(String(format: "%.2f", durationSec))s), skipping", category: "AUDIO")
       AppLogger.audio.warning(
         "Audio too short (\(String(format: "%.2f", durationSec))s), skipping transcription")
+      releaseIncrementalTranscriptionSessionBuffers()
       hideOverlay()
       appState.clearRecordingWaveformDisplay()
       appState.transcriptionState = .idle
@@ -1687,6 +1688,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return qwenResult
   }
 
+  private func releaseIncrementalTranscriptionSessionBuffers() {
+    incrementalTranscriptionCoordinator?.reset()
+  }
+
   private func handleTranscriptionResult(_ result: TranscriptionResult) async {
     debugPrint("📝 Raw result: \"\(result.text)\"", category: "TRANSCRIBE")
     AppLogger.transcription.info("processTranscription: Got raw result: \"\(result.text)\"")
@@ -1719,6 +1724,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Output text
     await MainActor.run {
+      self.releaseIncrementalTranscriptionSessionBuffers()
       appState.transcriptionState = .completed(text: processedText)
       appState.lastTranscription = processedText
       appState.partialTranscription = ""
@@ -1788,6 +1794,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     debugPrint("❌ Transcription error: \(error)", category: "ERROR")
     AppLogger.transcription.error("Transcription error: \(error)")
     await MainActor.run { [weak self] in
+      self?.releaseIncrementalTranscriptionSessionBuffers()
       self?.hideOverlay()
       self?.appState.partialTranscription = ""
       self?.appState.isCatchingUpTranscription = false
