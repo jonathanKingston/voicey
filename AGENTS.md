@@ -60,6 +60,47 @@ make clean
 make release
 ```
 
+## Direct macOS releases (agent runbook)
+
+Use `make ship-release VERSION=X.Y.Z` for a signed, notarized GitHub release. `make release` only builds the app. Read [`scripts/release.sh`](scripts/release.sh) and the relevant Makefile targets first; [`SPARKLE_CI.md`](SPARKLE_CI.md) describes Sparkle concepts but contains illustrative CI steps, not a substitute for the local release script.
+
+### Lessons from the v1.7.0 session
+
+- Model prewarming shipped in #238; #239 fixed the release script to sign the bundled `voicey-text` worker before notarization. The release version commit is `00784da`.
+- Preparing the Mac toolchain and release credentials took several attempts. Check all prerequisites before starting the expensive clean build.
+- The website checkout was identified as `/Users/jonathankingston/debugging/voicey.work`. The script instead assumes `../Voicey.work/public/appcast.xml`; this relative path is especially unreliable from an isolated worktree.
+- The existing Sparkle key was supplied through `.env.release`, but the script's bare `sign_update` invocation looks in Keychain. Loading that environment file alone does not make `SPARKLE_PRIVATE_KEY` available to the signer.
+- GitHub downloads and the website appcast are separate publication steps. A successful upload, or the script's final success message, does not prove automatic updates are live.
+
+### Preflight before building
+
+1. Confirm the requested version, source commit, and checkout. The script requires `main` with no tracked changes or untracked files. Inspect unexpected files (including generated `Package.resolved`) and preserve unrelated work; do not delete or commit them merely to satisfy this check. Check whether the version's tag/release already exists before rerunning.
+2. On macOS, check the selected full Xcode installation (`xcode-select -p`, `xcrun swift --version`) and that Metal, `notarytool`, and `stapler` are available. Check Rust/Cargo against [`rust-toolchain.toml`](rust-toolchain.toml) (currently 1.86.0), plus `make`, `python3`, `curl`, `gh`, `codesign`, `ditto`, and `hdiutil`. Confirm GitHub authentication and repository access. Report missing components together.
+3. The script loads the ignored `.env.release` from the checkout root. Required local names are `DEVELOPER_ID`, `APPLE_ID`, `TEAM_ID`, and `APP_PASSWORD`; CI documentation uses different names for some of these. Confirm the Developer ID Application certificate has its private key and is usable for signing, and that notarization credentials are configured.
+4. Resolve direct-distribution dependencies with `VOICEY_DIRECT=1 swift package resolve` when needed; Sparkle tools live in `.build/artifacts/sparkle/Sparkle/bin`. Confirm the existing update-signing key is usable **before** the build. The Apple signing certificate, Apple app-specific password, and Sparkle EdDSA key are separate credentials.
+5. Check the actual website checkout and `public/appcast.xml` before publishing. The path above is this maintainer's known checkout, not a portable default. Inspect its status and deployment workflow, and arrange approved access if it is outside the workspace.
+6. Keep credentials out of chat, diffs, shell tracing, and logs. Let the release tooling consume configured secrets without displaying credential files. Ask the user to update them locally when necessary. Use Copse tools and their approval path for host/network operations; do not work around a denied operation.
+
+### Sparkle key recovery
+
+- Reuse the private key matching `SUPublicEDKey` in `Info.direct.plist` and already distributed apps. Do not generate replacement keys or change the public key to get a release through.
+- If the key is on the previous release Mac, the owner can export the existing key privately using Sparkle's `generate_keys` tool. `make sparkle-export-private-key` prints the private key, so agents must not capture its output in the conversation.
+- For an exported key in `.env.release`, inspect the installed `sign_update --help` and use its supported private-key input, or have the owner import the existing key with `generate_keys`. Do not assume an environment variable is automatically consumed.
+- A format/base64 error is not proof the original key is wrong. Check the installed tool's expected export format and local quoting/encoding without revealing the key; verify the derived public key matches `SUPublicEDKey`. Keep any temporary key material private and remove it after use.
+
+### Build, publish, and finish
+
+1. Run `make ship-release VERSION=X.Y.Z` from the verified checkout. It bumps `Info.plist`, `Info.direct.plist`, and `project.yml`; builds the direct app and Rust workers; signs inside out; notarizes/staples the app; creates ZIP/DMG assets; notarizes/staples the DMG; then commits the version, tags, and publishes to GitHub.
+2. All bundled executables must be signed, including `voicey-capture`, `voicey-fetch`, `voicey-supervisor`, and `voicey-text`, plus Sparkle components and `mlx.metallib`. Preserve Metal signature xattrs: the DMG workaround removes only `com.apple.provenance`, not every extended attribute. `SKIP_DMG=1` produces a ZIP-only release; use it only when that reduced output is agreed.
+3. Retain bounded build/notarization logs and exit status. For long jobs, use a bounded background task with completion notification. On failure, inspect the saved log and completed stages before retrying.
+4. After GitHub publication, download the **published ZIP** and generate its Sparkle signature and byte length. Use those exact bytes for the appcast; rebuilding or recompressing locally can change them. Update only the intended version item and preserve older entries.
+5. Commit/push the website appcast change when authorized and verify deployment. The current script only edits the assumed local appcast and prints a reminder; it does not publish the website. It also does not wire `SPARKLE_PRIVATE_KEY` into `sign_update`. Account for both gaps explicitly.
+6. Verify the GitHub release is published with the expected tag and assets, signatures/notarization pass, and the live feed at the app's `SUFeedURL` contains the correct version, download URL, length, and EdDSA signature. Distinguish these checks from an actual update test in an older installed app; report any unverified step.
+
+### Resume instead of restarting
+
+If a late step fails, inspect the existing version commit, tag target, GitHub release/assets, and website state first. A rerun of the script starts with a clean build; an existing GitHub release causes asset publication to be skipped, and an existing tag must point at HEAD. Resume signing/appcast/deployment from the published ZIP when those are the only remaining steps. Do not move a published tag or replace released assets without explicit authorization. Report GitHub publication and live automatic-update status separately.
+
 ## Architecture Notes
 
 ### Dependency Injection
