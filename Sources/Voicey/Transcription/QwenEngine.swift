@@ -1,4 +1,5 @@
 import Foundation
+import MLX
 import Qwen3ASR
 import VoiceyCore
 import os
@@ -152,6 +153,19 @@ final class QwenEngine: @unchecked Sendable {
 
     guard let qwenModel else {
       throw QwenError.modelNotReady
+    }
+
+    // The pinned Qwen3ASR implementation leaves MLX's reusable Metal buffers cached
+    // after decoding. Keep the model weights loaded, but return scratch buffers to
+    // the system once each transcription has finished.
+    defer {
+      Stream.gpu.synchronize()
+      let cachedBefore = Memory.cacheMemory
+      Memory.clearCache()
+      let snapshot = Memory.snapshot()
+      AppLogger.transcription.info(
+        "QwenEngine: MLX memory after transcription: active=\(snapshot.activeMemory / 1_048_576) MiB, cached=\(snapshot.cacheMemory / 1_048_576) MiB (cleared \(cachedBefore / 1_048_576) MiB)"
+      )
     }
 
     let thermalStateBefore = ProcessInfo.processInfo.thermalState
