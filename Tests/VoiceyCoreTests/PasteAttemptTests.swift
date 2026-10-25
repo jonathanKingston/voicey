@@ -63,6 +63,19 @@ final class PasteAttemptTests: XCTestCase {
     let outcome = await PasteAttempt.perform(text: "hello", environment: environment, observationLimit: 3)
     XCTAssertEqual(outcome, .unconfirmed)
     XCTAssertEqual(environment.postCount, 1)
+    XCTAssertEqual(environment.observations, 3)
+  }
+
+  @MainActor
+  func testMissingAXBaselineStopsObservingAfterSettleLimit() async {
+    let environment = FakePasteEnvironment()
+    environment.before = nil
+    let outcome = await PasteAttempt.perform(
+      text: "hello", environment: environment, observationLimit: 50, unobservableSettleLimit: 5
+    )
+    XCTAssertEqual(outcome, .unconfirmed)
+    XCTAssertEqual(environment.postCount, 1)
+    XCTAssertEqual(environment.observations, 5)
   }
 
   @MainActor

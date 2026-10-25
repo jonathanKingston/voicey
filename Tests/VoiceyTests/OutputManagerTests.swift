@@ -25,11 +25,31 @@ final class OutputManagerTests: XCTestCase {
   }
 
   @MainActor
-  func testAmbiguousDispatchKeepsClipboardEvenWhenRestoreEnabled() async {
+  func testAmbiguousDispatchRestoresClipboardWhenEnabled() async {
     let fixture = OutputFixture()
     fixture.delivery.outcome = .unconfirmed
     await fixture.manager.deliver(text: "hello", targetPID: 42).value
     XCTAssertEqual(fixture.delivery.pastedTexts, ["hello"])
+    XCTAssertEqual(fixture.delivery.consumedClipboard, ["hello"])
+    XCTAssertEqual(fixture.clipboard.currentText(), "original")
+    fixture.pasteboard.releaseGlobally()
+  }
+
+  @MainActor
+  func testAmbiguousDispatchKeepsTranscriptionWhenRestoreDisabled() async {
+    let fixture = OutputFixture()
+    fixture.settings.restoreClipboardAfterPaste = false
+    fixture.delivery.outcome = .unconfirmed
+    await fixture.manager.deliver(text: "hello", targetPID: 42).value
+    XCTAssertEqual(fixture.clipboard.currentText(), "hello")
+    fixture.pasteboard.releaseGlobally()
+  }
+
+  @MainActor
+  func testPasteNotAttemptedKeepsTranscriptionWhenRestoreEnabled() async {
+    let fixture = OutputFixture()
+    fixture.delivery.outcome = .notAttempted
+    await fixture.manager.deliver(text: "hello", targetPID: 42).value
     XCTAssertEqual(fixture.clipboard.currentText(), "hello")
     fixture.pasteboard.releaseGlobally()
   }
@@ -48,12 +68,15 @@ final class OutputManagerTests: XCTestCase {
 
   @MainActor
   func testExternalClipboardChangeIsNeverRestoredOver() async {
-    let fixture = OutputFixture()
-    let clipboard = fixture.clipboard
-    fixture.delivery.onPaste = { clipboard.copy("user copy") }
-    await fixture.manager.deliver(text: "hello", targetPID: 42).value
-    XCTAssertEqual(fixture.clipboard.currentText(), "user copy")
-    fixture.pasteboard.releaseGlobally()
+    for outcome in [PasteAttemptOutcome.confirmed, .unconfirmed] {
+      let fixture = OutputFixture()
+      let clipboard = fixture.clipboard
+      fixture.delivery.outcome = outcome
+      fixture.delivery.onPaste = { clipboard.copy("user copy") }
+      await fixture.manager.deliver(text: "hello", targetPID: 42).value
+      XCTAssertEqual(fixture.clipboard.currentText(), "user copy")
+      fixture.pasteboard.releaseGlobally()
+    }
   }
 
   @MainActor
