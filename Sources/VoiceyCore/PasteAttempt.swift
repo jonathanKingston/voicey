@@ -41,7 +41,8 @@ public protocol PasteAttemptEnvironment {
 public enum PasteAttempt {
   @MainActor
   public static func perform(
-    text: String, environment: any PasteAttemptEnvironment, observationLimit: Int = 50
+    text: String, environment: any PasteAttemptEnvironment, observationLimit: Int = 50,
+    unobservableSettleLimit: Int = 5
   ) async -> PasteAttemptOutcome {
     guard environment.targetIsActive else { return .notAttempted }
     let before = environment.snapshot()
@@ -49,8 +50,11 @@ public enum PasteAttempt {
     // Check again after reading AX: focus may have changed during the query.
     guard environment.targetIsActive, environment.postPaste() else { return .notAttempted }
 
+    // Without an AX baseline (e.g. Electron composers) confirmation is impossible; waiting the
+    // full limit only keeps the transcription on the clipboard. Allow just enough time to consume it.
+    let limit = expected == nil ? min(observationLimit, unobservableSettleLimit) : observationLimit
     // Never retry after dispatch, including a timeout or unchanged AX value.
-    for _ in 0..<observationLimit {
+    for _ in 0..<limit {
       await environment.waitForObservation()
       guard environment.targetIsActive else { return .unconfirmed }
       if let expected, expected != before, environment.snapshot() == expected {

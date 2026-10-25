@@ -9,7 +9,7 @@ Voicey now dispatches one clipboard Cmd+V to the captured target PID. AX is read
 Delivery distinguishes:
 
 - `notAttempted`: permission, clipboard, activation or event construction prevented dispatch.
-- `unconfirmed`: dispatch occurred without an exact observable AX text/caret transition, or focus was lost. Voicey never retries automatically; clipboard restoration follows the user's setting.
+- `unconfirmed`: dispatch occurred without an exact observable AX text/caret transition, or focus was lost. Voicey never retries automatically; clipboard restoration follows the user's setting. When the target exposes no focused text input (Copse's composer), confirmation is impossible, so observation stops after a ~100 ms settle instead of the full ~1 s window; otherwise a Cmd+V in the same app within ~1.3 s re-pasted the transcription.
 - `confirmed`: AX value and caret match the predicted UTF-16 insertion transition. This does not independently prove Copse's renderer draft/send state.
 
 There are no AX setters, whole-field replacements, app-level AXPaste actions or fallback shortcuts after dispatch. Activation failure leaves the transcription on the clipboard. Clipboard transactions are serialized so overlapping dictations cannot overwrite an in-flight paste. Restoration after dispatch requires an unchanged pasteboard change count; it does not require AX confirmation, because some Electron editors accept the paste without exposing an exact text/caret transition. When dispatch is not attempted, Voicey leaves the transcription on the clipboard. A user copy during activation takes precedence over automatic insertion.
