@@ -79,16 +79,21 @@ final class OutputManager: @unchecked Sendable {
     }
     let clipboardChangeCount = clipboardManager.changeCount
     let outcome = await autoPaste.paste(text, targetPID: targetPID)
-    guard outcome == .confirmed else {
+    guard outcome != .notAttempted else {
       AppLogger.output.warning(
-        "Auto-paste: \(outcome.rawValue); retaining clipboard, no automatic retry"
+        "Auto-paste: not attempted; retaining transcription on clipboard"
       )
       notifications.showTranscriptionCopied()
       return
     }
 
-    // Confirmation is an exact AX value/selection transition, not proof of renderer send state.
-    // Leave time for the target to finish clipboard handling, then restore only our own copy.
+    if outcome == .unconfirmed {
+      AppLogger.output.warning("Auto-paste: dispatch unconfirmed; no automatic retry")
+      if savedClipboard == nil { notifications.showTranscriptionCopied() }
+    }
+
+    // AX confirmation is unavailable for some editors even when the paste succeeds.
+    // Leave time for the target to consume the clipboard, then restore only our own copy.
     if let savedClipboard {
       do {
         try await Task.sleep(nanoseconds: 200_000_000)
