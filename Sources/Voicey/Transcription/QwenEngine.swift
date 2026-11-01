@@ -271,9 +271,14 @@ final class QwenEngine: @unchecked Sendable {
     let rawText = qwenModel.transcribe(
       audio: audioBuffer,
       sampleRate: 16000,
-      language: language,
-      maxTokens: maxTokens,
-      context: decoderContext
+      options: Qwen3DecodingOptions(
+        maxTokens: maxTokens,
+        language: language,
+        context: decoderContext,
+        repetitionPenalty: 1.15,
+        noRepeatNgramSize: 3,
+        temperature: 0
+      )
     )
     return rawText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
